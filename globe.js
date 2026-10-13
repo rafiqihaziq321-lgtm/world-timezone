@@ -60,9 +60,9 @@ function subsolarPoint(date) {
 }
 
 // Draws a rotatable globe into `canvas`. `onCityClick(zone)` fires when a city
-// dot is clicked; `isSelected(zone)` and `isHour24()` are read every frame so
-// the globe always reflects the app's current state without being told.
-function createGlobe(canvas, { onCityClick, isSelected, isHour24 }) {
+// dot is clicked; `isSelected(zone)`, `isHour24()` and `getNow()` are read every
+// frame so the globe always reflects the app's current state without being told.
+function createGlobe(canvas, { onCityClick, isSelected, isHour24, getNow }) {
   const ctx = canvas.getContext('2d');
   const land = topojson.feature(WORLD_LAND_110M, WORLD_LAND_110M.objects.land);
   const graticule = d3.geoGraticule10();
@@ -129,35 +129,47 @@ function createGlobe(canvas, { onCityClick, isSelected, isHour24 }) {
 
     // Selected cities first so their labels win when labels collide.
     const viewCenter = [-rotation[0], -rotation[1]];
-    const cities = [...GLOBE_CITIES].sort((a, b) => isSelected(b.zone) - isSelected(a.zone));
-    const placedLabels = [];
-    hitTargets = [];
-    ctx.font = '600 12px system-ui, -apple-system, "Segoe UI", sans-serif';
-    ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
+    const visible = [...GLOBE_CITIES]
+      .sort((a, b) => isSelected(b.zone) - isSelected(a.zone))
+      .filter((city) => d3.geoDistance([city.lon, city.lat], viewCenter) < Math.PI / 2 - 0.05)
+      .map((city) => {
+        const [x, y] = projection([city.lon, city.lat]);
+        return { city, x, y, dotBox: { x: x - 5, y: y - 5, w: 10, h: 10 } };
+      });
+    hitTargets = visible;
 
-    for (const city of cities) {
-      const coords = [city.lon, city.lat];
-      if (d3.geoDistance(coords, viewCenter) > Math.PI / 2 - 0.05) continue;
-      const [x, y] = projection(coords);
+    for (const { city, x, y } of visible) {
       const selected = isSelected(city.zone);
-      const isDay = d3.geoDistance(coords, sun) < Math.PI / 2;
-      hitTargets.push({ city, x, y });
-
+      const isDay = d3.geoDistance([city.lon, city.lat], sun) < Math.PI / 2;
       ctx.beginPath();
       ctx.arc(x, y, selected ? 4.5 : 3, 0, 2 * Math.PI);
       ctx.fillStyle = isDay ? GLOBE_COLORS.cityDay : GLOBE_COLORS.cityNight;
       ctx.fill();
       if (selected) { ctx.strokeStyle = GLOBE_COLORS.label; ctx.lineWidth = 1.5; ctx.stroke(); }
+    }
 
+    // A label may not cover another label or another city's dot. Try right,
+    // left, above and below the dot; if none fit, the label is skipped.
+    ctx.font = '600 12px system-ui, -apple-system, "Segoe UI", sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    const placedLabels = [];
+    for (const target of visible) {
+      const { city, x, y } = target;
       const text = `${city.name} ${timeLabel(city.zone, now)}`;
       const w = ctx.measureText(text).width;
-      const labelX = x + 8 + w > size ? x - 8 - w : x + 8;
-      const box = { x: labelX - 2, y: y - 8, w: w + 4, h: 16 };
-      if (placedLabels.some((p) => boxesOverlap(p, box))) continue;
-      placedLabels.push(box);
-      ctx.strokeStyle = GLOBE_COLORS.labelHalo; ctx.lineWidth = 3; ctx.strokeText(text, labelX, y);
-      ctx.fillStyle = GLOBE_COLORS.label; ctx.fillText(text, labelX, y);
+      const candidates = [[x + 8, y], [x - 8 - w, y], [x - w / 2, y - 13], [x - w / 2, y + 13]];
+      const spot = candidates.find(([lx, ly]) => {
+        const box = { x: lx - 2, y: ly - 8, w: w + 4, h: 16 };
+        if (box.x < 0 || box.x + box.w > size || box.y < 0 || box.y + box.h > size) return false;
+        if (placedLabels.some((p) => boxesOverlap(p, box))) return false;
+        return !visible.some((other) => other !== target && boxesOverlap(other.dotBox, box));
+      });
+      if (!spot) continue;
+      const [lx, ly] = spot;
+      placedLabels.push({ x: lx - 2, y: ly - 8, w: w + 4, h: 16 });
+      ctx.strokeStyle = GLOBE_COLORS.labelHalo; ctx.lineWidth = 3; ctx.strokeText(text, lx, ly);
+      ctx.fillStyle = GLOBE_COLORS.label; ctx.fillText(text, lx, ly);
     }
   }
 
@@ -176,7 +188,7 @@ function createGlobe(canvas, { onCityClick, isSelected, isHour24 }) {
     } else if (!drag && !reduceMotion && t > autoRotateAfter) {
       rotation = [rotation[0] + dt * AUTO_ROTATE_DEG_PER_MS, rotation[1]];
     }
-    draw(new Date());
+    draw(getNow());
     requestAnimationFrame(frame);
   }
 
