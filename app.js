@@ -4,6 +4,7 @@ const STORAGE_KEY = 'world-timezone:v1';
 const DEFAULT_STATE = {
   zones: ['Asia/Kuala_Lumpur', 'Europe/London', 'America/New_York', 'Asia/Tokyo'],
   hour24: true,
+  theme: null, // null = follow the system setting, else 'light' | 'dark'
 };
 
 // Some browsers (e.g. Chromium) list legacy IANA names. Swap in the current
@@ -41,6 +42,10 @@ const timeLabelEl = document.getElementById('time-label');
 const timeResetEl = document.getElementById('time-reset');
 const plannerSummaryEl = document.getElementById('planner-summary');
 const plannerTableEl = document.getElementById('planner-table');
+const playEl = document.getElementById('time-play');
+const themeEl = document.getElementById('theme-toggle');
+const zoomInEl = document.getElementById('zoom-in');
+const zoomOutEl = document.getElementById('zoom-out');
 
 const MINUTE_MS = 60 * 1000;
 const QUARTER_MS = 15 * MINUTE_MS;
@@ -69,6 +74,7 @@ function loadState() {
     return {
       zones: Array.isArray(parsed.zones) ? parsed.zones.filter(isValidZone) : DEFAULT_STATE.zones,
       hour24: typeof parsed.hour24 === 'boolean' ? parsed.hour24 : DEFAULT_STATE.hour24,
+      theme: ['light', 'dark'].includes(parsed.theme) ? parsed.theme : DEFAULT_STATE.theme,
     };
   } catch (err) {
     console.warn('Data tersimpan rosak; guna tetapan lalai.', err);
@@ -78,7 +84,7 @@ function loadState() {
 
 function saveState(state) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ zones: state.zones, hour24: state.hour24 }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ zones: state.zones, hour24: state.hour24, theme: state.theme }));
   } catch (err) {
     console.warn('Gagal simpan tetapan; perubahan tidak akan kekal selepas reload.', err);
   }
@@ -105,6 +111,14 @@ function signedDuration(minutes) {
   const h = Math.floor(abs / 60);
   const m = abs % 60;
   return `${sign}${h}j${m ? ` ${m}m` : ''}`;
+}
+
+// 480 -> "UTC+8", 330 -> "UTC+5:30", -240 -> "UTC−4"
+function formatUtcOffset(minutes) {
+  const sign = minutes < 0 ? '−' : '+';
+  const abs = Math.abs(minutes);
+  const m = abs % 60;
+  return `UTC${sign}${Math.floor(abs / 60)}${m ? `:${String(m).padStart(2, '0')}` : ''}`;
 }
 
 function formatDiff(minutes) {
@@ -140,37 +154,88 @@ function hourLabel(minutes, hour24) {
   return m ? `${shown}:${String(m).padStart(2, '0')}` : shown;
 }
 
-function hourIn(zone, date) {
-  return Number(new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: 'numeric', hourCycle: 'h23' }).format(date));
+// Part of the day by the city's own clock; drives the card background and icon.
+const PHASES = {
+  dawn: { icon: '🌅', name: 'Fajar' },
+  day: { icon: '☀️', name: 'Siang' },
+  dusk: { icon: '🌇', name: 'Senja' },
+  night: { icon: '🌙', name: 'Malam' },
+};
+
+function dayPhase(minutes) {
+  if (minutes >= 5 * 60 && minutes < 7 * 60) return 'dawn';
+  if (minutes >= 7 * 60 && minutes < 17 * 60) return 'day';
+  if (minutes >= 17 * 60 && minutes < 19 * 60) return 'dusk';
+  return 'night';
 }
 
-function renderCards(state) {
-  clocksEl.replaceChildren();
-  if (state.zones.length === 0) {
-    const p = document.createElement('p');
-    p.className = 'empty';
-    p.textContent = 'Tiada bandar. Tambah satu di atas.';
-    clocksEl.append(p);
-    return;
-  }
-  for (const zone of state.zones) {
-    const card = document.createElement('article');
-    card.className = 'card';
-    card.dataset.zone = zone;
-    card.innerHTML = `
-      <div class="city"></div>
-      <div class="time"></div>
-      <div class="meta date"></div>
-      <div class="meta diff"></div>
-      <button class="remove" type="button" aria-label="Buang">×</button>`;
-    card.classList.toggle('on-globe', GLOBE_CITIES.some((c) => c.zone === zone));
-    card.querySelector('.city').textContent = cityName(zone);
-    card.querySelector('.remove').addEventListener('click', () => {
+const ANALOG_TICKS = Array.from({ length: 12 }, (_, i) => {
+  const major = i % 3 === 0;
+  return `<line class="tick" x1="50" y1="${major ? 8 : 10}" x2="50" y2="${major ? 16 : 14}" transform="rotate(${i * 30} 50 50)"/>`;
+}).join('');
+
+function createCard(state, zone) {
+  const card = document.createElement('article');
+  card.className = 'card';
+  card.dataset.zone = zone;
+  card.innerHTML = `
+    <div class="card-head">
+      <span class="phase" aria-hidden="true"></span>
+      <span class="city"></span>
+      <span class="utc"></span>
+    </div>
+    <div class="card-body">
+      <div>
+        <div class="time"></div>
+        <div class="meta date"></div>
+        <div class="meta diff"></div>
+      </div>
+      <svg class="analog" viewBox="0 0 100 100" aria-hidden="true">
+        <circle class="face" cx="50" cy="50" r="46"/>
+        ${ANALOG_TICKS}
+        <line class="hand hour" x1="50" y1="54" x2="50" y2="28"/>
+        <line class="hand minute" x1="50" y1="56" x2="50" y2="16"/>
+        <line class="hand second" x1="50" y1="60" x2="50" y2="12"/>
+        <circle class="pin" cx="50" cy="50" r="3"/>
+      </svg>
+    </div>
+    <button class="remove" type="button" aria-label="Buang ${cityName(zone)}">×</button>`;
+  card.classList.toggle('on-globe', GLOBE_CITIES.some((c) => c.zone === zone));
+  card.querySelector('.city').textContent = cityName(zone);
+  card.querySelector('.remove').addEventListener('click', () => {
+    card.classList.add('leaving');
+    card.addEventListener('animationend', () => {
       state.zones = state.zones.filter((z) => z !== zone);
       saveState(state);
       renderCards(state);
       tick(state);
-    });
+    }, { once: true });
+  });
+  card.addEventListener('animationend', (e) => {
+    if (e.animationName === 'card-in') card.classList.remove('enter');
+  });
+  return card;
+}
+
+// Keeps existing card elements so only added cards animate in.
+function renderCards(state) {
+  const existing = new Map([...clocksEl.querySelectorAll('.card')].map((c) => [c.dataset.zone, c]));
+  clocksEl.replaceChildren();
+  if (state.zones.length === 0) {
+    const p = document.createElement('p');
+    p.className = 'empty';
+    p.textContent = 'Tiada bandar. Tambah satu di atas atau klik bandar pada glob.';
+    clocksEl.append(p);
+    return;
+  }
+  let entering = 0;
+  for (const zone of state.zones) {
+    let card = existing.get(zone);
+    if (!card) {
+      card = createCard(state, zone);
+      card.classList.add('enter');
+      card.style.setProperty('--i', entering++);
+    }
     clocksEl.append(card);
   }
 }
@@ -180,9 +245,14 @@ function tick(state) {
   const localOffset = utcOffsetMinutes(LOCAL_ZONE, now);
   for (const card of clocksEl.querySelectorAll('.card')) {
     const zone = card.dataset.zone;
-    const hour = hourIn(zone, now);
-    const isDay = hour >= 6 && hour < 18;
-    card.querySelector('.time').textContent = `${isDay ? '☀️' : '🌙'} ` + now.toLocaleTimeString('ms-MY', {
+    const offset = utcOffsetMinutes(zone, now);
+    const minutes = minuteOfDay(zone, now.getTime());
+    const seconds = now.getUTCSeconds();
+    const phase = dayPhase(minutes);
+    card.dataset.phase = phase;
+    card.querySelector('.phase').textContent = PHASES[phase].icon;
+    card.querySelector('.utc').textContent = formatUtcOffset(offset);
+    card.querySelector('.time').textContent = now.toLocaleTimeString('ms-MY', {
       timeZone: zone,
       hour: '2-digit', minute: '2-digit', second: '2-digit',
       hourCycle: state.hour24 ? 'h23' : 'h12',
@@ -190,7 +260,10 @@ function tick(state) {
     card.querySelector('.date').textContent = now.toLocaleDateString('ms-MY', {
       timeZone: zone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
     });
-    card.querySelector('.diff').textContent = formatDiff(utcOffsetMinutes(zone, now) - localOffset);
+    card.querySelector('.diff').textContent = formatDiff(offset - localOffset);
+    card.querySelector('.hand.hour').setAttribute('transform', `rotate(${(minutes % 720) / 2} 50 50)`);
+    card.querySelector('.hand.minute').setAttribute('transform', `rotate(${(minutes % 60) * 6 + seconds / 10} 50 50)`);
+    card.querySelector('.hand.second').setAttribute('transform', `rotate(${seconds * 6} 50 50)`);
   }
   renderPlanner(state, now);
 }
@@ -239,6 +312,9 @@ function renderPlanner(state, now) {
     const th = document.createElement('th');
     th.scope = 'row';
     th.textContent = cityName(zone);
+    const utc = document.createElement('small');
+    utc.textContent = formatUtcOffset(utcOffsetMinutes(zone, now));
+    th.append(utc);
     row.append(th);
     slots.forEach((ms, i) => {
       const td = row.insertCell();
@@ -297,9 +373,38 @@ function addZone(state, zone) {
 function flashCard(zone) {
   const card = clocksEl.querySelector(`.card[data-zone="${CSS.escape(zone)}"]`);
   card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if (card.classList.contains('enter')) return; // its entrance animation is feedback enough
   card.classList.remove('flash');
   void card.offsetWidth; // restart the animation if it is already running
   card.classList.add('flash');
+}
+
+const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
+
+function applyTheme(state) {
+  if (state.theme) document.documentElement.dataset.theme = state.theme;
+  else delete document.documentElement.dataset.theme;
+  const dark = (state.theme ?? (systemDark.matches ? 'dark' : 'light')) === 'dark';
+  themeEl.textContent = dark ? '☀️' : '🌙';
+  themeEl.setAttribute('aria-label', dark ? 'Tukar ke tema cerah' : 'Tukar ke tema gelap');
+}
+
+function describeCity(state, zone, now) {
+  const offset = utcOffsetMinutes(zone, now);
+  const diff = offset - utcOffsetMinutes(LOCAL_ZONE, now);
+  const phase = PHASES[dayPhase(minuteOfDay(zone, now.getTime()))];
+  return {
+    time: now.toLocaleTimeString('ms-MY', {
+      timeZone: zone, hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hourCycle: state.hour24 ? 'h23' : 'h12',
+    }),
+    lines: [
+      now.toLocaleDateString('ms-MY', { timeZone: zone, weekday: 'long', day: 'numeric', month: 'long' }),
+      `${formatUtcOffset(offset)} · ${diff === 0 ? 'sama dengan anda' : `${signedDuration(diff)} dari anda`}`,
+      `${phase.icon} ${phase.name}`,
+      state.zones.includes(zone) ? '✓ Dalam senarai anda' : 'Klik untuk tambah',
+    ],
+  };
 }
 
 function init() {
@@ -310,20 +415,75 @@ function init() {
       addZone(state, zone);
       flashCard(zone);
     },
-    isSelected: (zone) => state.zones.includes(zone),
+    getSelectedZones: () => state.zones,
     isHour24: () => state.hour24,
     getNow: () => displayDate(state),
+    describeCity: (zone, now) => describeCity(state, zone, now),
+    offsetBetween(from, to, now) {
+      const diff = utcOffsetMinutes(to, now) - utcOffsetMinutes(from, now);
+      return diff === 0 ? 'Sama' : signedDuration(diff);
+    },
+  });
+  zoomInEl.addEventListener('click', () => globe.zoomBy(1.4));
+  zoomOutEl.addEventListener('click', () => globe.zoomBy(1 / 1.4));
+
+  applyTheme(state);
+  systemDark.addEventListener('change', () => applyTheme(state));
+  themeEl.addEventListener('click', () => {
+    const dark = (state.theme ?? (systemDark.matches ? 'dark' : 'light')) === 'dark';
+    state.theme = dark ? 'light' : 'dark';
+    saveState(state);
+    applyTheme(state);
+  });
+
+  // ▶ sweeps the displayed time forward at PLAY_MIN_PER_SEC, wrapping from
+  // +24h back to −24h, until paused or the user picks a time another way.
+  const PLAY_MIN_PER_SEC = 72; // a full day in 20 seconds
+  let playFrame = null;
+  let playLast = 0;
+  function stopPlay() {
+    if (playFrame !== null) cancelAnimationFrame(playFrame);
+    playFrame = null;
+    playEl.textContent = '▶';
+    playEl.setAttribute('aria-label', 'Main 24 jam');
+    playEl.classList.remove('playing');
+  }
+  function playStep(t) {
+    const elapsed = t - playLast;
+    playLast = t;
+    const base = floorToQuarter(Date.now());
+    let next = (state.viewTime ?? Date.now()) + (elapsed / 1000) * PLAY_MIN_PER_SEC * MINUTE_MS;
+    if (next > base + 24 * HOUR_MS) next = base - 24 * HOUR_MS;
+    setViewTime(state, next);
+    playFrame = requestAnimationFrame(playStep);
+  }
+  playEl.addEventListener('click', () => {
+    if (playFrame !== null) {
+      stopPlay();
+      return;
+    }
+    playEl.textContent = '⏸';
+    playEl.setAttribute('aria-label', 'Jeda');
+    playEl.classList.add('playing');
+    playLast = performance.now();
+    playFrame = requestAnimationFrame(playStep);
   });
 
   timeSliderEl.addEventListener('input', () => {
+    stopPlay();
     const steps = Number(timeSliderEl.value);
     setViewTime(state, steps === 0 ? null : floorToQuarter(Date.now()) + steps * QUARTER_MS);
   });
-  timeResetEl.addEventListener('click', () => setViewTime(state, null));
+  timeResetEl.addEventListener('click', () => {
+    stopPlay();
+    setViewTime(state, null);
+  });
 
   plannerTableEl.addEventListener('click', (e) => {
     const cell = e.target.closest('[data-slot]');
-    if (cell) setViewTime(state, Number(cell.dataset.slot));
+    if (!cell) return;
+    stopPlay();
+    setViewTime(state, Number(cell.dataset.slot));
   });
 
   clocksEl.addEventListener('click', (e) => {
