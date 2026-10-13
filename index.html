@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jam Dunia</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Jam Dunia</h1>
+    <label class="toggle">
+      <input type="checkbox" id="format24">
+      Format 24 jam
+    </label>
+  </header>
+
+  <section id="globe-wrap">
+    <canvas id="globe" role="img" aria-label="Glob interaktif menunjukkan waktu semasa bandar utama serta kawasan siang dan malam"></canvas>
+    <p class="hint">Seret untuk putar · klik bandar untuk tambah ke senarai</p>
+  </section>
+
+  <form id="add-form">
+    <input id="zone-input" list="zone-list" placeholder="Cari bandar, cth. Paris" autocomplete="off" required>
+    <datalist id="zone-list"></datalist>
+    <button type="submit">Tambah</button>
+  </form>
+  <p id="form-error" class="error" hidden></p>
+
+  <main id="clocks"></main>
+
+  <script src="vendor/d3-array.min.js"></script>
+  <script src="vendor/d3-geo.min.js"></script>
+  <script src="vendor/topojson-client.min.js"></script>
+  <script src="vendor/land-110m.js"></script>
+  <script src="globe.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
