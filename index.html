@@ -9,19 +9,27 @@
 <body>
   <header>
     <h1>Jam Dunia</h1>
-    <label class="toggle">
-      <input type="checkbox" id="format24">
-      Format 24 jam
-    </label>
+    <div class="header-actions">
+      <label class="toggle">
+        <input type="checkbox" id="format24">
+        Format 24 jam
+      </label>
+      <button id="theme-toggle" type="button" class="icon-btn">🌙</button>
+    </div>
   </header>
 
   <section id="globe-wrap">
     <canvas id="globe" role="img" aria-label="Glob interaktif menunjukkan waktu semasa bandar utama serta kawasan siang dan malam"></canvas>
-    <p class="hint">Seret untuk putar · klik bandar untuk tambah ke senarai</p>
+    <div class="globe-zoom">
+      <button id="zoom-in" type="button" aria-label="Zum masuk">+</button>
+      <button id="zoom-out" type="button" aria-label="Zum keluar">−</button>
+    </div>
+    <p class="hint">Seret untuk putar · scroll/cubit untuk zum · klik bandar untuk tambah</p>
   </section>
 
   <section id="time-control">
     <div class="time-row">
+      <button id="time-play" type="button" class="play-btn" aria-label="Main 24 jam">▶</button>
       <label for="time-slider">Penukar masa</label>
       <span id="time-label" aria-live="polite">Sekarang</span>
       <button id="time-reset" type="button" class="secondary" hidden>Kembali ke sekarang</button>

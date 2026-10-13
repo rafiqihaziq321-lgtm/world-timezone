@@ -42,6 +42,8 @@ const GLOBE_COLORS = {
   cityNight: '#93c5fd',
   label: '#f8fafc',
   labelHalo: 'rgba(2, 6, 23, 0.85)',
+  arc: 'rgba(251, 191, 36, 0.9)',
+  arcText: '#1c1917',
 };
 
 // Point on Earth where the sun is directly overhead. Low-precision formula
@@ -59,10 +61,16 @@ function subsolarPoint(date) {
   return [lon, declination];
 }
 
-// Draws a rotatable globe into `canvas`. `onCityClick(zone)` fires when a city
-// dot is clicked; `isSelected(zone)`, `isHour24()` and `getNow()` are read every
-// frame so the globe always reflects the app's current state without being told.
-function createGlobe(canvas, { onCityClick, isSelected, isHour24, getNow }) {
+
+// Draws a rotatable, zoomable globe into `canvas`.
+// Options (all read live, so the globe follows app state without being told):
+//   onCityClick(zone)               a city dot was clicked or tapped
+//   getSelectedZones()              the user's list; the first city on the globe is the arc "home"
+//   isHour24(), getNow()            label format and the instant to draw
+//   describeCity(zone, now)         -> { time, lines[] } for the tooltip
+//   offsetBetween(from, to, now)    -> short label for the arc between two cities
+function createGlobe(canvas, options) {
+  const { onCityClick, getSelectedZones, isHour24, getNow, describeCity, offsetBetween } = options;
   const ctx = canvas.getContext('2d');
   const land = topojson.feature(WORLD_LAND_110M, WORLD_LAND_110M.objects.land);
   const graticule = d3.geoGraticule10();
@@ -73,14 +81,30 @@ function createGlobe(canvas, { onCityClick, isSelected, isHour24, getNow }) {
   const AUTO_ROTATE_DEG_PER_MS = 0.006;
   const IDLE_BEFORE_AUTO_ROTATE_MS = 3000;
   const FOCUS_DURATION_MS = 800;
+  const INTRO_DURATION_MS = 1100;
+  const MIN_ZOOM = 1;
+  const MAX_ZOOM = 4;
+  const RADIUS_RATIO = 0.88; // leave room around the sphere for the atmosphere glow
+
+  const tip = document.createElement('div');
+  tip.className = 'globe-tip';
+  tip.hidden = true;
+  canvas.parentElement.append(tip);
 
   let size = 0;
   let rotation = [-101.69, -10]; // start centred near Kuala Lumpur
+  let zoom = 1;
+  let targetZoom = 1;
   let drag = null;
+  let pinch = null;
   let focusAnim = null;
   let autoRotateAfter = 0;
   let lastFrame = performance.now();
+  const introStart = performance.now();
   let hitTargets = [];
+  let tipCity = null;
+  let tipKey = '';
+  const pointers = new Map();
   const formatters = new Map();
 
   function timeLabel(zone, now) {
@@ -102,18 +126,55 @@ function createGlobe(canvas, { onCityClick, isSelected, isHour24, getNow }) {
     canvas.width = Math.round(size * dpr);
     canvas.height = Math.round(size * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    projection.translate([size / 2, size / 2]).scale(size / 2 - 4);
+    projection.translate([size / 2, size / 2]);
+  }
+
+  function clampZoom(z) {
+    return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
   }
 
   function boxesOverlap(a, b) {
     return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
   }
 
-  function draw(now) {
-    projection.rotate(rotation);
-    ctx.clearRect(0, 0, size, size);
+  function easeOutCubic(k) {
+    return 1 - Math.pow(1 - k, 3);
+  }
 
-    ctx.beginPath(); path({ type: 'Sphere' }); ctx.fillStyle = GLOBE_COLORS.ocean; ctx.fill();
+  function easeInOut(k) {
+    return k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+  }
+
+  function pill(text, x, y, bg, fg) {
+    const w = ctx.measureText(text).width + 10;
+    ctx.beginPath();
+    ctx.roundRect(x - w / 2, y - 9, w, 18, 9);
+    ctx.fillStyle = bg; ctx.fill();
+    ctx.fillStyle = fg; ctx.fillText(text, x - w / 2 + 5, y);
+    return { x: x - w / 2, y: y - 9, w, h: 18 };
+  }
+
+  function draw(now, t) {
+    const intro = reduceMotion ? 1 : easeOutCubic(Math.min(1, (t - introStart) / INTRO_DURATION_MS));
+    const radius = (size / 2) * RADIUS_RATIO * zoom * (0.7 + 0.3 * intro);
+    projection.rotate(rotation).scale(radius);
+    const cx = size / 2;
+    const cy = size / 2;
+
+    ctx.clearRect(0, 0, size, size);
+    ctx.globalAlpha = intro;
+
+    // Atmosphere glow just outside the sphere.
+    const glow = ctx.createRadialGradient(cx, cy, radius * 0.98, cx, cy, radius * 1.12);
+    glow.addColorStop(0, 'rgba(96, 165, 250, 0.45)');
+    glow.addColorStop(1, 'rgba(96, 165, 250, 0)');
+    ctx.beginPath(); ctx.arc(cx, cy, radius * 1.12, 0, 2 * Math.PI); ctx.fillStyle = glow; ctx.fill();
+
+    // Ocean shaded from upper-left so the sphere reads as 3D.
+    const ocean = ctx.createRadialGradient(cx - radius * 0.35, cy - radius * 0.35, radius * 0.1, cx, cy, radius);
+    ocean.addColorStop(0, '#1f5f9e');
+    ocean.addColorStop(1, '#0a1a36');
+    ctx.beginPath(); path({ type: 'Sphere' }); ctx.fillStyle = ocean; ctx.fill();
     ctx.beginPath(); path(graticule); ctx.strokeStyle = GLOBE_COLORS.graticule; ctx.lineWidth = 1; ctx.stroke();
     ctx.beginPath(); path(land); ctx.fillStyle = GLOBE_COLORS.land; ctx.fill();
 
@@ -121,29 +182,74 @@ function createGlobe(canvas, { onCityClick, isSelected, isHour24, getNow }) {
     // smaller circle darkens the deep-night side beyond civil twilight (−6°).
     const sun = subsolarPoint(now);
     const antiSun = [sun[0] + 180, -sun[1]];
-    for (const radius of [90, 84]) {
-      ctx.beginPath(); path(nightCircle.center(antiSun).radius(radius)()); ctx.fillStyle = GLOBE_COLORS.night; ctx.fill();
+    for (const r of [90, 84]) {
+      ctx.beginPath(); path(nightCircle.center(antiSun).radius(r)()); ctx.fillStyle = GLOBE_COLORS.night; ctx.fill();
     }
 
     ctx.beginPath(); path({ type: 'Sphere' }); ctx.strokeStyle = GLOBE_COLORS.outline; ctx.lineWidth = 1.5; ctx.stroke();
 
-    // Selected cities first so their labels win when labels collide.
     const viewCenter = [-rotation[0], -rotation[1]];
+    const onScreen = ([x, y]) => x >= 0 && x <= size && y >= 0 && y <= size;
+    const isFacing = (coords) => d3.geoDistance(coords, viewCenter) < Math.PI / 2 - 0.05;
+
+    ctx.font = '600 11px system-ui, -apple-system, "Segoe UI", sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    const placedLabels = [];
+
+    // Arcs from the first listed city to each other listed city, with the
+    // time difference at the midpoint. Dashes march unless motion is reduced.
+    const selectedZones = getSelectedZones();
+    const selectedCities = selectedZones
+      .map((zone) => GLOBE_CITIES.find((c) => c.zone === zone))
+      .filter(Boolean);
+    const [home, ...others] = selectedCities;
+    if (home) {
+      ctx.save();
+      ctx.setLineDash([6, 6]);
+      ctx.lineDashOffset = reduceMotion ? 0 : -((t / 40) % 12);
+      ctx.strokeStyle = GLOBE_COLORS.arc;
+      ctx.lineWidth = 1.6;
+      for (const other of others) {
+        ctx.beginPath();
+        path({ type: 'LineString', coordinates: [[home.lon, home.lat], [other.lon, other.lat]] });
+        ctx.stroke();
+      }
+      ctx.restore();
+      for (const other of others) {
+        const mid = d3.geoInterpolate([home.lon, home.lat], [other.lon, other.lat])(0.5);
+        if (!isFacing(mid)) continue;
+        const [x, y] = projection(mid);
+        if (!onScreen([x, y])) continue;
+        placedLabels.push(pill(offsetBetween(home.zone, other.zone, now), x, y, GLOBE_COLORS.arc, GLOBE_COLORS.arcText));
+      }
+    }
+
+    // Selected cities first so their labels win when labels collide.
     const visible = [...GLOBE_CITIES]
-      .sort((a, b) => isSelected(b.zone) - isSelected(a.zone))
-      .filter((city) => d3.geoDistance([city.lon, city.lat], viewCenter) < Math.PI / 2 - 0.05)
+      .sort((a, b) => selectedZones.includes(b.zone) - selectedZones.includes(a.zone))
+      .filter((city) => isFacing([city.lon, city.lat]))
       .map((city) => {
         const [x, y] = projection([city.lon, city.lat]);
         return { city, x, y, dotBox: { x: x - 5, y: y - 5, w: 10, h: 10 } };
-      });
+      })
+      .filter(({ x, y }) => onScreen([x, y]));
     hitTargets = visible;
 
+    const pulse = reduceMotion ? 0 : (t % 1600) / 1600;
     for (const { city, x, y } of visible) {
-      const selected = isSelected(city.zone);
+      const selected = selectedZones.includes(city.zone);
       const isDay = d3.geoDistance([city.lon, city.lat], sun) < Math.PI / 2;
+      const color = isDay ? GLOBE_COLORS.cityDay : GLOBE_COLORS.cityNight;
+      if (selected && pulse) {
+        ctx.beginPath();
+        ctx.arc(x, y, 4.5 + 8 * pulse, 0, 2 * Math.PI);
+        ctx.strokeStyle = color; ctx.globalAlpha = intro * (1 - pulse); ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.globalAlpha = intro;
+      }
       ctx.beginPath();
       ctx.arc(x, y, selected ? 4.5 : 3, 0, 2 * Math.PI);
-      ctx.fillStyle = isDay ? GLOBE_COLORS.cityDay : GLOBE_COLORS.cityNight;
+      ctx.fillStyle = color;
       ctx.fill();
       if (selected) { ctx.strokeStyle = GLOBE_COLORS.label; ctx.lineWidth = 1.5; ctx.stroke(); }
     }
@@ -151,11 +257,9 @@ function createGlobe(canvas, { onCityClick, isSelected, isHour24, getNow }) {
     // A label may not cover another label or another city's dot. Try right,
     // left, above and below the dot; if none fit, the label is skipped.
     ctx.font = '600 12px system-ui, -apple-system, "Segoe UI", sans-serif';
-    ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-    const placedLabels = [];
     for (const target of visible) {
       const { city, x, y } = target;
+      if (city === tipCity) continue; // the tooltip already says it
       const text = `${city.name} ${timeLabel(city.zone, now)}`;
       const w = ctx.measureText(text).width;
       const candidates = [[x + 8, y], [x - 8 - w, y], [x - w / 2, y - 13], [x - w / 2, y + 13]];
@@ -171,24 +275,55 @@ function createGlobe(canvas, { onCityClick, isSelected, isHour24, getNow }) {
       ctx.strokeStyle = GLOBE_COLORS.labelHalo; ctx.lineWidth = 3; ctx.strokeText(text, lx, ly);
       ctx.fillStyle = GLOBE_COLORS.label; ctx.fillText(text, lx, ly);
     }
+    ctx.globalAlpha = 1;
+
+    updateTip(now, visible);
   }
 
-  function easeInOut(k) {
-    return k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+  function updateTip(now, visible) {
+    const target = tipCity && visible.find((v) => v.city === tipCity);
+    if (!target) {
+      tip.hidden = true;
+      return;
+    }
+    // Rebuild the content at most once per displayed second.
+    const key = `${tipCity.zone}|${Math.floor(now.getTime() / 1000)}|${isHour24()}`;
+    if (key !== tipKey) {
+      tipKey = key;
+      const info = describeCity(tipCity.zone, now);
+      const title = document.createElement('strong');
+      title.textContent = tipCity.name;
+      const time = document.createElement('div');
+      time.className = 'tip-time';
+      time.textContent = info.time;
+      const lines = info.lines.map((line) => {
+        const div = document.createElement('div');
+        div.textContent = line;
+        return div;
+      });
+      tip.replaceChildren(title, time, ...lines);
+    }
+    tip.hidden = false;
+    const half = tip.offsetWidth / 2;
+    const wrapWidth = canvas.parentElement.clientWidth;
+    const left = Math.max(half + 4, Math.min(wrapWidth - half - 4, canvas.offsetLeft + target.x));
+    tip.style.left = `${left}px`;
+    tip.style.top = `${canvas.offsetTop + target.y}px`;
   }
 
   function frame(t) {
     const dt = Math.min(t - lastFrame, 100);
     lastFrame = t;
+    zoom += (targetZoom - zoom) * Math.min(1, dt / 120);
     if (focusAnim) {
       const k = Math.min((t - focusAnim.start) / FOCUS_DURATION_MS, 1);
       const [lon, lat] = focusAnim.interpolate(easeInOut(k));
       rotation = [-lon, -lat];
       if (k === 1) focusAnim = null;
-    } else if (!drag && !reduceMotion && t > autoRotateAfter) {
-      rotation = [rotation[0] + dt * AUTO_ROTATE_DEG_PER_MS, rotation[1]];
+    } else if (!drag && !pinch && !tipCity && !reduceMotion && t > autoRotateAfter) {
+      rotation = [rotation[0] + (dt * AUTO_ROTATE_DEG_PER_MS) / zoom, rotation[1]];
     }
-    draw(getNow());
+    draw(getNow(), t);
     requestAnimationFrame(frame);
   }
 
@@ -197,7 +332,7 @@ function createGlobe(canvas, { onCityClick, isSelected, isHour24, getNow }) {
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
     let best = null;
-    let bestDist = 12;
+    let bestDist = 14;
     for (const target of hitTargets) {
       const d = Math.hypot(target.x - x, target.y - y);
       if (d < bestDist) { best = target.city; bestDist = d; }
@@ -205,21 +340,48 @@ function createGlobe(canvas, { onCityClick, isSelected, isHour24, getNow }) {
     return best;
   }
 
+  function pointerDistance() {
+    const [a, b] = [...pointers.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  function pauseAutoRotate() {
+    autoRotateAfter = performance.now() + IDLE_BEFORE_AUTO_ROTATE_MS;
+  }
+
   canvas.addEventListener('pointerdown', (e) => {
     canvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     focusAnim = null;
-    drag = { x: e.clientX, y: e.clientY, rotation: rotation.slice(), moved: false };
-    canvas.style.cursor = 'grabbing';
+    if (pointers.size === 2) {
+      drag = null;
+      tipCity = null;
+      pinch = { startDist: pointerDistance(), startZoom: targetZoom };
+    } else if (pointers.size === 1) {
+      drag = { x: e.clientX, y: e.clientY, rotation: rotation.slice(), moved: false };
+      canvas.style.cursor = 'grabbing';
+    }
   });
 
   canvas.addEventListener('pointermove', (e) => {
+    if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && pointers.size >= 2) {
+      targetZoom = clampZoom(pinch.startZoom * (pointerDistance() / pinch.startDist));
+      zoom = targetZoom;
+      return;
+    }
     if (!drag) {
-      canvas.style.cursor = cityAt(e) ? 'pointer' : 'grab';
+      const city = cityAt(e);
+      canvas.style.cursor = city ? 'pointer' : 'grab';
+      if (e.pointerType === 'mouse') tipCity = city;
       return;
     }
     const dx = e.clientX - drag.x;
     const dy = e.clientY - drag.y;
-    if (Math.hypot(dx, dy) > 4) drag.moved = true;
+    if (!drag.moved && Math.hypot(dx, dy) > 4) {
+      drag.moved = true;
+      tipCity = null;
+    }
     const degPerPx = 57.3 / projection.scale();
     rotation = [
       drag.rotation[0] + dx * degPerPx,
@@ -227,20 +389,30 @@ function createGlobe(canvas, { onCityClick, isSelected, isHour24, getNow }) {
     ];
   });
 
-  canvas.addEventListener('pointerup', (e) => {
-    if (drag && !drag.moved) {
+  function endPointer(e, cancelled) {
+    if (!cancelled && drag && !drag.moved && pointers.size === 1) {
       const city = cityAt(e);
+      tipCity = city;
       if (city) onCityClick(city.zone);
     }
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch = null;
     drag = null;
-    autoRotateAfter = performance.now() + IDLE_BEFORE_AUTO_ROTATE_MS;
+    pauseAutoRotate();
     canvas.style.cursor = cityAt(e) ? 'pointer' : 'grab';
+  }
+
+  canvas.addEventListener('pointerup', (e) => endPointer(e, false));
+  canvas.addEventListener('pointercancel', (e) => endPointer(e, true));
+  canvas.addEventListener('pointerleave', (e) => {
+    if (e.pointerType === 'mouse' && !drag) tipCity = null;
   });
 
-  canvas.addEventListener('pointercancel', () => {
-    drag = null;
-    autoRotateAfter = performance.now() + IDLE_BEFORE_AUTO_ROTATE_MS;
-  });
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    targetZoom = clampZoom(targetZoom * Math.exp(-e.deltaY * 0.0015));
+    pauseAutoRotate();
+  }, { passive: false });
 
   new ResizeObserver(resize).observe(canvas);
   resize();
@@ -257,6 +429,10 @@ function createGlobe(canvas, { onCityClick, isSelected, isHour24, getNow }) {
       const start = performance.now();
       focusAnim = { start, interpolate: d3.geoInterpolate([-rotation[0], -rotation[1]], [city.lon, city.lat]) };
       autoRotateAfter = start + FOCUS_DURATION_MS + IDLE_BEFORE_AUTO_ROTATE_MS;
+    },
+    zoomBy(factor) {
+      targetZoom = clampZoom(targetZoom * factor);
+      pauseAutoRotate();
     },
   };
 }
