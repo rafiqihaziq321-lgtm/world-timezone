@@ -20,6 +20,16 @@
     <p class="hint">Seret untuk putar · klik bandar untuk tambah ke senarai</p>
   </section>
 
+  <section id="time-control">
+    <div class="time-row">
+      <label for="time-slider">Penukar masa</label>
+      <span id="time-label" aria-live="polite">Sekarang</span>
+      <button id="time-reset" type="button" class="secondary" hidden>Kembali ke sekarang</button>
+    </div>
+    <input type="range" id="time-slider" min="-96" max="96" step="1" value="0" aria-describedby="time-label">
+    <div class="time-scale" aria-hidden="true"><span>−24j</span><span>Sekarang</span><span>+24j</span></div>
+  </section>
+
   <form id="add-form">
     <input id="zone-input" list="zone-list" placeholder="Cari bandar, cth. Paris" autocomplete="off" required>
     <datalist id="zone-list"></datalist>
@@ -28,6 +38,20 @@
   <p id="form-error" class="error" hidden></p>
 
   <main id="clocks"></main>
+
+  <section id="planner">
+    <h2>Perancang mesyuarat</h2>
+    <p id="planner-summary"></p>
+    <div class="planner-scroll">
+      <table id="planner-table"></table>
+    </div>
+    <p class="legend">
+      <span class="swatch work"></span>Waktu kerja (09:00–17:00)
+      <span class="swatch off"></span>Luar waktu kerja
+      <span class="swatch sleep"></span>Waktu tidur (22:00–07:00)
+      · Klik satu jam untuk lihat masa itu.
+    </p>
+  </section>
 
   <script src="vendor/d3-array.min.js"></script>
   <script src="vendor/d3-geo.min.js"></script>

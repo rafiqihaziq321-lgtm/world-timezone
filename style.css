@@ -118,3 +118,111 @@ button {
   from { box-shadow: 0 0 0 3px var(--accent); }
   to { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
 }
+
+button.secondary {
+  padding: 6px 12px;
+  font-size: 0.9rem;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+#time-control {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.time-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.time-row label { font-weight: 600; }
+#time-label { color: var(--muted); flex: 1 1 220px; min-width: 0; }
+body.time-shifted #time-label { color: var(--accent); font-weight: 600; }
+
+#time-slider { width: 100%; margin: 10px 0 2px; accent-color: var(--accent); }
+
+.time-scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+body.time-shifted .card .time { color: var(--accent); }
+
+#planner {
+  margin-top: 24px;
+  padding: 16px;
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+#planner h2 { margin: 0 0 4px; font-size: 1.2rem; }
+#planner-summary { margin: 0 0 12px; }
+
+.planner-scroll { overflow-x: auto; }
+
+#planner-table {
+  border-collapse: separate;
+  border-spacing: 2px;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+#planner-table th[scope="row"] {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  padding-right: 8px;
+  background: var(--card);
+  text-align: left;
+  white-space: nowrap;
+}
+
+#planner-table thead button {
+  min-width: 36px;
+  padding: 4px 2px;
+  font-size: 0.8rem;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+}
+
+#planner-table td {
+  min-width: 36px;
+  padding: 6px 2px;
+  text-align: center;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#planner-table .work { background: #bbf7d0; color: #14532d; }
+#planner-table .off { background: #fef3c7; color: #78350f; }
+#planner-table .sleep { background: #e2e8f0; color: #475569; }
+
+#planner-table thead .all-work button { background: #16a34a; color: #fff; font-weight: 600; }
+#planner-table .current { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.legend { margin: 12px 0 0; color: var(--muted); font-size: 0.8rem; line-height: 1.8; }
+
+.swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin: 0 4px 0 8px;
+  vertical-align: -1px;
+  border-radius: 3px;
+}
+
+.swatch:first-child { margin-left: 0; }
+.swatch.work { background: #bbf7d0; }
+.swatch.off { background: #fef3c7; }
+.swatch.sleep { background: #e2e8f0; }

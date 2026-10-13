@@ -36,6 +36,19 @@ const inputEl = document.getElementById('zone-input');
 const listEl = document.getElementById('zone-list');
 const errorEl = document.getElementById('form-error');
 const format24El = document.getElementById('format24');
+const timeSliderEl = document.getElementById('time-slider');
+const timeLabelEl = document.getElementById('time-label');
+const timeResetEl = document.getElementById('time-reset');
+const plannerSummaryEl = document.getElementById('planner-summary');
+const plannerTableEl = document.getElementById('planner-table');
+
+const MINUTE_MS = 60 * 1000;
+const QUARTER_MS = 15 * MINUTE_MS;
+const HOUR_MS = 60 * MINUTE_MS;
+const WORK_START_MIN = 9 * 60;
+const WORK_END_MIN = 17 * 60;
+const SLEEP_START_MIN = 22 * 60;
+const SLEEP_END_MIN = 7 * 60;
 
 // "America/Argentina/Buenos_Aires" -> "Buenos Aires"
 function cityName(zone) {
@@ -65,7 +78,7 @@ function loadState() {
 
 function saveState(state) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ zones: state.zones, hour24: state.hour24 }));
   } catch (err) {
     console.warn('Gagal simpan tetapan; perubahan tidak akan kekal selepas reload.', err);
   }
@@ -85,13 +98,46 @@ function utcOffsetMinutes(zone, date) {
   return Math.round((wallAsUtc - Math.floor(date.getTime() / 1000) * 1000) / 60000);
 }
 
-function formatDiff(minutes) {
-  if (minutes === 0) return 'Sama dengan waktu anda';
+// 195 -> "+3j 15m", -120 -> "−2j"
+function signedDuration(minutes) {
   const sign = minutes > 0 ? '+' : '−';
   const abs = Math.abs(minutes);
   const h = Math.floor(abs / 60);
   const m = abs % 60;
-  return `${sign}${h}j${m ? ` ${m}m` : ''} dari waktu anda`;
+  return `${sign}${h}j${m ? ` ${m}m` : ''}`;
+}
+
+function formatDiff(minutes) {
+  if (minutes === 0) return 'Sama dengan waktu anda';
+  return `${signedDuration(minutes)} dari waktu anda`;
+}
+
+// The instant every clock shows: live now, or the time picked with the slider
+// or planner (state.viewTime, epoch ms).
+function displayDate(state) {
+  return state.viewTime === null ? new Date() : new Date(state.viewTime);
+}
+
+function floorToQuarter(ms) {
+  return Math.floor(ms / QUARTER_MS) * QUARTER_MS;
+}
+
+function minuteOfDay(zone, ms) {
+  const minutes = Math.floor(ms / MINUTE_MS) + utcOffsetMinutes(zone, new Date(ms));
+  return ((minutes % 1440) + 1440) % 1440;
+}
+
+function slotCategory(startMin) {
+  if (startMin >= WORK_START_MIN && startMin + 60 <= WORK_END_MIN) return 'work';
+  if (startMin >= SLEEP_START_MIN || startMin < SLEEP_END_MIN) return 'sleep';
+  return 'off';
+}
+
+function hourLabel(minutes, hour24) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const shown = hour24 ? String(h).padStart(2, '0') : String(h % 12 || 12);
+  return m ? `${shown}:${String(m).padStart(2, '0')}` : shown;
 }
 
 function hourIn(zone, date) {
@@ -130,7 +176,7 @@ function renderCards(state) {
 }
 
 function tick(state) {
-  const now = new Date();
+  const now = displayDate(state);
   const localOffset = utcOffsetMinutes(LOCAL_ZONE, now);
   for (const card of clocksEl.querySelectorAll('.card')) {
     const zone = card.dataset.zone;
@@ -146,6 +192,96 @@ function tick(state) {
     });
     card.querySelector('.diff').textContent = formatDiff(utcOffsetMinutes(zone, now) - localOffset);
   }
+  renderPlanner(state, now);
+}
+
+// 24 one-hour slots across the viewer's local day. Rebuilt only when its
+// inputs change, since tick() calls this every second.
+function renderPlanner(state, now) {
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const currentSlot = Math.min(23, Math.floor((now.getTime() - dayStart) / HOUR_MS));
+  const key = JSON.stringify([state.zones, dayStart, currentSlot, state.hour24]);
+  if (plannerTableEl.dataset.key === key) return;
+  plannerTableEl.dataset.key = key;
+  plannerTableEl.replaceChildren();
+
+  if (state.zones.length === 0) {
+    plannerSummaryEl.textContent = 'Tambah bandar untuk merancang mesyuarat.';
+    return;
+  }
+
+  const slots = Array.from({ length: 24 }, (_, i) => dayStart + i * HOUR_MS);
+  const categories = state.zones.map((zone) => slots.map((ms) => slotCategory(minuteOfDay(zone, ms))));
+  const allWork = slots.map((_, i) => categories.every((row) => row[i] === 'work'));
+
+  const head = plannerTableEl.createTHead().insertRow();
+  const corner = document.createElement('th');
+  corner.scope = 'row';
+  corner.textContent = 'Waktu anda';
+  head.append(corner);
+  slots.forEach((ms, i) => {
+    const th = document.createElement('th');
+    th.className = [allWork[i] && 'all-work', i === currentSlot && 'current'].filter(Boolean).join(' ');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.dataset.slot = ms;
+    btn.textContent = hourLabel(minuteOfDay(LOCAL_ZONE, ms), state.hour24);
+    btn.setAttribute('aria-label', `Lihat masa ${new Date(ms).toLocaleTimeString('ms-MY', {
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    })} waktu anda`);
+    th.append(btn);
+    head.append(th);
+  });
+
+  const body = plannerTableEl.createTBody();
+  state.zones.forEach((zone, r) => {
+    const row = body.insertRow();
+    const th = document.createElement('th');
+    th.scope = 'row';
+    th.textContent = cityName(zone);
+    row.append(th);
+    slots.forEach((ms, i) => {
+      const td = row.insertCell();
+      td.className = [categories[r][i], i === currentSlot && 'current'].filter(Boolean).join(' ');
+      td.dataset.slot = ms;
+      td.textContent = hourLabel(minuteOfDay(zone, ms), state.hour24);
+    });
+  });
+
+  const ranges = [];
+  allWork.forEach((ok, i) => {
+    if (!ok) return;
+    const last = ranges[ranges.length - 1];
+    if (last && last.end === i) last.end = i + 1;
+    else ranges.push({ start: i, end: i + 1 });
+  });
+  const fmt = (ms) => new Date(ms).toLocaleTimeString('ms-MY', {
+    hour: '2-digit', minute: '2-digit', hourCycle: state.hour24 ? 'h23' : 'h12',
+  });
+  plannerSummaryEl.textContent = ranges.length
+    ? `Waktu sesuai untuk semua (waktu anda): ${ranges.map((g) => `${fmt(slots[g.start])}–${fmt(dayStart + g.end * HOUR_MS)}`).join(', ')}`
+    : 'Tiada jam yang berada dalam waktu kerja untuk semua bandar pada hari ini.';
+}
+
+// Switches every clock to `ms` (epoch ms), or back to live time when null.
+function setViewTime(state, ms) {
+  state.viewTime = ms;
+  const shifted = ms !== null;
+  document.body.classList.toggle('time-shifted', shifted);
+  timeResetEl.hidden = !shifted;
+  if (shifted) {
+    const offsetMin = Math.round((ms - floorToQuarter(Date.now())) / MINUTE_MS);
+    timeSliderEl.value = String(Math.round(offsetMin / 15));
+    const when = new Date(ms).toLocaleString('ms-MY', {
+      weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+      hourCycle: state.hour24 ? 'h23' : 'h12',
+    });
+    timeLabelEl.textContent = `${offsetMin === 0 ? 'Sekarang' : `${signedDuration(offsetMin)} dari sekarang`} · ${when} waktu anda`;
+  } else {
+    timeSliderEl.value = '0';
+    timeLabelEl.textContent = 'Sekarang';
+  }
+  tick(state);
 }
 
 // Returns false when the zone is already listed.
@@ -167,7 +303,7 @@ function flashCard(zone) {
 }
 
 function init() {
-  const state = loadState();
+  const state = { ...loadState(), viewTime: null };
 
   const globe = createGlobe(document.getElementById('globe'), {
     onCityClick(zone) {
@@ -176,6 +312,18 @@ function init() {
     },
     isSelected: (zone) => state.zones.includes(zone),
     isHour24: () => state.hour24,
+    getNow: () => displayDate(state),
+  });
+
+  timeSliderEl.addEventListener('input', () => {
+    const steps = Number(timeSliderEl.value);
+    setViewTime(state, steps === 0 ? null : floorToQuarter(Date.now()) + steps * QUARTER_MS);
+  });
+  timeResetEl.addEventListener('click', () => setViewTime(state, null));
+
+  plannerTableEl.addEventListener('click', (e) => {
+    const cell = e.target.closest('[data-slot]');
+    if (cell) setViewTime(state, Number(cell.dataset.slot));
   });
 
   clocksEl.addEventListener('click', (e) => {
@@ -194,7 +342,7 @@ function init() {
   format24El.addEventListener('change', () => {
     state.hour24 = format24El.checked;
     saveState(state);
-    tick(state);
+    setViewTime(state, state.viewTime); // refresh the time label's 12/24h format
   });
 
   formEl.addEventListener('submit', (e) => {
