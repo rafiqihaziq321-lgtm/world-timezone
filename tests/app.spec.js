@@ -273,10 +273,10 @@ test.describe('tema dan paparan', () => {
     await openApp(page);
     const bg = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim());
     await expect(page.locator('#theme-toggle')).toHaveText('🌙');
-    expect(await bg()).toBe('#eef2f7');
+    expect(await bg()).toBe('#eef3fb');
     await page.click('#theme-toggle');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    expect(await bg()).toBe('#030712');
+    expect(await bg()).toBe('#060b24');
   });
 
   test('muat pada skrin telefon tanpa scroll mendatar', async ({ page }) => {
@@ -387,5 +387,39 @@ test.describe('jimat bateri', () => {
     await page.locator('#globe').scrollIntoViewIfNeeded();
     await expect(page.locator('#globe')).toBeInViewport();
     expect(await drawsDuring(1000)).toBeGreaterThan(30);
+  });
+});
+
+test.describe('laman web', () => {
+  test('jam hero menunjukkan waktu tempatan dan mengikut penukar masa', async ({ page }) => {
+    await openApp(page);
+    await expect(page.locator('#hero-place')).toHaveText('Di Kuala Lumpur, sekarang pukul');
+    await expect(page.locator('#hero-time')).toHaveText(/^06:00:\d\d$/);
+    await expect(page.locator('#hero-time')).toHaveAttribute('data-phase', 'dawn');
+
+    await page.locator('#time-slider').fill('36');
+    await page.clock.runFor(1100);
+    await expect(page.locator('#hero-place')).toHaveText('Di Kuala Lumpur, masa yang dipilih ialah');
+    await expect(page.locator('#hero-time')).toHaveText('15:00:00');
+    await expect(page.locator('#hero-time')).toHaveAttribute('data-phase', 'day');
+
+    await page.uncheck('#format24');
+    await expect(page.locator('#hero-time')).toHaveText('03:00:00 PTG');
+  });
+
+  test('setiap pautan navigasi menuju ke bahagian yang wujud', async ({ page }) => {
+    await openApp(page);
+    const targets = await page.locator('.nav-links a').evaluateAll((links) => links.map((a) => a.getAttribute('href')));
+    expect(targets).toEqual(['#glob', '#bandar', '#perancang', '#fakta', '#tentang']);
+    for (const target of targets) {
+      await expect(page.locator(/** @type {string} */ (target))).toHaveCount(1);
+    }
+  });
+
+  test('elemen tersembunyi kekal tersembunyi semasa dimuat', async ({ page }) => {
+    await openApp(page);
+    for (const id of ['#time-reset', '#share-banner', '#share-status']) {
+      await expect(page.locator(id)).toBeHidden();
+    }
   });
 });
