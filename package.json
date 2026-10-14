@@ -1,0 +1,11 @@
+{
+  "name": "world-timezone",
+  "private": true,
+  "description": "Jam Dunia: static world clock with an interactive globe",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0"
+  }
+}
