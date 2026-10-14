@@ -51,6 +51,9 @@ const shareStatusEl = document.getElementById('share-status');
 const shareBannerEl = document.getElementById('share-banner');
 const shareSaveEl = document.getElementById('share-save');
 const shareExitEl = document.getElementById('share-exit');
+const heroPlaceEl = document.getElementById('hero-place');
+const heroTimeEl = document.getElementById('hero-time');
+const heroDateEl = document.getElementById('hero-date');
 
 const MINUTE_MS = 60 * 1000;
 const QUARTER_MS = 15 * MINUTE_MS;
@@ -248,8 +251,37 @@ function renderCards(state) {
   }
 }
 
+// The hero's large clock shows the viewer's own zone at the displayed instant.
+function renderHero(state, now) {
+  const city = cityName(LOCAL_ZONE);
+  heroPlaceEl.textContent = state.viewTime === null
+    ? `Di ${city}, sekarang pukul`
+    : `Di ${city}, masa yang dipilih ialah`;
+  const parts = new Intl.DateTimeFormat('ms-MY', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hourCycle: state.hour24 ? 'h23' : 'h12',
+  }).formatToParts(now);
+  const get = (type) => parts.find((p) => p.type === type)?.value ?? '';
+  const seconds = document.createElement('span');
+  seconds.className = 'hero-seconds';
+  seconds.textContent = `:${get('second')}`;
+  const nodes = [`${get('hour')}:${get('minute')}`, seconds];
+  if (!state.hour24) {
+    const period = document.createElement('span');
+    period.className = 'hero-period';
+    period.textContent = ` ${get('dayPeriod')}`;
+    nodes.push(period);
+  }
+  heroTimeEl.replaceChildren(...nodes);
+  heroTimeEl.dataset.phase = dayPhase(minuteOfDay(LOCAL_ZONE, now.getTime()));
+  heroDateEl.textContent = now.toLocaleDateString('ms-MY', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
+}
+
 function tick(state) {
   const now = displayDate(state);
+  renderHero(state, now);
   const localOffset = utcOffsetMinutes(LOCAL_ZONE, now);
   for (const card of clocksEl.querySelectorAll('.card')) {
     const zone = card.dataset.zone;
