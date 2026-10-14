@@ -14,9 +14,19 @@
         <input type="checkbox" id="format24">
         Format 24 jam
       </label>
+      <button id="share" type="button" class="icon-btn" aria-label="Kongsi pautan">🔗</button>
       <button id="theme-toggle" type="button" class="icon-btn">🌙</button>
     </div>
   </header>
+  <p id="share-status" role="status" hidden></p>
+
+  <div id="share-banner" hidden>
+    <span>Anda sedang melihat pautan kongsi. Senarai anda sendiri tidak diubah.</span>
+    <span class="share-actions">
+      <button id="share-save" type="button">Simpan ke senarai saya</button>
+      <button id="share-exit" type="button" class="secondary">Kembali ke senarai saya</button>
+    </span>
+  </div>
 
   <section id="globe-wrap">
     <canvas id="globe" role="img" aria-label="Glob interaktif menunjukkan waktu semasa bandar utama serta kawasan siang dan malam"></canvas>

@@ -311,7 +311,18 @@ function createGlobe(canvas, options) {
     tip.style.top = `${canvas.offsetTop + target.y}px`;
   }
 
+  // Only keep animating while the canvas is on screen; scrolling it out of
+  // view stops the redraw loop (saves battery), scrolling back resumes it.
+  let onScreen = true;
+  let frameRequested = false;
+  function requestFrame() {
+    if (frameRequested) return;
+    frameRequested = true;
+    requestAnimationFrame(frame);
+  }
+
   function frame(t) {
+    frameRequested = false;
     const dt = Math.min(t - lastFrame, 100);
     lastFrame = t;
     zoom += (targetZoom - zoom) * Math.min(1, dt / 120);
@@ -324,7 +335,7 @@ function createGlobe(canvas, options) {
       rotation = [rotation[0] + (dt * AUTO_ROTATE_DEG_PER_MS) / zoom, rotation[1]];
     }
     draw(getNow(), t);
-    requestAnimationFrame(frame);
+    if (onScreen) requestFrame();
   }
 
   function cityAt(event) {
@@ -415,8 +426,12 @@ function createGlobe(canvas, options) {
   }, { passive: false });
 
   new ResizeObserver(resize).observe(canvas);
+  new IntersectionObserver((entries) => {
+    onScreen = entries[entries.length - 1].isIntersecting;
+    if (onScreen) requestFrame();
+  }).observe(canvas);
   resize();
-  requestAnimationFrame(frame);
+  requestFrame();
 
   return {
     hasZone(zone) {

@@ -20,14 +20,16 @@ const test = base.extend({
   },
 });
 
-async function openApp(page, stored) {
+async function openApp(page, stored, query = '') {
   if (stored) {
     await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [STORAGE_KEY, JSON.stringify(stored)]);
   }
   await page.clock.install({ time: FIXED_NOW });
-  await page.goto(APP_URL);
+  await page.goto(APP_URL + query);
   await page.clock.runFor(1100);
 }
+
+const storedZones = async (page) => JSON.parse(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY)).zones;
 
 const card = (page, zone) => page.locator(`.card[data-zone="${zone}"]`);
 const cardZones = (page) => page.locator('.card').evaluateAll((cards) => cards.map((c) => c.dataset.zone));
@@ -221,6 +223,10 @@ test.describe('glob', () => {
     await card(page, 'Asia/Tokyo').locator('.city').click();
     await page.clock.runFor(1000);
     await page.locator('#globe').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    // The globe stops drawing while off screen; wait until it is visible and
+    // has drawn a few frames so its city hit-targets match the new rotation.
+    await expect(page.locator('#globe')).toBeInViewport();
+    await page.clock.runFor(100);
     const box = await page.locator('#globe').boundingBox();
     if (!box) throw new Error('globe canvas not rendered');
     return box;
@@ -279,5 +285,107 @@ test.describe('tema dan paparan', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
     const overflowing = await page.locator('.card .time').evaluateAll((els) => els.filter((e) => e.scrollWidth > e.clientWidth).length);
     expect(overflowing).toBe(0);
+  });
+});
+
+test.describe('pautan kongsi', () => {
+  const SHARED = '?bandar=Europe/Paris,Asia/Tokyo&masa=2026-10-14T07:00:00Z';
+
+  test('buka pautan tanpa menimpa senarai sendiri, kemudian kembali', async ({ page }) => {
+    await openApp(page, { zones: ['Asia/Kuala_Lumpur', 'Europe/London'], hour24: true }, SHARED);
+    expect(await cardZones(page)).toEqual(['Europe/Paris', 'Asia/Tokyo']);
+    await expect(card(page, 'Asia/Tokyo').locator('.time')).toHaveText('16:00:00');
+    await expect(card(page, 'Europe/Paris').locator('.time')).toHaveText('09:00:00');
+    await expect(page.locator('#share-banner')).toBeVisible();
+
+    await addCity(page, 'Seoul'); // changes while viewing a link are not saved
+    expect(await storedZones(page)).toEqual(['Asia/Kuala_Lumpur', 'Europe/London']);
+
+    await page.click('#share-exit');
+    expect(await cardZones(page)).toEqual(['Asia/Kuala_Lumpur', 'Europe/London']);
+    await expect(page.locator('#share-banner')).toBeHidden();
+    await expect(page.locator('#time-label')).toHaveText('Sekarang');
+    expect(new URL(page.url()).search).toBe('');
+  });
+
+  test('simpan senarai dari pautan', async ({ page }) => {
+    await openApp(page, undefined, SHARED);
+    await page.click('#share-save');
+    await expect(page.locator('#share-banner')).toBeHidden();
+    expect(await storedZones(page)).toEqual(['Europe/Paris', 'Asia/Tokyo']);
+    expect(new URL(page.url()).search).toBe('');
+
+    await page.reload();
+    await page.clock.runFor(1100);
+    expect(await cardZones(page)).toEqual(['Europe/Paris', 'Asia/Tokyo']);
+    await expect(page.locator('#share-banner')).toBeHidden();
+  });
+
+  test('bandar tidak sah dan pendua diabaikan', async ({ page }) => {
+    await openApp(page, undefined, '?bandar=Atlantis,Asia/Tokyo,Asia/Tokyo');
+    expect(await cardZones(page)).toEqual(['Asia/Tokyo']);
+    await expect(page.locator('#share-banner')).toBeVisible();
+  });
+
+  test('pautan yang rosak sepenuhnya guna senarai sendiri', async ({ page }) => {
+    await openApp(page, undefined, '?bandar=Atlantis&masa=bukan-tarikh');
+    expect(await cardZones(page)).toEqual(['Asia/Kuala_Lumpur', 'Europe/London', 'America/New_York', 'Asia/Tokyo']);
+    await expect(page.locator('#share-banner')).toBeHidden();
+    await expect(page.locator('#time-label')).toHaveText('Sekarang');
+  });
+
+  test('butang kongsi menyalin pautan yang membuka paparan yang sama', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await openApp(page);
+    await page.locator('#time-slider').fill('36'); // 06:00 -> 15:00 KL = 07:00 UTC
+    await page.click('#share');
+    await expect(page.locator('#share-status')).toHaveText('Pautan disalin ke clipboard.');
+    const url = await page.evaluate(() => navigator.clipboard.readText());
+    expect(url).toMatch(/\?bandar=Asia\/Kuala_Lumpur,Europe\/London,America\/New_York,Asia\/Tokyo&masa=2026-10-14T07:00:00Z$/);
+
+    await page.goto(url);
+    await page.clock.runFor(1100);
+    await expect(card(page, 'Asia/Kuala_Lumpur').locator('.time')).toHaveText('15:00:00');
+    await expect(page.locator('#share-banner')).toBeVisible();
+  });
+
+  test('papar pautan untuk disalin manual bila clipboard disekat', async ({ page }) => {
+    await page.addInitScript(() => {
+      navigator.clipboard.writeText = () => Promise.reject(new DOMException('blocked', 'NotAllowedError'));
+    });
+    await openApp(page);
+    await page.click('#share');
+    await expect(page.locator('#share-status input')).toHaveValue(/\?bandar=Asia\/Kuala_Lumpur,/);
+  });
+});
+
+test.describe('jimat bateri', () => {
+  test('glob berhenti melukis bila di luar skrin dan sambung bila kelihatan', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 400 });
+    await page.addInitScript(() => {
+      const clearRect = CanvasRenderingContext2D.prototype.clearRect;
+      window.globeDraws = 0;
+      CanvasRenderingContext2D.prototype.clearRect = function (...args) {
+        if (this.canvas.id === 'globe') window.globeDraws += 1;
+        return clearRect.apply(this, args);
+      };
+    });
+    await openApp(page);
+    const drawsDuring = async (ms) => {
+      await page.evaluate(() => { window.globeDraws = 0; });
+      await page.clock.runFor(ms);
+      return page.evaluate(() => window.globeDraws);
+    };
+
+    expect(await drawsDuring(1000)).toBeGreaterThan(30);
+
+    await page.locator('#planner').scrollIntoViewIfNeeded();
+    await expect(page.locator('#globe')).not.toBeInViewport();
+    await page.clock.runFor(100); // let the in-flight frame finish
+    expect(await drawsDuring(1000)).toBe(0);
+
+    await page.locator('#globe').scrollIntoViewIfNeeded();
+    await expect(page.locator('#globe')).toBeInViewport();
+    expect(await drawsDuring(1000)).toBeGreaterThan(30);
   });
 });
