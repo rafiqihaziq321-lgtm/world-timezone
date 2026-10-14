@@ -179,6 +179,43 @@ button.secondary {
 .error { color: var(--error); margin: 4px 0; }
 .empty { color: var(--muted); }
 
+/* ---------- Share link ---------- */
+
+#share-status {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-align: right;
+}
+
+#share-status input {
+  width: min(100%, 420px);
+  padding: 6px 8px;
+  font: inherit;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+}
+
+#share-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  box-shadow: var(--shadow);
+}
+
+#share-banner[hidden] { display: none; }
+.share-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#share-banner button { padding: 6px 12px; font-size: 0.9rem; }
+
 /* ---------- Globe ---------- */
 
 #globe-wrap {

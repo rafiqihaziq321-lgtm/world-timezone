@@ -46,6 +46,11 @@ const playEl = document.getElementById('time-play');
 const themeEl = document.getElementById('theme-toggle');
 const zoomInEl = document.getElementById('zoom-in');
 const zoomOutEl = document.getElementById('zoom-out');
+const shareEl = document.getElementById('share');
+const shareStatusEl = document.getElementById('share-status');
+const shareBannerEl = document.getElementById('share-banner');
+const shareSaveEl = document.getElementById('share-save');
+const shareExitEl = document.getElementById('share-exit');
 
 const MINUTE_MS = 60 * 1000;
 const QUARTER_MS = 15 * MINUTE_MS;
@@ -82,9 +87,12 @@ function loadState() {
   }
 }
 
+// While viewing a shared link (state.shared), the visible list is the sender's,
+// so the viewer's own list (state.savedZones) is what gets stored.
 function saveState(state) {
+  const zones = state.shared ? state.savedZones : state.zones;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ zones: state.zones, hour24: state.hour24, theme: state.theme }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ zones, hour24: state.hour24, theme: state.theme }));
   } catch (err) {
     console.warn('Gagal simpan tetapan; perubahan tidak akan kekal selepas reload.', err);
   }
@@ -407,8 +415,60 @@ function describeCity(state, zone, now) {
   };
 }
 
+// Reads `?bandar=Zone/A,Zone/B&masa=<ISO instant>`. Unknown zones are dropped;
+// a missing or unusable part comes back as null.
+function readShareParams() {
+  const params = new URLSearchParams(window.location.search);
+  const zoneList = (params.get('bandar') ?? '').split(',').map((z) => z.trim()).filter(isValidZone);
+  const time = Date.parse(params.get('masa') ?? '');
+  return {
+    zones: zoneList.length ? [...new Set(zoneList)] : null,
+    time: Number.isFinite(time) ? time : null,
+  };
+}
+
+function buildShareUrl(state) {
+  // Keep "/" and "," readable; everything else is percent-encoded.
+  const zones = state.zones.map((z) => encodeURIComponent(z).replace(/%2F/g, '/')).join(',');
+  let query = `?bandar=${zones}`;
+  if (state.viewTime !== null) query += `&masa=${new Date(state.viewTime).toISOString().replace('.000Z', 'Z')}`;
+  return `${window.location.origin}${window.location.pathname}${query}`;
+}
+
+function clearShareParams() {
+  window.history.replaceState(null, '', window.location.pathname);
+}
+
+async function copyShareLink(state) {
+  const url = buildShareUrl(state);
+  shareStatusEl.hidden = false;
+  try {
+    await navigator.clipboard.writeText(url);
+    shareStatusEl.textContent = 'Pautan disalin ke clipboard.';
+  } catch (err) {
+    // Clipboard can be blocked (permissions, insecure context): let the user copy by hand.
+    console.info('Clipboard tidak tersedia; papar pautan untuk disalin manual.', err);
+    shareStatusEl.textContent = 'Salin pautan ini: ';
+    const field = document.createElement('input');
+    field.readOnly = true;
+    field.value = url;
+    field.setAttribute('aria-label', 'Pautan kongsi');
+    shareStatusEl.append(field);
+    field.select();
+  }
+}
+
 function init() {
-  const state = { ...loadState(), viewTime: null };
+  const saved = loadState();
+  const shared = readShareParams();
+  const state = {
+    ...saved,
+    zones: shared.zones ?? saved.zones,
+    savedZones: [...saved.zones],
+    shared: shared.zones !== null,
+    viewTime: null,
+  };
+  shareBannerEl.hidden = !state.shared;
 
   const globe = createGlobe(document.getElementById('globe'), {
     onCityClick(zone) {
@@ -525,8 +585,27 @@ function init() {
     inputEl.value = '';
   });
 
+  shareEl.addEventListener('click', () => copyShareLink(state));
+  shareSaveEl.addEventListener('click', () => {
+    state.savedZones = [...state.zones];
+    state.shared = false;
+    saveState(state);
+    shareBannerEl.hidden = true;
+    clearShareParams();
+  });
+  shareExitEl.addEventListener('click', () => {
+    stopPlay();
+    state.zones = [...state.savedZones];
+    state.shared = false;
+    shareBannerEl.hidden = true;
+    clearShareParams();
+    renderCards(state);
+    setViewTime(state, null);
+  });
+
   renderCards(state);
-  tick(state);
+  if (shared.time !== null) setViewTime(state, shared.time);
+  else tick(state);
   setInterval(() => tick(state), 1000);
 }
 
