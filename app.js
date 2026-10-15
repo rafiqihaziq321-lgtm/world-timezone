@@ -1,11 +1,7 @@
 'use strict';
 
 const STORAGE_KEY = 'world-timezone:v1';
-const DEFAULT_STATE = {
-  zones: ['Asia/Kuala_Lumpur', 'Europe/London', 'America/New_York', 'Asia/Tokyo'],
-  hour24: true,
-  theme: null, // null = follow the system setting, else 'light' | 'dark'
-};
+const DEFAULT_ZONES = ['Asia/Kuala_Lumpur', 'Europe/London', 'America/New_York', 'Asia/Tokyo'];
 
 // Some browsers (e.g. Chromium) list legacy IANA names. Swap in the current
 // names so users searching "Kolkata" or "Kyiv" find them.
@@ -68,34 +64,66 @@ function cityName(zone) {
   return zone.split('/').pop().replace(/_/g, ' ');
 }
 
+// A city in the user's list. lat/lon are null when unknown; such a city
+// still gets a card, just no dot on the globe.
+function makeCity(name, zone, lat = null, lon = null) {
+  return { name, zone, lat, lon };
+}
+
+// The city a bare IANA zone stands for, e.g. "Asia/Tokyo" -> Tokyo, with its
+// position when it is one of the globe's built-in cities.
+function cityForZone(zone) {
+  const known = GLOBE_CITIES.find((c) => c.zone === zone);
+  return makeCity(cityName(zone), zone, known?.lat ?? null, known?.lon ?? null);
+}
+
+function defaultState() {
+  return { cities: DEFAULT_ZONES.map(cityForZone), hour24: true, theme: null }; // theme null = follow the system
+}
+
+function parseStoredCity(raw) {
+  if (!raw || typeof raw.name !== 'string' || typeof raw.zone !== 'string' || !isValidZone(raw.zone)) return null;
+  const coord = (n) => (Number.isFinite(n) ? n : null);
+  return makeCity(raw.name, raw.zone, coord(raw.lat), coord(raw.lon));
+}
+
 function loadState() {
   let raw;
   try {
     raw = localStorage.getItem(STORAGE_KEY);
   } catch (err) {
     console.warn('localStorage tidak tersedia; guna tetapan lalai.', err);
-    return { ...DEFAULT_STATE };
+    return defaultState();
   }
-  if (!raw) return { ...DEFAULT_STATE };
+  if (!raw) return defaultState();
   try {
     const parsed = JSON.parse(raw);
+    const defaults = defaultState();
+    let cities = defaults.cities;
+    if (Array.isArray(parsed.cities)) {
+      cities = parsed.cities.map(parseStoredCity).filter(Boolean);
+    } else if (Array.isArray(parsed.zones)) {
+      // Lists saved before cities existed held zone ids only.
+      cities = parsed.zones.filter((z) => typeof z === 'string' && isValidZone(z)).map(cityForZone);
+    }
     return {
-      zones: Array.isArray(parsed.zones) ? parsed.zones.filter(isValidZone) : DEFAULT_STATE.zones,
-      hour24: typeof parsed.hour24 === 'boolean' ? parsed.hour24 : DEFAULT_STATE.hour24,
-      theme: ['light', 'dark'].includes(parsed.theme) ? parsed.theme : DEFAULT_STATE.theme,
+      cities,
+      hour24: typeof parsed.hour24 === 'boolean' ? parsed.hour24 : defaults.hour24,
+      theme: ['light', 'dark'].includes(parsed.theme) ? parsed.theme : defaults.theme,
     };
   } catch (err) {
     console.warn('Data tersimpan rosak; guna tetapan lalai.', err);
-    return { ...DEFAULT_STATE };
+    return defaultState();
   }
 }
 
 // While viewing a shared link (state.shared), the visible list is the sender's,
-// so the viewer's own list (state.savedZones) is what gets stored.
+// so the viewer's own list (state.savedCities) is what gets stored.
 function saveState(state) {
-  const zones = state.shared ? state.savedZones : state.zones;
+  const cities = (state.shared ? state.savedCities : state.cities)
+    .map(({ name, zone, lat, lon }) => ({ name, zone, lat, lon }));
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ zones, hour24: state.hour24, theme: state.theme }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ cities, hour24: state.hour24, theme: state.theme }));
   } catch (err) {
     console.warn('Gagal simpan tetapan; perubahan tidak akan kekal selepas reload.', err);
   }
@@ -185,10 +213,11 @@ const ANALOG_TICKS = Array.from({ length: 12 }, (_, i) => {
   return `<line class="tick" x1="50" y1="${major ? 8 : 10}" x2="50" y2="${major ? 16 : 14}" transform="rotate(${i * 30} 50 50)"/>`;
 }).join('');
 
-function createCard(state, zone) {
+function createCard(state, city) {
   const card = document.createElement('article');
   card.className = 'card';
-  card.dataset.zone = zone;
+  card.dataset.zone = city.zone;
+  card.dataset.key = cityKey(city);
   card.innerHTML = `
     <div class="card-head">
       <span class="phase" aria-hidden="true"></span>
@@ -210,13 +239,15 @@ function createCard(state, zone) {
         <circle class="pin" cx="50" cy="50" r="3"/>
       </svg>
     </div>
-    <button class="remove" type="button" aria-label="Buang ${cityName(zone)}">×</button>`;
-  card.classList.toggle('on-globe', GLOBE_CITIES.some((c) => c.zone === zone));
-  card.querySelector('.city').textContent = cityName(zone);
-  card.querySelector('.remove').addEventListener('click', () => {
+    <button class="remove" type="button"></button>`;
+  card.querySelector('.city').textContent = city.name;
+  const remove = card.querySelector('.remove');
+  remove.textContent = '×';
+  remove.setAttribute('aria-label', `Buang ${city.name}`);
+  remove.addEventListener('click', () => {
     card.classList.add('leaving');
     card.addEventListener('animationend', () => {
-      state.zones = state.zones.filter((z) => z !== zone);
+      state.cities = state.cities.filter((c) => cityKey(c) !== cityKey(city));
       saveState(state);
       renderCards(state);
       tick(state);
@@ -230,9 +261,9 @@ function createCard(state, zone) {
 
 // Keeps existing card elements so only added cards animate in.
 function renderCards(state) {
-  const existing = new Map([...clocksEl.querySelectorAll('.card')].map((c) => [c.dataset.zone, c]));
+  const existing = new Map([...clocksEl.querySelectorAll('.card')].map((c) => [c.dataset.key, c]));
   clocksEl.replaceChildren();
-  if (state.zones.length === 0) {
+  if (state.cities.length === 0) {
     const p = document.createElement('p');
     p.className = 'empty';
     p.textContent = 'Tiada bandar. Tambah satu di atas atau klik bandar pada glob.';
@@ -240,10 +271,10 @@ function renderCards(state) {
     return;
   }
   let entering = 0;
-  for (const zone of state.zones) {
-    let card = existing.get(zone);
+  for (const city of state.cities) {
+    let card = existing.get(cityKey(city));
     if (!card) {
-      card = createCard(state, zone);
+      card = createCard(state, city);
       card.classList.add('enter');
       card.style.setProperty('--i', entering++);
     }
@@ -285,6 +316,9 @@ function tick(state) {
   const localOffset = utcOffsetMinutes(LOCAL_ZONE, now);
   for (const card of clocksEl.querySelectorAll('.card')) {
     const zone = card.dataset.zone;
+    const city = state.cities.find((c) => cityKey(c) === card.dataset.key);
+    // Positions can arrive after the card does (shared links look them up).
+    card.classList.toggle('on-globe', Boolean(city && city.lat !== null));
     const offset = utcOffsetMinutes(zone, now);
     const minutes = minuteOfDay(zone, now.getTime());
     const seconds = now.getUTCSeconds();
@@ -313,18 +347,18 @@ function tick(state) {
 function renderPlanner(state, now) {
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const currentSlot = Math.min(23, Math.floor((now.getTime() - dayStart) / HOUR_MS));
-  const key = JSON.stringify([state.zones, dayStart, currentSlot, state.hour24]);
+  const key = JSON.stringify([state.cities.map(cityKey), dayStart, currentSlot, state.hour24]);
   if (plannerTableEl.dataset.key === key) return;
   plannerTableEl.dataset.key = key;
   plannerTableEl.replaceChildren();
 
-  if (state.zones.length === 0) {
+  if (state.cities.length === 0) {
     plannerSummaryEl.textContent = 'Tambah bandar untuk merancang mesyuarat.';
     return;
   }
 
   const slots = Array.from({ length: 24 }, (_, i) => dayStart + i * HOUR_MS);
-  const categories = state.zones.map((zone) => slots.map((ms) => slotCategory(minuteOfDay(zone, ms))));
+  const categories = state.cities.map(({ zone }) => slots.map((ms) => slotCategory(minuteOfDay(zone, ms))));
   const allWork = slots.map((_, i) => categories.every((row) => row[i] === 'work'));
 
   const head = plannerTableEl.createTHead().insertRow();
@@ -347,11 +381,11 @@ function renderPlanner(state, now) {
   });
 
   const body = plannerTableEl.createTBody();
-  state.zones.forEach((zone, r) => {
+  state.cities.forEach(({ name, zone }, r) => {
     const row = body.insertRow();
     const th = document.createElement('th');
     th.scope = 'row';
-    th.textContent = cityName(zone);
+    th.textContent = name;
     const utc = document.createElement('small');
     utc.textContent = formatUtcOffset(utcOffsetMinutes(zone, now));
     th.append(utc);
@@ -400,18 +434,18 @@ function setViewTime(state, ms) {
   tick(state);
 }
 
-// Returns false when the zone is already listed.
-function addZone(state, zone) {
-  if (state.zones.includes(zone)) return false;
-  state.zones.push(zone);
+// Returns false when the city is already listed.
+function addCity(state, city) {
+  if (state.cities.some((c) => cityKey(c) === cityKey(city))) return false;
+  state.cities.push(city);
   saveState(state);
   renderCards(state);
   tick(state);
   return true;
 }
 
-function flashCard(zone) {
-  const card = clocksEl.querySelector(`.card[data-zone="${CSS.escape(zone)}"]`);
+function flashCard(city) {
+  const card = clocksEl.querySelector(`.card[data-key="${CSS.escape(cityKey(city))}"]`);
   card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   if (card.classList.contains('enter')) return; // its entrance animation is feedback enough
   card.classList.remove('flash');
@@ -429,7 +463,8 @@ function applyTheme(state) {
   themeEl.setAttribute('aria-label', dark ? 'Tukar ke tema cerah' : 'Tukar ke tema gelap');
 }
 
-function describeCity(state, zone, now) {
+function describeCity(state, city, now) {
+  const { zone } = city;
   const offset = utcOffsetMinutes(zone, now);
   const diff = offset - utcOffsetMinutes(LOCAL_ZONE, now);
   const phase = PHASES[dayPhase(minuteOfDay(zone, now.getTime()))];
@@ -442,27 +477,45 @@ function describeCity(state, zone, now) {
       now.toLocaleDateString('ms-MY', { timeZone: zone, weekday: 'long', day: 'numeric', month: 'long' }),
       `${formatUtcOffset(offset)} · ${diff === 0 ? 'sama dengan anda' : `${signedDuration(diff)} dari anda`}`,
       `${phase.icon} ${phase.name}`,
-      state.zones.includes(zone) ? '✓ Dalam senarai anda' : 'Klik untuk tambah',
+      state.cities.some((c) => cityKey(c) === cityKey(city)) ? '✓ Dalam senarai anda' : 'Klik untuk tambah',
     ],
   };
 }
 
-// Reads `?bandar=Zone/A,Zone/B&masa=<ISO instant>`. Unknown zones are dropped;
-// a missing or unusable part comes back as null.
+// A city in a share link: its zone, plus "~Name" when the name is not simply
+// the zone's own city ("Asia/Tokyo", "Asia/Kuala_Lumpur~Johor Bahru").
+function shareToken(city) {
+  const token = city.name === cityName(city.zone) ? city.zone : `${city.zone}~${city.name}`;
+  // Keep "/" readable; everything else is percent-encoded.
+  return encodeURIComponent(token).replace(/%2F/g, '/');
+}
+
+function parseShareToken(token) {
+  const [zone, ...rest] = token.trim().split('~');
+  if (zone === '' || !isValidZone(zone)) return null;
+  const name = rest.join('~').trim();
+  if (!name) return cityForZone(zone);
+  const known = GLOBE_CITIES.find((c) => c.zone === zone && c.name === name);
+  return makeCity(name, zone, known?.lat ?? null, known?.lon ?? null);
+}
+
+// Reads `?bandar=<token>,<token>&masa=<ISO instant>`. Unknown zones and
+// repeats are dropped; a missing or unusable part comes back as null.
 function readShareParams() {
   const params = new URLSearchParams(window.location.search);
-  const zoneList = (params.get('bandar') ?? '').split(',').map((z) => z.trim()).filter(isValidZone);
+  const cities = [];
+  for (const city of (params.get('bandar') ?? '').split(',').map(parseShareToken)) {
+    if (city && !cities.some((c) => cityKey(c) === cityKey(city))) cities.push(city);
+  }
   const time = Date.parse(params.get('masa') ?? '');
   return {
-    zones: zoneList.length ? [...new Set(zoneList)] : null,
+    cities: cities.length ? cities : null,
     time: Number.isFinite(time) ? time : null,
   };
 }
 
 function buildShareUrl(state) {
-  // Keep "/" and "," readable; everything else is percent-encoded.
-  const zones = state.zones.map((z) => encodeURIComponent(z).replace(/%2F/g, '/')).join(',');
-  let query = `?bandar=${zones}`;
+  let query = `?bandar=${state.cities.map(shareToken).join(',')}`;
   if (state.viewTime !== null) query += `&masa=${new Date(state.viewTime).toISOString().replace('.000Z', 'Z')}`;
   return `${window.location.origin}${window.location.pathname}${query}`;
 }
@@ -490,27 +543,70 @@ async function copyShareLink(state) {
   }
 }
 
+// "São Paulo " -> "sao paulo", so searches ignore case and accents.
+function normalizeName(text) {
+  return text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
+}
+
+// Finds "Name" or "Name, Country" in the city list (rows are most populous
+// first, so a bare "George Town" is the one in Penang).
+function findCity(rows, query) {
+  const [name, country] = query.split(/,(?=[^,]*$)/).map(normalizeName);
+  const row = rows.find((r) => normalizeName(r[0]) === name && (country === undefined || normalizeName(r[1]) === country));
+  return row ? makeCity(row[0], row[2], row[3], row[4]) : null;
+}
+
+// vendor/cities.js is ~400 KB, so it is only fetched once someone searches
+// (or opens a shared link that needs city positions).
+function createCityListLoader() {
+  let pending = null;
+  return function loadCityList() {
+    if (!pending) {
+      pending = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'vendor/cities.js';
+        script.onload = () => resolve(window.WORLD_CITIES);
+        script.onerror = () => {
+          pending = null; // allow a retry on the next search
+          script.remove();
+          reject(new Error('vendor/cities.js gagal dimuat'));
+        };
+        document.head.append(script);
+      });
+    }
+    return pending;
+  };
+}
+
 function init() {
+  if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
+    navigator.serviceWorker.register('sw.js').catch((err) => {
+      console.warn('Service worker gagal didaftarkan; mod luar talian tidak tersedia.', err);
+    });
+  }
+
+  const loadCityList = createCityListLoader();
   const saved = loadState();
   const shared = readShareParams();
   const state = {
     ...saved,
-    zones: shared.zones ?? saved.zones,
-    savedZones: [...saved.zones],
-    shared: shared.zones !== null,
+    cities: shared.cities ?? saved.cities,
+    savedCities: [...saved.cities],
+    shared: shared.cities !== null,
     viewTime: null,
   };
   shareBannerEl.hidden = !state.shared;
 
   const globe = createGlobe(document.getElementById('globe'), {
-    onCityClick(zone) {
-      addZone(state, zone);
-      flashCard(zone);
+    onCityClick(city) {
+      const listed = makeCity(city.name, city.zone, city.lat, city.lon);
+      addCity(state, listed);
+      flashCard(listed);
     },
-    getSelectedZones: () => state.zones,
+    getSelectedCities: () => state.cities,
     isHour24: () => state.hour24,
     getNow: () => displayDate(state),
-    describeCity: (zone, now) => describeCity(state, zone, now),
+    describeCity: (city, now) => describeCity(state, city, now),
     offsetBetween(from, to, now) {
       const diff = utcOffsetMinutes(to, now) - utcOffsetMinutes(from, now);
       return diff === 0 ? 'Sama' : signedDuration(diff);
@@ -580,15 +676,28 @@ function init() {
 
   clocksEl.addEventListener('click', (e) => {
     const card = e.target.closest('.card');
-    if (card && !e.target.closest('.remove')) globe.focusZone(card.dataset.zone);
+    if (!card || e.target.closest('.remove')) return;
+    const city = state.cities.find((c) => cityKey(c) === card.dataset.key);
+    if (city) globe.focusCity(city);
   });
 
-  for (const zone of ALL_ZONES) {
-    const opt = document.createElement('option');
-    opt.value = zone;
-    opt.label = cityName(zone);
-    listEl.append(opt);
+  function showCityListError(err) {
+    console.warn(err);
+    errorEl.textContent = 'Senarai bandar gagal dimuat. Anda masih boleh menaip zon waktu, cth. Asia/Tokyo.';
+    errorEl.hidden = false;
   }
+
+  inputEl.addEventListener('focus', () => {
+    if (listEl.childElementCount) return;
+    loadCityList().then((rows) => {
+      if (listEl.childElementCount) return;
+      listEl.append(...rows.map(([name, country]) => {
+        const opt = document.createElement('option');
+        opt.value = `${name}, ${country}`;
+        return opt;
+      }));
+    }, showCityListError);
+  });
 
   format24El.checked = state.hour24;
   format24El.addEventListener('change', () => {
@@ -597,19 +706,29 @@ function init() {
     setViewTime(state, state.viewTime); // refresh the time label's 12/24h format
   });
 
-  formEl.addEventListener('submit', (e) => {
+  formEl.addEventListener('submit', async (e) => {
     e.preventDefault();
     const query = inputEl.value.trim();
-    // Accept either the exact IANA id or a city name typed by the user.
-    const zone = (query.includes('/') && isValidZone(query) ? query : undefined)
-      ?? ALL_ZONES.find((z) => cityName(z).toLowerCase() === query.toLowerCase());
-    if (!zone) {
-      errorEl.textContent = `Zon waktu "${query}" tidak dijumpai.`;
+    // An exact IANA id, then the city list, then the zone names the browser knows.
+    let city = query.includes('/') && isValidZone(query) ? cityForZone(query) : null;
+    if (!city) {
+      try {
+        city = findCity(await loadCityList(), query);
+      } catch (err) {
+        showCityListError(err);
+      }
+    }
+    if (!city) {
+      const zone = ALL_ZONES.find((z) => normalizeName(cityName(z)) === normalizeName(query));
+      if (zone) city = cityForZone(zone);
+    }
+    if (!city) {
+      errorEl.textContent = `Bandar atau zon waktu "${query}" tidak dijumpai.`;
       errorEl.hidden = false;
       return;
     }
-    if (!addZone(state, zone)) {
-      errorEl.textContent = `${cityName(zone)} sudah ada dalam senarai.`;
+    if (!addCity(state, city)) {
+      errorEl.textContent = `${city.name} sudah ada dalam senarai.`;
       errorEl.hidden = false;
       return;
     }
@@ -619,7 +738,7 @@ function init() {
 
   shareEl.addEventListener('click', () => copyShareLink(state));
   shareSaveEl.addEventListener('click', () => {
-    state.savedZones = [...state.zones];
+    state.savedCities = [...state.cities];
     state.shared = false;
     saveState(state);
     shareBannerEl.hidden = true;
@@ -627,13 +746,25 @@ function init() {
   });
   shareExitEl.addEventListener('click', () => {
     stopPlay();
-    state.zones = [...state.savedZones];
+    state.cities = [...state.savedCities];
     state.shared = false;
     shareBannerEl.hidden = true;
     clearShareParams();
     renderCards(state);
     setViewTime(state, null);
   });
+
+  // Cities named in a shared link only carry name and zone; look up where they
+  // are so they get globe dots too.
+  if (state.shared && state.cities.some((c) => c.lat === null)) {
+    loadCityList().then((rows) => {
+      for (const city of state.cities.filter((c) => c.lat === null)) {
+        const row = rows.find((r) => r[0] === city.name && r[2] === city.zone);
+        if (row) [city.lat, city.lon] = [row[3], row[4]];
+      }
+      tick(state);
+    }, (err) => console.warn('Kedudukan bandar dalam pautan tidak dapat dicari.', err));
+  }
 
   renderCards(state);
   if (shared.time !== null) setViewTime(state, shared.time);

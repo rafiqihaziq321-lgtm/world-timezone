@@ -1,8 +1,7 @@
 // @ts-check
-const path = require('path');
 const { test: base, expect } = require('@playwright/test');
 
-const APP_URL = `file://${path.resolve(__dirname, '..', 'index.html')}`;
+const APP_URL = 'index.html'; // relative to baseURL (the local test server)
 const STORAGE_KEY = 'world-timezone:v1';
 // 22:00:07 UTC = 06:00:07 Wed in Kuala Lumpur (London on BST, New York on EDT).
 const FIXED_NOW = new Date('2026-10-13T22:00:07Z');
@@ -29,7 +28,8 @@ async function openApp(page, stored, query = '') {
   await page.clock.runFor(1100);
 }
 
-const storedZones = async (page) => JSON.parse(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY)).zones;
+const storedCities = async (page) => JSON.parse(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY)).cities;
+const storedZones = async (page) => (await storedCities(page)).map((c) => c.zone);
 
 const card = (page, zone) => page.locator(`.card[data-zone="${zone}"]`);
 const cardZones = (page) => page.locator('.card').evaluateAll((cards) => cards.map((c) => c.dataset.zone));
@@ -84,7 +84,7 @@ test.describe('carian bandar', () => {
     await addCity(page, 'Tokyo');
     await expect(page.locator('#form-error')).toHaveText('Tokyo sudah ada dalam senarai.');
     await addCity(page, 'Atlantis');
-    await expect(page.locator('#form-error')).toHaveText('Zon waktu "Atlantis" tidak dijumpai.');
+    await expect(page.locator('#form-error')).toHaveText('Bandar atau zon waktu "Atlantis" tidak dijumpai.');
     expect(await cardZones(page)).toHaveLength(4);
   });
 
@@ -334,13 +334,16 @@ test.describe('pautan kongsi', () => {
     await expect(page.locator('#time-label')).toHaveText('Sekarang');
   });
 
-  test('butang kongsi menyalin pautan yang membuka paparan yang sama', async ({ page, context }) => {
-    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  test('butang kongsi menyalin pautan yang membuka paparan yang sama', async ({ page }) => {
+    // Capture what would be copied; clipboard permissions differ per browser.
+    await page.addInitScript(() => {
+      navigator.clipboard.writeText = async (text) => { window.copiedText = text; };
+    });
     await openApp(page);
     await page.locator('#time-slider').fill('36'); // 06:00 -> 15:00 KL = 07:00 UTC
     await page.click('#share');
     await expect(page.locator('#share-status')).toHaveText('Pautan disalin ke clipboard.');
-    const url = await page.evaluate(() => navigator.clipboard.readText());
+    const url = await page.evaluate(() => window.copiedText);
     expect(url).toMatch(/\?bandar=Asia\/Kuala_Lumpur,Europe\/London,America\/New_York,Asia\/Tokyo&masa=2026-10-14T07:00:00Z$/);
 
     await page.goto(url);
@@ -421,5 +424,122 @@ test.describe('laman web', () => {
     for (const id of ['#time-reset', '#share-banner', '#share-status']) {
       await expect(page.locator(id)).toBeHidden();
     }
+  });
+});
+
+test.describe('pangkalan data bandar', () => {
+  const byKey = (page, key) => page.locator(`.card[data-key="${key}"]`);
+
+  test('bandar dalam zon yang sama menjadi kad berasingan', async ({ page }) => {
+    await openApp(page);
+    await addCity(page, 'Johor Bahru');
+    const jb = byKey(page, 'Asia/Kuala_Lumpur~Johor Bahru');
+    await expect(jb.locator('.city')).toHaveText('Johor Bahru');
+    await expect(jb.locator('.utc')).toHaveText('UTC+8');
+    await expect(byKey(page, 'Asia/Kuala_Lumpur~Kuala Lumpur')).toHaveCount(1);
+
+    await addCity(page, 'johor bahru');
+    await expect(page.locator('#form-error')).toHaveText('Johor Bahru sudah ada dalam senarai.');
+    await expect(page.locator('.card')).toHaveCount(5);
+  });
+
+  test('nama Melayu, nama negara dan bandar paling besar dahulu', async ({ page }) => {
+    await openApp(page);
+    await addCity(page, 'Mekah');
+    await expect(byKey(page, 'Asia/Riyadh~Mekah').locator('.utc')).toHaveText('UTC+3');
+    await addCity(page, 'kota bharu');
+    await expect(byKey(page, 'Asia/Kuala_Lumpur~Kota Bharu')).toHaveCount(1);
+    await addCity(page, 'George Town'); // the one in Penang, not the Cayman Islands
+    await expect(byKey(page, 'Asia/Kuala_Lumpur~George Town')).toHaveCount(1);
+    await addCity(page, 'George Town, Cayman Islands');
+    await expect(byKey(page, 'America/Cayman~George Town').locator('.utc')).toHaveText('UTC−5');
+  });
+
+  test('senarai bandar hanya dimuat bila carian digunakan', async ({ page }) => {
+    await openApp(page);
+    expect(await page.evaluate(() => 'WORLD_CITIES' in window)).toBe(false);
+    await page.focus('#zone-input');
+    await expect.poll(() => page.locator('#zone-list option').count()).toBeGreaterThan(7000);
+    await expect(page.locator('#zone-list option[value="Johor Bahru, Malaysia"]')).toHaveCount(1);
+  });
+
+  test('bandar yang dicari mendapat titik sendiri pada glob', async ({ page }) => {
+    await openApp(page);
+    await addCity(page, 'Johor Bahru');
+    await byKey(page, 'Asia/Kuala_Lumpur~Johor Bahru').locator('.city').click();
+    await page.clock.runFor(1000);
+    await page.locator('#globe').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await expect(page.locator('#globe')).toBeInViewport();
+    await page.clock.runFor(100);
+    const box = await page.locator('#globe').boundingBox();
+    if (!box) throw new Error('globe canvas not rendered');
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.clock.runFor(200);
+    await expect(page.locator('.globe-tip')).toContainText('Johor Bahru');
+  });
+
+  test('senarai lama (zon sahaja) dipindahkan ke format bandar', async ({ page }) => {
+    await openApp(page, { zones: ['Asia/Kuala_Lumpur', 'Europe/Kyiv'], hour24: true });
+    await expect(page.locator('.card .city')).toHaveText(['Kuala Lumpur', 'Kyiv']);
+    await page.uncheck('#format24'); // any change saves
+    const stored = JSON.parse(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY));
+    expect(stored).not.toHaveProperty('zones');
+    expect(stored.cities).toEqual([
+      { name: 'Kuala Lumpur', zone: 'Asia/Kuala_Lumpur', lat: 3.14, lon: 101.69 },
+      { name: 'Kyiv', zone: 'Europe/Kyiv', lat: null, lon: null },
+    ]);
+  });
+
+  test('pautan kongsi membawa nama bandar dan mencari kedudukannya', async ({ page }) => {
+    await openApp(page, undefined, '?bandar=Asia/Kuala_Lumpur,Asia/Kuala_Lumpur~Johor%20Bahru');
+    await expect(page.locator('.card .city')).toHaveText(['Kuala Lumpur', 'Johor Bahru']);
+    await expect(byKey(page, 'Asia/Kuala_Lumpur~Johor Bahru')).toHaveClass(/on-globe/);
+
+    await page.addInitScript(() => {
+      navigator.clipboard.writeText = async (text) => { window.copiedText = text; };
+    });
+    await page.reload();
+    await page.clock.runFor(1100);
+    await page.click('#share');
+    await expect.poll(() => page.evaluate(() => window.copiedText)).toMatch(/\?bandar=Asia\/Kuala_Lumpur,Asia\/Kuala_Lumpur~Johor%20Bahru$/);
+  });
+});
+
+test.describe('PWA dan pratonton pautan', () => {
+  test('manifest dan semua ikon boleh dimuat', async ({ page }) => {
+    await openApp(page);
+    await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', 'manifest.webmanifest');
+    const response = await page.request.get('manifest.webmanifest');
+    expect(response.ok()).toBe(true);
+    const manifest = await response.json();
+    expect(manifest).toMatchObject({ name: 'Jam Dunia', display: 'standalone', start_url: './' });
+    expect(manifest.icons.map((i) => i.sizes)).toEqual(['192x192', '512x512', '512x512']);
+    for (const icon of [...manifest.icons.map((i) => i.src), 'icons/apple-touch-icon.png', 'icons/icon.svg']) {
+      const res = await page.request.get(icon);
+      expect(res.ok(), icon).toBe(true);
+    }
+  });
+
+  test('tag pratonton pautan menunjuk ke imej yang wujud', async ({ page }) => {
+    await openApp(page);
+    const meta = (selector) => page.locator(selector).getAttribute('content');
+    expect(await meta('meta[property="og:title"]')).toBe('Jam Dunia');
+    expect(await meta('meta[name="twitter:card"]')).toBe('summary_large_image');
+    const image = await meta('meta[property="og:image"]');
+    expect(image).toBe('https://rafiqihaziq321-lgtm.github.io/world-timezone/og-image.png');
+    const res = await page.request.get('og-image.png');
+    expect(res.ok()).toBe(true);
+    expect(res.headers()['content-type']).toBe('image/png');
+  });
+
+  test('boleh dibuka tanpa internet selepas lawatan pertama', async ({ page, context }) => {
+    await openApp(page);
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+    await context.setOffline(true);
+    await page.reload();
+    await expect(page.locator('#hero-title')).toBeVisible();
+    await expect(page.locator('.card')).toHaveCount(4);
+    expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toContain('Manrope');
+    await context.setOffline(false);
   });
 });
