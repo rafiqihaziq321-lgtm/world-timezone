@@ -607,14 +607,32 @@ function weatherSection(state, city, entry, key, iso) {
   return section;
 }
 
-function airQualitySection() {
+// `air` is a state capital's estimate from stateAirQuality(), or null where
+// we have none (cities outside the Bandar tab), which leaves only the link.
+function airQualitySection(state, air = null) {
   const section = el('section', 'local-block');
   section.append(el('h4', '', 'Kualiti udara'));
+  if (air) {
+    if (air.entry.status === 'loading') {
+      section.append(el('p', 'local-status', 'Memuatkan anggaran kualiti udara…'));
+    } else if (air.entry.status === 'error') {
+      section.append(el('p', 'local-status', 'Anggaran kualiti udara tidak dapat dimuat.'), retryButton(state, air.key));
+    } else if (!air.estimate) {
+      section.append(el('p', 'local-status', 'Data model tidak mencukupi untuk anggaran.'));
+    } else {
+      const { index, band, pm25, pm10 } = air.estimate;
+      const reading = el('p', `aqi-reading aqi-${band.id}`);
+      reading.append(el('strong', '', String(index)), ` ${band.label}`);
+      section.append(reading, el('p', 'local-status',
+        `Anggaran: PM2.5 ${pm25} µg/m³, PM10 ${pm10} µg/m³ (purata 24 jam, model CAMS). Bukan IPU rasmi JAS.`));
+    }
+  }
   const link = el('a', 'local-link', 'Semak IPU rasmi (JAS)');
   link.href = AIR_QUALITY_URL;
   link.target = '_blank';
   link.rel = 'noopener';
-  section.append(link, el('p', 'local-status', 'Bacaan dikemas kini setiap jam daripada stesen Jabatan Alam Sekitar.'));
+  section.append(link);
+  if (!air) section.append(el('p', 'local-status', 'Bacaan dikemas kini setiap jam daripada stesen Jabatan Alam Sekitar.'));
   return section;
 }
 
@@ -644,19 +662,20 @@ function formatClock(state, zone, ms) {
 
 // Rebuilt only when the data, the displayed minute or the 12/24h setting
 // change, so buttons and links keep keyboard focus between ticks.
-function renderLocalPanel(state, panel, city, now) {
+function renderLocalPanel(state, panel, city, now, air = null) {
   const { iso } = cityDate(city.zone, now);
   const { key: prayerKey, entry: prayer, day } = prayerFor(state, city, now);
   const weatherKey = `cuaca|${city.name}`;
   const weather = state.localData.get(weatherKey, `${WEATHER_API}?contains=${encodeURIComponent(city.name)}@location__location_name&limit=50`);
-  const renderKey = [prayerKey, prayer?.status, weather.status, Math.floor(now.getTime() / MINUTE_MS), state.hour24].join('|');
+  const renderKey = [prayerKey, prayer?.status, weather.status, air?.key, air?.entry.status, Math.floor(now.getTime() / MINUTE_MS), state.hour24].join('|');
   if (panel.dataset.key === renderKey) return;
   panel.dataset.key = renderKey;
   panel.replaceChildren(
     prayerSection(state, city, prayer, prayerKey, now, day),
     weatherSection(state, city, weather, weatherKey, iso),
-    airQualitySection(),
-    el('p', 'local-source', 'Waktu solat: JAKIM melalui waktusolat.app. Cuaca: MET Malaysia melalui data.gov.my.'),
+    airQualitySection(state, air),
+    el('p', 'local-source', `Waktu solat: JAKIM melalui waktusolat.app. Cuaca: MET Malaysia melalui data.gov.my.${
+      air ? ' Kualiti udara: Copernicus CAMS melalui Open-Meteo (CC BY 4.0).' : ''}`),
   );
 }
 
@@ -701,6 +720,18 @@ function weatherIcon(text = '') {
   if (/jerebu/.test(t)) return '🌫️';
   if (/mendung|berawan/.test(t)) return '☁️';
   return '🌤️';
+}
+
+// MET warnings name every affected district after "kawasan berikut:", which
+// can run to hundreds of words; the lead clause says what and when.
+function warningSummary(text, max = 160) {
+  const colon = text.search(/(?<!\d):(?!\d)/); // not the colon in "6:00 petang"
+  let lead = (colon > 0 ? text.slice(0, colon) : text.split(/(?<=\.)\s/)[0]).trim();
+  if (lead.length > max) {
+    const space = lead.lastIndexOf(' ', max - 1);
+    lead = `${lead.slice(0, space > 0 ? space : max - 1)}…`;
+  }
+  return lead;
 }
 
 function loadErrorText(entry, what) {
@@ -751,18 +782,32 @@ function renderMalaysia(state, now) {
   // Warnings still in force.
   const warnKey = 'amaran';
   const warnings = state.localData.get(warnKey, `${WARNING_API}?sort=-warning_issue__issued&limit=20`);
-  renderKeyed(document.getElementById('my-warnings'), `${warnings.status}|${minute}`, () => {
+  // MET reissues warnings unchanged, so show each title and text once.
+  const seen = new Set();
+  const active = (warnings.status === 'ok' && Array.isArray(warnings.data) ? warnings.data : [])
+    .filter((w) => !(parseMyt(w.valid_to) < now.getTime()))
+    .filter((w) => {
+      const id = `${w.warning_issue?.title_bm || w.heading_bm}|${w.text_bm}`;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  // Keyed on what is shown, not the minute, so an opened "Baca penuh" stays open.
+  const warnRenderKey = [warnings.status, state.hour24, ...active.map((w) => `${w.warning_issue?.issued}|${w.valid_to}|${w.text_bm}`)].join('|');
+  renderKeyed(document.getElementById('my-warnings'), warnRenderKey, () => {
     const heading = el('h3', '', 'Amaran cuaca');
     if (warnings.status !== 'ok') return [heading, statusLine(state, warnings, warnKey, 'Amaran cuaca')];
-    const active = (Array.isArray(warnings.data) ? warnings.data : [])
-      .filter((w) => !(parseMyt(w.valid_to) < now.getTime()));
     if (!active.length) return [heading, el('p', 'local-status', 'Tiada amaran cuaca aktif.')];
     return [heading, ...active.map((w) => {
       const item = el('article', 'alert');
-      item.append(
-        el('h4', '', w.warning_issue?.title_bm || w.heading_bm || 'Amaran'),
-        el('p', '', w.text_bm || ''),
-      );
+      const text = w.text_bm || '';
+      const summary = warningSummary(text);
+      item.append(el('h4', '', w.warning_issue?.title_bm || w.heading_bm || 'Amaran'), el('p', '', summary));
+      if (summary !== text) {
+        const more = el('details', 'alert-more');
+        more.append(el('summary', '', 'Baca penuh'), el('p', '', text));
+        item.append(more);
+      }
       const until = parseMyt(w.valid_to);
       if (Number.isFinite(until)) {
         item.append(el('p', 'local-status', `Sah hingga ${new Date(until).toLocaleString('ms-MY', {
@@ -956,7 +1001,21 @@ function renderCities(state, now) {
   const grid = document.getElementById('my-cities');
   const photos = state.localData.get('foto-landmark', loadLandmarkPhotos);
   const forecasts = stateForecasts(state, now);
+  const air = stateAirQuality(state);
   const minute = Math.floor(now.getTime() / MINUTE_MS);
+
+  if (!state.mapView) {
+    state.mapView = { status: 'loading' };
+    createMalaysiaMap(state).then((view) => {
+      Object.assign(state.mapView, { status: 'ready' }, view);
+      tick(state);
+    }, (err) => {
+      state.mapView.status = 'error';
+      console.info('Jam Dunia: peta 3D tidak dapat dipaparkan.', err);
+      setMapStatus('Peta 3D tidak dapat dipaparkan: pelayar ini mungkin tidak menyokong WebGL, atau fail peta gagal dimuat. Senarai bandar di bawah masih berfungsi.');
+    });
+  }
+  if (state.mapView.status === 'ready') renderMapMarkers(state, state.mapView, now, photos, forecasts, air);
 
   if (!grid.childElementCount) {
     for (const s of MALAYSIA_STATES) {
@@ -988,7 +1047,8 @@ function renderCities(state, now) {
     const { entry, today } = prayerFor(state, stateCity(s), now);
     const forecast = forecasts.entry.status === 'ok' && Array.isArray(forecasts.entry.data)
       ? forecastForState(forecasts.entry.data, s.state, forecasts.iso) : null;
-    renderKeyed(card.querySelector('.city-now'), `${entry.status}|${forecasts.entry.status}|${minute}|${state.hour24}`, () => {
+    const { estimate } = air.forState(s);
+    renderKeyed(card.querySelector('.city-now'), `${entry.status}|${forecasts.entry.status}|${estimate?.index}|${minute}|${state.hour24}`, () => {
       const lines = [];
       if (forecast) {
         const summary = forecast.summary_forecast || forecast.afternoon_forecast || '';
@@ -999,6 +1059,11 @@ function renderCities(state, now) {
         const label = PRAYER_TIMES.find(([f]) => f === next)[1];
         lines.push(el('span', '', `🕌 ${label} ${formatClock(state, s.zone, today[next] * 1000)}`));
       }
+      if (estimate) {
+        const aqi = el('span', 'city-aqi');
+        aqi.append(el('span', `aqi-dot aqi-${estimate.band.id}`), `IPU anggaran ${estimate.index}, ${estimate.band.label}`);
+        lines.push(aqi);
+      }
       return lines;
     });
   }
@@ -1007,7 +1072,7 @@ function renderCities(state, now) {
   if (dialog.open && state.dialogState) {
     const s = state.dialogState;
     const panel = dialog.querySelector('.local-panel');
-    if (panel) renderLocalPanel(state, panel, stateCity(s), now);
+    if (panel) renderLocalPanel(state, panel, stateCity(s), now, air.forState(s));
     renderKeyed(dialog.querySelector('.dialog-photo'), photos.status, () => {
       const photo = photos.status === 'ok' ? photos.data.get(s.landmark) : null;
       return [photoElement(s, photo, '(max-width: 700px) 100vw, 640px'), ...(photo ? [photoCredit(photo)] : [])];
@@ -1029,6 +1094,207 @@ function openCityDialog(state, s) {
   );
   dialog.showModal();
   tick(state);
+}
+
+// ---------- Estimated air quality (Open-Meteo, CAMS model) ----------
+
+const AIR_API = 'https://air-quality-api.open-meteo.com/v1/air-quality';
+// Malaysia's 24-hour ambient air standards (MAAQS 2020), µg/m³.
+const PM25_STANDARD = 35;
+const PM10_STANDARD = 100;
+// The IPU's published bands.
+const AIR_BANDS = [
+  { max: 50, id: 'good', label: 'Baik' },
+  { max: 100, id: 'moderate', label: 'Sederhana' },
+  { max: 200, id: 'unhealthy', label: 'Tidak sihat' },
+  { max: 300, id: 'very-unhealthy', label: 'Sangat tidak sihat' },
+  { max: Infinity, id: 'hazardous', label: 'Berbahaya' },
+];
+
+// JAS does not publish the breakpoints it converts PM readings with, so this
+// is an IPU-like estimate, not the IPU: 100 means the worse of PM2.5 and PM10
+// is at its 24-hour standard, from modelled rather than measured levels.
+// `hourly` is Open-Meteo's series with unix times; null if under 18 hours.
+function estimateAirIndex(hourly, nowMs) {
+  const from = nowMs / 1000 - 24 * 3600;
+  const mean = (values) => {
+    const recent = (hourly?.time ?? []).flatMap((t, i) => (t > from && t <= nowMs / 1000 && Number.isFinite(values?.[i]) ? [values[i]] : []));
+    return recent.length >= 18 ? recent.reduce((a, b) => a + b, 0) / recent.length : null;
+  };
+  const pm25 = mean(hourly?.pm2_5);
+  const pm10 = mean(hourly?.pm10);
+  if (pm25 === null || pm10 === null) return null;
+  const index = Math.round(Math.max((pm25 / PM25_STANDARD) * 100, (pm10 / PM10_STANDARD) * 100));
+  return { index, band: AIR_BANDS.find((b) => index <= b.max), pm25: Math.round(pm25), pm10: Math.round(pm10) };
+}
+
+// One request for all 16 capitals, refreshed each hour; Open-Meteo returns
+// a list in the order the coordinates were given.
+function stateAirQuality(state) {
+  const nowMs = Date.now();
+  const key = `udara|${Math.floor(nowMs / HOUR_MS)}`;
+  const coords = (field) => MALAYSIA_STATES.map((s) => s[field]).join(',');
+  const entry = state.localData.get(key, `${AIR_API}?latitude=${coords('lat')}&longitude=${coords('lon')}&hourly=pm10,pm2_5&past_days=1&forecast_days=1&timeformat=unixtime`);
+  return {
+    key,
+    entry,
+    forState(s) {
+      const rows = entry.status === 'ok' && Array.isArray(entry.data) ? entry.data : [];
+      return { key, entry, estimate: estimateAirIndex(rows[MALAYSIA_STATES.indexOf(s)]?.hourly, nowMs) };
+    },
+  };
+}
+
+// ---------- 3D map of Malaysia (MapLibre, OpenFreeMap, AWS terrain) ----------
+
+const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
+const DEM_TILES = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+const DEM_ATTRIBUTION = '<a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener">Rupa bumi: Mapzen, AWS</a>';
+const MALAYSIA_BOUNDS = [[99.6, 0.85], [119.3, 7.4]];
+const PENINSULA_BOUNDS = [[99.6, 1.2], [104.4, 6.75]]; // phones: Borneo is a swipe away
+const MAP_PITCH = 35;
+const LABEL_ZOOM = 6.5; // markers show their name and readings from here in
+const MAP_LOCALE = {
+  'NavigationControl.ZoomIn': 'Zum masuk',
+  'NavigationControl.ZoomOut': 'Zum keluar',
+  'NavigationControl.ResetBearing': 'Seret untuk memutar, klik untuk menghala ke utara',
+  'FullscreenControl.Enter': 'Skrin penuh',
+  'FullscreenControl.Exit': 'Keluar skrin penuh',
+  'AttributionControl.ToggleAttribution': 'Tunjuk sumber peta',
+  'CooperativeGesturesHandler.WindowsHelpText': 'Tekan Ctrl sambil menatal untuk zum peta',
+  'CooperativeGesturesHandler.MacHelpText': 'Tekan ⌘ sambil menatal untuk zum peta',
+  'CooperativeGesturesHandler.MobileHelpText': 'Guna dua jari untuk menggerakkan peta',
+  'Map.Title': 'Peta Malaysia',
+};
+// Kuala Lumpur first, then by population: who keeps their marker when
+// markers overlap.
+const MAP_PRIORITY = [...MALAYSIA_STATES].sort((a, b) => (b.state === 'W.P. Kuala Lumpur') - (a.state === 'W.P. Kuala Lumpur') || b.population - a.population);
+
+function setMapStatus(text) {
+  const status = document.getElementById('map-status');
+  status.textContent = text;
+  status.hidden = !text;
+}
+
+async function createMalaysiaMap(state) {
+  const css = el('link');
+  css.rel = 'stylesheet';
+  css.href = 'vendor/maplibre/maplibre-gl.css';
+  document.head.append(css);
+  const maplibregl = await import('./vendor/maplibre/maplibre-gl.mjs');
+
+  const container = document.getElementById('my-map');
+  // Fitted flat, then tilted: fitting while tilted leaves the near edge cut off.
+  const map = new maplibregl.Map({
+    container,
+    style: MAP_STYLE,
+    bounds: container.clientWidth < 600 ? PENINSULA_BOUNDS : MALAYSIA_BOUNDS,
+    fitBoundsOptions: { padding: { top: 40, bottom: 40, left: 40, right: 60 } },
+    maxPitch: 70,
+    maxBounds: [[94, -4], [125, 12]],
+    cooperativeGestures: true,
+    attributionControl: { compact: true },
+    locale: MAP_LOCALE,
+  });
+  map.setPitch(MAP_PITCH);
+  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+  map.addControl(new maplibregl.FullscreenControl({ container: container.parentElement }), 'top-right');
+
+  let reported = false;
+  map.on('error', (event) => {
+    console.info('Jam Dunia: sebahagian peta gagal dimuat.', event.error);
+    if (!reported) setMapStatus('Sebahagian peta tidak dapat dimuat. Penanda bandar dan senarai di bawah masih berfungsi.');
+    reported = true;
+  });
+  map.on('load', () => {
+    // Relief shading everywhere, and real 3D hills once tilted and zoomed in.
+    map.addSource('dem-terrain', { type: 'raster-dem', tiles: [DEM_TILES], encoding: 'terrarium', tileSize: 256, maxzoom: 12, attribution: DEM_ATTRIBUTION });
+    map.addSource('dem-shade', { type: 'raster-dem', tiles: [DEM_TILES], encoding: 'terrarium', tileSize: 256, maxzoom: 12 });
+    const firstSymbol = map.getStyle().layers.find((layer) => layer.type === 'symbol')?.id;
+    map.addLayer({ id: 'hillshade', type: 'hillshade', source: 'dem-shade', paint: { 'hillshade-exaggeration': 0.35 } }, firstSymbol);
+    map.setTerrain({ source: 'dem-terrain', exaggeration: 1.5 });
+  });
+
+  const markers = new Map();
+  for (const s of MALAYSIA_STATES) {
+    const root = el('div', 'map-marker');
+    const open = el('button', 'marker-open');
+    open.type = 'button';
+    open.setAttribute('aria-label', `Butiran ${s.capital}, ${s.state}`);
+    const label = el('span', 'marker-label');
+    label.append(el('strong', '', s.capital), el('span', 'marker-meta'));
+    open.append(el('span', 'marker-photo'), el('span', 'marker-weather'), el('span', 'marker-aqi'), label);
+    open.addEventListener('click', () => openCityDialog(state, s));
+    const more = el('button', 'marker-more');
+    more.type = 'button';
+    more.hidden = true;
+    more.addEventListener('click', () => map.easeTo({ center: [s.lon, s.lat], zoom: Math.max(map.getZoom() + 2, LABEL_ZOOM) }));
+    root.append(open, more);
+    const marker = new maplibregl.Marker({ element: root, anchor: 'center' }).setLngLat([s.lon, s.lat]).addTo(map);
+    markers.set(s.state, { root, marker, more });
+  }
+
+  // Markers that would overlap a more important one are hidden; the one kept
+  // shows "+n" and zooms in to separate them.
+  const declutter = () => {
+    const labelled = map.getZoom() >= LABEL_ZOOM;
+    container.classList.toggle('map-labelled', labelled);
+    const [w, h] = labelled ? [130, 96] : [52, 52];
+    const kept = [];
+    for (const s of MAP_PRIORITY) {
+      const m = markers.get(s.state);
+      const p = map.project([s.lon, s.lat]);
+      const owner = kept.find((k) => Math.abs(k.p.x - p.x) < w && Math.abs(k.p.y - p.y) < h);
+      m.root.classList.toggle('is-covered', Boolean(owner));
+      if (owner) owner.hidden += 1;
+      else kept.push({ m, p, hidden: 0 });
+    }
+    for (const { m, hidden } of kept) {
+      m.more.hidden = !hidden;
+      m.more.textContent = `+${hidden}`;
+      m.more.setAttribute('aria-label', `${hidden} lagi bandar berdekatan; zum masuk`);
+    }
+  };
+  map.on('move', declutter);
+  map.on('resize', declutter);
+  declutter();
+
+  return { map, markers };
+}
+
+function renderMapMarkers(state, view, now, photos, forecasts, air) {
+  const minute = Math.floor(now.getTime() / MINUTE_MS);
+  for (const s of MALAYSIA_STATES) {
+    const { root } = view.markers.get(s.state);
+    renderKeyed(root.querySelector('.marker-photo'), photos.status, () => {
+      const photo = photos.status === 'ok' ? photos.data.get(s.landmark) : null;
+      if (!photo) return [el('span', 'marker-initial', s.capital[0])];
+      const img = el('img');
+      img.src = photo.src;
+      img.alt = '';
+      img.decoding = 'async';
+      return [img];
+    });
+    const forecast = forecasts.entry.status === 'ok' && Array.isArray(forecasts.entry.data)
+      ? forecastForState(forecasts.entry.data, s.state, forecasts.iso) : null;
+    const summary = forecast ? forecast.summary_forecast || forecast.afternoon_forecast || '' : '';
+    renderKeyed(root.querySelector('.marker-weather'), summary, () => (forecast ? [weatherIcon(summary)] : []));
+    root.querySelector('.marker-weather').title = summary;
+
+    const { estimate } = air.forState(s);
+    root.dataset.aqi = estimate ? estimate.band.id : '';
+    renderKeyed(root.querySelector('.marker-aqi'), estimate ? `${estimate.index}` : '', () => (estimate ? [String(estimate.index)] : []));
+    root.querySelector('.marker-aqi').title = estimate ? `IPU anggaran ${estimate.index}: ${estimate.band.label}` : '';
+
+    const { today } = prayerFor(state, stateCity(s), now);
+    const next = nextPrayer(today, now);
+    renderKeyed(root.querySelector('.marker-meta'), `${forecast?.max_temp}|${next}|${minute}|${state.hour24}`, () => {
+      const parts = [];
+      if (forecast) parts.push(`${forecast.max_temp}°C`);
+      if (next) parts.push(`🕌 ${PRAYER_TIMES.find(([f]) => f === next)[1]} ${formatClock(state, s.zone, today[next] * 1000)}`);
+      return [parts.join(' · ')];
+    });
+  }
 }
 
 // Returns false when the city is already listed.
@@ -1194,6 +1460,7 @@ function init() {
   };
   state.localData = createLocalData(() => tick(state));
   state.dialogState = null;
+  state.mapView = null; // created the first time the Bandar tab opens
   state.tab = showTab(window.location.hash);
   window.addEventListener('hashchange', () => {
     state.tab = showTab(window.location.hash);

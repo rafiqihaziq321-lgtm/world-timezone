@@ -198,7 +198,7 @@
         <div>
           <h3>Masa dari pelayar anda</h3>
           <p>Masa setiap bandar dikira oleh pelayar anda menggunakan pangkalan data zon waktu IANA, sama seperti telefon dan komputer anda. Tiada akaun; senarai anda disimpan dalam pelayar ini sahaja.</p>
-          <p>Panel Malaysia mengambil data hanya apabila dibuka: waktu solat JAKIM daripada waktusolat.app (kedudukan bandar dihantar untuk mencari zon), ramalan, amaran cuaca dan gempa bumi MET Malaysia daripada data.gov.my, dan foto landmark daripada Wikipedia serta Wikimedia Commons.</p>
+          <p>Panel Malaysia mengambil data hanya apabila dibuka: waktu solat JAKIM daripada waktusolat.app (kedudukan bandar dihantar untuk mencari zon), ramalan, amaran cuaca dan gempa bumi MET Malaysia daripada data.gov.my, foto landmark daripada Wikipedia serta Wikimedia Commons, anggaran kualiti udara daripada Open-Meteo, serta jubin peta daripada OpenFreeMap dan Amazon Web Services (rupa bumi).</p>
         </div>
         <div>
           <h3>Waktu jimat siang</h3>
@@ -257,10 +257,27 @@
     </div>
 
     <div id="bandar-malaysia" class="tab-panel" hidden>
+      <section class="section map-section" aria-labelledby="map-title">
+        <div class="section-head">
+          <h2 id="map-title">Peta Malaysia</h2>
+          <p>Ibu negeri setiap negeri dan wilayah persekutuan. Seret untuk menggerakkan peta, klik kanan atau dua jari untuk condong dan putar. Pilih penanda untuk waktu solat, cuaca dan kualiti udara.</p>
+        </div>
+        <div class="map-frame">
+          <div id="my-map" class="my-map"></div>
+          <ul class="map-legend" aria-label="Petunjuk IPU anggaran">
+            <li><span class="aqi-dot aqi-good"></span>Baik</li>
+            <li><span class="aqi-dot aqi-moderate"></span>Sederhana</li>
+            <li><span class="aqi-dot aqi-unhealthy"></span>Tidak sihat</li>
+            <li><span class="aqi-dot aqi-very-unhealthy"></span>Sangat tidak sihat</li>
+            <li><span class="aqi-dot aqi-hazardous"></span>Berbahaya</li>
+          </ul>
+        </div>
+        <p id="map-status" class="map-status" role="status" hidden></p>
+        <p class="map-note">Angka pada penanda ialah <strong>IPU anggaran</strong>: purata PM2.5 dan PM10 24 jam daripada model Copernicus CAMS (melalui Open-Meteo), dengan 100 bersamaan piawai kualiti udara Malaysia. Ia bukan bacaan rasmi Jabatan Alam Sekitar; untuk IPU rasmi, semak <a href="https://eqms.doe.gov.my/" target="_blank" rel="noopener">APIMS</a>.</p>
+      </section>
       <section class="section" aria-labelledby="cities-title">
         <div class="section-head">
-          <h2 id="cities-title">Bandar Malaysia</h2>
-          <p>Ibu negeri setiap negeri dan wilayah persekutuan. Pilih bandar untuk waktu solat, cuaca dan kualiti udara.</p>
+          <h2 id="cities-title">Senarai bandar</h2>
         </div>
         <div id="my-cities" class="city-grid"></div>
       </section>
@@ -281,7 +298,7 @@
         </svg>
         Jam Dunia
       </p>
-      <p>Peta daripada Natural Earth (domain awam). Glob dilukis dengan D3. Fon Unbounded dan Manrope (SIL Open Font License).</p>
+      <p>Peta daripada Natural Earth (domain awam). Glob dilukis dengan D3. Peta Malaysia dilukis dengan MapLibre (data © OpenStreetMap melalui OpenFreeMap). Fon Unbounded dan Manrope (SIL Open Font License).</p>
       <p><a href="https://github.com/rafiqihaziq321-lgtm/world-timezone">Kod sumber di GitHub</a></p>
     </div>
   </footer>
