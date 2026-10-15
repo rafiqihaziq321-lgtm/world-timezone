@@ -231,7 +231,7 @@ button.secondary,
 /* Shared horizontal rhythm for every full-width band. */
 .nav-inner,
 .notices,
-main > section,
+.tab-panel > section,
 .footer-inner {
   max-width: 1180px;
   margin-inline: auto;
@@ -283,6 +283,7 @@ main > section,
 }
 
 .nav-links a:hover { color: var(--text); background: var(--panel); }
+.nav-links a[aria-current="page"] { color: var(--accent-contrast); background: var(--accent); }
 
 .header-actions { display: flex; align-items: center; gap: 10px; }
 .toggle { color: var(--muted); cursor: pointer; font-size: 0.95rem; white-space: nowrap; }
@@ -552,6 +553,7 @@ body.time-shifted #time-label { color: var(--accent-ink); font-weight: 700; }
 #clocks {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  align-items: start; /* an opened panel grows only its own card */
   gap: 14px;
   margin-top: 20px;
 }
@@ -645,6 +647,236 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 
 @keyframes flash {
   from { box-shadow: 0 0 0 4px var(--accent-ink), var(--shadow); }
+}
+
+/* ---------- Malaysian city panel ---------- */
+
+.card .local-toggle {
+  margin-top: 12px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.2);
+  color: inherit;
+  border-color: currentColor;
+}
+
+.local-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid currentColor;
+  border-top-color: color-mix(in srgb, currentColor 30%, transparent);
+  font-size: 0.875rem;
+}
+
+.local-block + .local-block { margin-top: 14px; }
+.local-block h4 { margin: 0 0 6px; font-size: 0.95rem; }
+.local-block h4 small { font-weight: 600; opacity: 0.75; }
+.local-block p { margin: 4px 0 0; }
+.local-status { opacity: 0.8; }
+
+.prayer-times {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.prayer-times li {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.prayer-times li span { font-size: 0.75rem; opacity: 0.85; }
+.prayer-times li strong { font-variant-numeric: tabular-nums; }
+.prayer-times li.next { outline: 2px solid currentColor; }
+.next-prayer { font-weight: 700; }
+
+.forecast {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 12px;
+  margin: 0;
+}
+
+.forecast dt { font-weight: 700; }
+.forecast dd { margin: 0; }
+
+.local-link { font-weight: 700; }
+.local-retry { margin-top: 6px; padding: 4px 12px; font-size: 0.8rem; }
+.local-source { margin-top: 14px !important; font-size: 0.75rem; opacity: 0.7; }
+
+/* ---------- Malaysia tab ---------- */
+
+.my-intro { padding-bottom: 0; }
+.my-intro .section-head { margin-bottom: 0; }
+
+.alerts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 20px;
+}
+
+.alert-list h3 { margin: 0 0 10px; font-size: 1.05rem; }
+
+.alert {
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-left: 4px solid var(--sun-ink);
+}
+
+.alert.quake { border-left-color: var(--moon); }
+.alert h4 { margin: 0 0 4px; font-size: 0.95rem; }
+.alert p { margin: 2px 0 0; font-size: 0.9rem; }
+
+.load-error { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+.state-weather {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: 12px;
+}
+
+.weather-tile {
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+}
+
+.weather-icon { font-size: 1.6rem; }
+.weather-tile h3 { margin: 6px 0 2px; font-size: 1rem; }
+.weather-tile p { margin: 0; color: var(--muted); font-size: 0.85rem; }
+.weather-tile .weather-temp { margin-top: 6px; color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.table-scroll {
+  overflow-x: auto;
+  border-radius: 16px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table th, .data-table td { padding: 10px 14px; text-align: left; white-space: nowrap; }
+.data-table thead th { color: var(--muted); font-weight: 700; border-bottom: 1px solid var(--panel-border); }
+.data-table tbody tr + tr { border-top: 1px solid var(--panel-border); }
+.data-table tbody th small { display: block; color: var(--muted); font-weight: 400; font-size: 0.75rem; }
+.data-table td.next { color: var(--sun-ink); font-weight: 800; }
+.data-table tfoot { border-top: 2px solid var(--panel-border); font-weight: 800; }
+
+.bar {
+  display: inline-block;
+  width: calc(var(--share) * 120px);
+  height: 8px;
+  margin-right: 10px;
+  border-radius: 4px;
+  background: var(--sun);
+  vertical-align: middle;
+}
+
+/* ---------- Bandar Malaysia tab ---------- */
+
+.city-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 18px;
+}
+
+.city-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 20px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--shadow);
+}
+
+.city-open {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: 400;
+  text-align: left;
+}
+
+.city-photo { aspect-ratio: 4 / 3; overflow: hidden; background: var(--mark-night); }
+.city-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+.photo-missing {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  min-height: 180px;
+  padding: 16px;
+  background: linear-gradient(160deg, #1e1b4b, #312e81 60%, #6d28d9);
+  color: #e0e7ff;
+  font-weight: 700;
+  text-align: center;
+}
+
+.photo-loading { animation: pulse-bg 1.4s ease-in-out infinite; }
+
+@keyframes pulse-bg {
+  50% { opacity: 0.6; }
+}
+
+.city-info { padding: 14px 16px 6px; }
+.city-info h3 { margin: 0; font-size: 1.15rem; }
+.city-state { margin: 0; color: var(--muted); font-size: 0.85rem; }
+.city-landmark { margin: 6px 0 0; font-size: 0.85rem; font-style: italic; }
+.city-now { display: grid; gap: 2px; margin: 10px 0 0; font-size: 0.85rem; }
+
+.city-credit { padding: 0 16px 14px; }
+.photo-credit { margin: 6px 0 0; color: var(--muted); font-size: 0.7rem; }
+
+#city-dialog {
+  width: min(680px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+#city-dialog::backdrop { background: rgba(2, 6, 23, 0.6); }
+#city-dialog-body { padding: 0 20px 20px; }
+#city-dialog h2 { margin: 16px 0 2px; }
+#city-dialog .local-panel { border-top-color: var(--panel-border); }
+.dialog-photo { margin: 0 -20px; }
+.dialog-photo img, .dialog-photo .photo-missing { display: block; width: 100%; height: auto; max-height: 360px; object-fit: cover; }
+.dialog-photo .photo-credit { padding: 0 20px; }
+
+.dialog-close { position: sticky; top: 0; z-index: 1; height: 0; text-align: right; }
+.dialog-close button {
+  width: 36px;
+  height: 36px;
+  margin: 10px;
+  padding: 0;
+  font-size: 1.3rem;
+  background: rgba(10, 16, 46, 0.7);
+  color: #f8fafc;
 }
 
 /* ---------- Meeting planner ---------- */
@@ -780,6 +1012,7 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 
 .about > div { padding-top: 20px; border-top: 1px solid var(--panel-border); }
 .about p { margin: 0; color: var(--muted); }
+.about p + p { margin-top: 12px; }
 
 @media (max-width: 860px) {
   .about { grid-template-columns: minmax(0, 1fr); gap: 28px; }

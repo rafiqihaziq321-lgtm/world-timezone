@@ -38,12 +38,10 @@
         </svg>
         Jam Dunia
       </a>
-      <nav class="nav-links" aria-label="Bahagian laman">
-        <a href="#glob">Glob</a>
-        <a href="#bandar">Bandar</a>
-        <a href="#perancang">Perancang</a>
-        <a href="#fakta">Fakta</a>
-        <a href="#tentang">Tentang</a>
+      <nav class="nav-links" aria-label="Panel">
+        <a href="#dunia">Jam dunia</a>
+        <a href="#malaysia">Malaysia</a>
+        <a href="#bandar-malaysia">Bandar Malaysia</a>
       </nav>
       <div class="header-actions">
         <label class="toggle">
@@ -68,6 +66,7 @@
   </div>
 
   <main>
+    <div id="dunia" class="tab-panel">
     <section id="glob" class="hero" aria-labelledby="hero-title">
       <div class="hero-copy">
         <h1 id="hero-title">Siang dan malam di seluruh dunia, pada satu glob.</h1>
@@ -198,7 +197,8 @@
       <div class="about">
         <div>
           <h3>Masa dari pelayar anda</h3>
-          <p>Masa setiap bandar dikira oleh pelayar anda menggunakan pangkalan data zon waktu IANA, sama seperti telefon dan komputer anda. Tiada pelayan dan tiada akaun; senarai anda disimpan dalam pelayar ini sahaja.</p>
+          <p>Masa setiap bandar dikira oleh pelayar anda menggunakan pangkalan data zon waktu IANA, sama seperti telefon dan komputer anda. Tiada akaun; senarai anda disimpan dalam pelayar ini sahaja.</p>
+          <p>Panel Malaysia mengambil data hanya apabila dibuka: waktu solat JAKIM daripada waktusolat.app (kedudukan bandar dihantar untuk mencari zon), ramalan, amaran cuaca dan gempa bumi MET Malaysia daripada data.gov.my, dan foto landmark daripada Wikipedia serta Wikimedia Commons.</p>
         </div>
         <div>
           <h3>Waktu jimat siang</h3>
@@ -210,7 +210,67 @@
         </div>
       </div>
     </section>
+    </div>
+
+    <div id="malaysia" class="tab-panel" hidden>
+      <section class="section my-intro" aria-labelledby="my-title">
+        <div class="section-head">
+          <h2 id="my-title">Malaysia hari ini</h2>
+          <p id="my-today"></p>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="my-alerts-title">
+        <div class="section-head">
+          <h2 id="my-alerts-title">Amaran</h2>
+          <p>Amaran cuaca dan gempa bumi rasmi daripada MET Malaysia.</p>
+        </div>
+        <div class="alerts">
+          <div id="my-warnings" class="alert-list"></div>
+          <div id="my-quakes" class="alert-list"></div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="my-weather-title">
+        <div class="section-head">
+          <h2 id="my-weather-title">Cuaca setiap negeri</h2>
+          <p>Ramalan MET Malaysia bagi hari ini.</p>
+        </div>
+        <div id="my-weather" class="state-weather"></div>
+      </section>
+
+      <section class="section" aria-labelledby="my-prayer-title">
+        <div class="section-head">
+          <h2 id="my-prayer-title">Waktu solat setiap negeri</h2>
+          <p>Waktu JAKIM bagi ibu negeri setiap negeri. Solat seterusnya ditanda.</p>
+        </div>
+        <div class="table-scroll"><table id="my-prayers" class="data-table"></table></div>
+      </section>
+
+      <section class="section" aria-labelledby="my-facts-title">
+        <div class="section-head">
+          <h2 id="my-facts-title">Fakta negeri</h2>
+          <p>Penduduk 2025 (anggaran DOSM) dan keluasan daripada sempadan rasmi DOSM.</p>
+        </div>
+        <div class="table-scroll"><table id="my-facts" class="data-table"></table></div>
+      </section>
+    </div>
+
+    <div id="bandar-malaysia" class="tab-panel" hidden>
+      <section class="section" aria-labelledby="cities-title">
+        <div class="section-head">
+          <h2 id="cities-title">Bandar Malaysia</h2>
+          <p>Ibu negeri setiap negeri dan wilayah persekutuan. Pilih bandar untuk waktu solat, cuaca dan kualiti udara.</p>
+        </div>
+        <div id="my-cities" class="city-grid"></div>
+      </section>
+    </div>
   </main>
+
+  <dialog id="city-dialog" aria-labelledby="city-dialog-title">
+    <form method="dialog" class="dialog-close"><button type="submit" aria-label="Tutup">×</button></form>
+    <div id="city-dialog-body"></div>
+  </dialog>
 
   <footer class="site-footer">
     <div class="footer-inner">
@@ -231,6 +291,7 @@
   <script src="vendor/topojson-client.min.js"></script>
   <script src="vendor/land-110m.js"></script>
   <script src="globe.js"></script>
+  <script src="malaysia-data.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

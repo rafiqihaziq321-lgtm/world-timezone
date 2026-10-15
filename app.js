@@ -256,6 +256,23 @@ function createCard(state, city) {
   card.addEventListener('animationend', (e) => {
     if (e.animationName === 'card-in') card.classList.remove('enter');
   });
+  if (isMalaysian(city)) {
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'local-toggle';
+    toggle.textContent = 'Solat & cuaca';
+    toggle.setAttribute('aria-expanded', 'false');
+    const panel = document.createElement('div');
+    panel.className = 'local-panel';
+    panel.hidden = true;
+    toggle.addEventListener('click', () => {
+      const opening = panel.hidden;
+      panel.hidden = !opening;
+      toggle.setAttribute('aria-expanded', String(opening));
+      if (opening) tick(state); // fetches start only once the panel is opened
+    });
+    card.append(toggle, panel);
+  }
   return card;
 }
 
@@ -338,8 +355,12 @@ function tick(state) {
     card.querySelector('.hand.hour').setAttribute('transform', `rotate(${(minutes % 720) / 2} 50 50)`);
     card.querySelector('.hand.minute').setAttribute('transform', `rotate(${(minutes % 60) * 6 + seconds / 10} 50 50)`);
     card.querySelector('.hand.second').setAttribute('transform', `rotate(${seconds * 6} 50 50)`);
+    const panel = card.querySelector('.local-panel');
+    if (panel && !panel.hidden && city) renderLocalPanel(state, panel, city, now);
   }
   renderPlanner(state, now);
+  if (state.tab === 'malaysia') renderMalaysia(state, now);
+  if (state.tab === 'bandar-malaysia') renderCities(state, now);
 }
 
 // 24 one-hour slots across the viewer's local day. Rebuilt only when its
@@ -434,6 +455,582 @@ function setViewTime(state, ms) {
   tick(state);
 }
 
+// ---------- Malaysian cities: prayer times, weather, air quality ----------
+
+const MALAYSIA_ZONES = ['Asia/Kuala_Lumpur', 'Asia/Kuching'];
+const PRAYER_API = 'https://api.waktusolat.app/v2/solat/gps'; // JAKIM times; zone found from GPS
+const WEATHER_API = 'https://api.data.gov.my/weather/forecast'; // MET Malaysia 7-day forecast
+const AIR_QUALITY_URL = 'https://eqms.doe.gov.my/'; // JAS APIMS: no public API, so we link to it
+const PRAYER_TIMES = [['fajr', 'Subuh'], ['syuruk', 'Syuruk'], ['dhuhr', 'Zohor'], ['asr', 'Asar'], ['maghrib', 'Maghrib'], ['isha', 'Isyak']];
+const PRAYERS = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha']; // syuruk is sunrise, not a prayer
+
+function isMalaysian(city) {
+  return MALAYSIA_ZONES.includes(city.zone);
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText} (${url})`);
+  return response.json();
+}
+
+// Fetches are remembered for the page's lifetime, so ticking the clock or
+// reopening a panel never repeats a request. A failed one can be retried.
+function createLocalData(onSettled) {
+  const entries = new Map();
+  return {
+    // `source` is a URL to fetch as JSON, or a function returning a promise.
+    get(key, source) {
+      let entry = entries.get(key);
+      if (!entry) {
+        entry = { status: 'loading', data: null, error: null };
+        entries.set(key, entry);
+        const load = typeof source === 'function' ? source : () => fetchJson(source);
+        load().then(
+          (data) => Object.assign(entry, { status: 'ok', data }),
+          (err) => {
+            Object.assign(entry, { status: 'error', error: err });
+            console.info('Jam Dunia: data luar gagal dimuat.', err);
+          },
+        ).finally(onSettled);
+      }
+      return entry;
+    },
+    retry(key) {
+      entries.delete(key);
+      onSettled();
+    },
+  };
+}
+
+// The year, month, day and ISO date of `now` on the city's own calendar.
+function cityDate(zone, now) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now);
+  const get = (type) => parts.find((p) => p.type === type).value;
+  return { year: Number(get('year')), month: Number(get('month')), day: Number(get('day')), iso: `${get('year')}-${get('month')}-${get('day')}` };
+}
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function retryButton(state, key) {
+  const button = el('button', 'local-retry', 'Cuba lagi');
+  button.type = 'button';
+  button.addEventListener('click', () => state.localData.retry(key));
+  return button;
+}
+
+function prayerSection(state, city, entry, key, now, day) {
+  const section = el('section', 'local-block');
+  const heading = el('h4', '', 'Waktu solat');
+  section.append(heading);
+  if (!entry) {
+    section.append(el('p', '', 'Kedudukan bandar ini tidak diketahui, jadi zon waktu solatnya tidak dapat ditentukan.'));
+    return section;
+  }
+  if (entry.status === 'loading') {
+    section.append(el('p', 'local-status', 'Memuatkan waktu solat…'));
+    return section;
+  }
+  if (entry.status === 'error') {
+    section.append(el('p', 'local-status', 'Waktu solat tidak dapat dimuat.'), retryButton(state, key));
+    return section;
+  }
+  const today = Array.isArray(entry.data.prayers) ? entry.data.prayers.find((p) => p.day === day) : undefined;
+  if (!today) {
+    section.append(el('p', 'local-status', 'Tiada waktu solat untuk tarikh ini.'));
+    return section;
+  }
+  heading.append(' ', el('small', '', `zon ${entry.data.zone}`));
+  const nowSec = now.getTime() / 1000;
+  const next = PRAYERS.find((field) => today[field] && today[field] > nowSec);
+  const fmt = (ts) => new Date(ts * 1000).toLocaleTimeString('ms-MY', {
+    timeZone: city.zone, hour: '2-digit', minute: '2-digit', hourCycle: state.hour24 ? 'h23' : 'h12',
+  });
+  const list = el('ul', 'prayer-times');
+  for (const [field, label] of PRAYER_TIMES) {
+    const item = el('li', field === next ? 'next' : '');
+    item.append(el('span', '', label), el('strong', '', today[field] ? fmt(today[field]) : '—'));
+    list.append(item);
+  }
+  section.append(list);
+  if (next) {
+    const label = PRAYER_TIMES.find(([field]) => field === next)[1];
+    const minutes = Math.ceil((today[next] - nowSec) / 60);
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    const wait = [h && `${h}j`, m && `${m}m`].filter(Boolean).join(' ');
+    section.append(el('p', 'next-prayer', `Seterusnya: ${label} dalam ${wait}`));
+  } else {
+    section.append(el('p', 'next-prayer', 'Semua waktu solat hari ini telah berlalu.'));
+  }
+  return section;
+}
+
+function weatherSection(state, city, entry, key, iso) {
+  const section = el('section', 'local-block');
+  const heading = el('h4', '', 'Cuaca');
+  section.append(heading);
+  if (entry.status === 'loading') {
+    section.append(el('p', 'local-status', 'Memuatkan ramalan cuaca…'));
+    return section;
+  }
+  if (entry.status === 'error') {
+    section.append(el('p', 'local-status', 'Ramalan cuaca tidak dapat dimuat.'), retryButton(state, key));
+    return section;
+  }
+  const records = Array.isArray(entry.data) ? entry.data : [];
+  // The search matches substrings, so prefer the location named exactly like the city.
+  const exact = records.filter((r) => normalizeName(r.location?.location_name ?? '') === normalizeName(city.name));
+  const record = (exact.length ? exact : records).find((r) => r.date === iso);
+  if (!records.length) {
+    section.append(el('p', 'local-status', `Tiada ramalan MET Malaysia untuk ${city.name}.`));
+    return section;
+  }
+  if (!record) {
+    section.append(el('p', 'local-status', 'Tiada ramalan untuk tarikh ini.'));
+    return section;
+  }
+  heading.append(' ', el('small', '', `${record.min_temp}–${record.max_temp}°C`));
+  const list = el('dl', 'forecast');
+  for (const [label, text] of [['Pagi', record.morning_forecast], ['Petang', record.afternoon_forecast], ['Malam', record.night_forecast]]) {
+    list.append(el('dt', '', label), el('dd', '', text ?? '—'));
+  }
+  section.append(list);
+  if (!exact.length) section.append(el('p', 'local-status', `Ramalan untuk ${record.location?.location_name}.`));
+  return section;
+}
+
+function airQualitySection() {
+  const section = el('section', 'local-block');
+  section.append(el('h4', '', 'Kualiti udara'));
+  const link = el('a', 'local-link', 'Semak IPU rasmi (JAS)');
+  link.href = AIR_QUALITY_URL;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  section.append(link, el('p', 'local-status', 'Bacaan dikemas kini setiap jam daripada stesen Jabatan Alam Sekitar.'));
+  return section;
+}
+
+// The month of JAKIM times for a city (null without a position), shared by
+// every view that shows the same city.
+function prayerFor(state, city, now) {
+  const { year, month, day } = cityDate(city.zone, now);
+  const key = `solat|${city.lat},${city.lon}|${year}-${month}`;
+  const entry = city.lat === null ? null
+    : state.localData.get(key, `${PRAYER_API}/${city.lat}/${city.lon}?year=${year}&month=${month}`);
+  const today = entry?.status === 'ok' && Array.isArray(entry.data.prayers)
+    ? entry.data.prayers.find((p) => p.day === day) ?? null
+    : null;
+  return { key, entry, day, today };
+}
+
+function nextPrayer(today, now) {
+  if (!today) return null;
+  return PRAYERS.find((field) => today[field] && today[field] > now.getTime() / 1000) ?? null;
+}
+
+function formatClock(state, zone, ms) {
+  return new Date(ms).toLocaleTimeString('ms-MY', {
+    timeZone: zone, hour: '2-digit', minute: '2-digit', hourCycle: state.hour24 ? 'h23' : 'h12',
+  });
+}
+
+// Rebuilt only when the data, the displayed minute or the 12/24h setting
+// change, so buttons and links keep keyboard focus between ticks.
+function renderLocalPanel(state, panel, city, now) {
+  const { iso } = cityDate(city.zone, now);
+  const { key: prayerKey, entry: prayer, day } = prayerFor(state, city, now);
+  const weatherKey = `cuaca|${city.name}`;
+  const weather = state.localData.get(weatherKey, `${WEATHER_API}?contains=${encodeURIComponent(city.name)}@location__location_name&limit=50`);
+  const renderKey = [prayerKey, prayer?.status, weather.status, Math.floor(now.getTime() / MINUTE_MS), state.hour24].join('|');
+  if (panel.dataset.key === renderKey) return;
+  panel.dataset.key = renderKey;
+  panel.replaceChildren(
+    prayerSection(state, city, prayer, prayerKey, now, day),
+    weatherSection(state, city, weather, weatherKey, iso),
+    airQualitySection(),
+    el('p', 'local-source', 'Waktu solat: JAKIM melalui waktusolat.app. Cuaca: MET Malaysia melalui data.gov.my.'),
+  );
+}
+
+// ---------- Tabs: Jam dunia / Malaysia / Bandar Malaysia ----------
+
+const TABS = ['dunia', 'malaysia', 'bandar-malaysia'];
+const WARNING_API = 'https://api.data.gov.my/weather/warning';
+const QUAKE_API = 'https://api.data.gov.my/weather/warning/earthquake';
+const WIKI_API = 'https://en.wikipedia.org/w/api.php';
+
+// Shows the tab named by the hash, or the tab containing the element it
+// names (so #perancang still works), defaulting to the world clock.
+function showTab(hash) {
+  const id = decodeURIComponent(hash.replace(/^#/, ''));
+  let tab = TABS.includes(id) ? id : null;
+  if (!tab && id) tab = document.getElementById(id)?.closest('.tab-panel')?.id ?? null;
+  tab = tab ?? 'dunia';
+  for (const name of TABS) document.getElementById(name).hidden = name !== tab;
+  for (const link of document.querySelectorAll('.nav-links a')) {
+    if (link.getAttribute('href') === `#${tab}`) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  }
+  return tab;
+}
+
+// MET Malaysia dates and times carry no zone; they are Malaysian time.
+function parseMyt(text) {
+  if (!text) return NaN;
+  return Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(text) ? text : `${text}+08:00`);
+}
+
+function addDaysIso(iso, days) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function weatherIcon(text = '') {
+  const t = text.toLowerCase();
+  if (/ribut|petir/.test(t)) return '⛈️';
+  if (/hujan/.test(t) && !/tiada hujan/.test(t)) return '🌧️';
+  if (/jerebu/.test(t)) return '🌫️';
+  if (/mendung|berawan/.test(t)) return '☁️';
+  return '🌤️';
+}
+
+function loadErrorText(entry, what) {
+  return /\b429\b/.test(entry.error?.message ?? '')
+    ? `Had permintaan data.gov.my dicapai (4 seminit). Cuba lagi sebentar lagi.`
+    : `${what} tidak dapat dimuat.`;
+}
+
+// One request for every state's forecast, today and the next two days; the
+// Malaysia and Bandar tabs both read it (the API allows 4 requests a minute).
+function stateForecasts(state, now) {
+  const { iso } = cityDate('Asia/Kuala_Lumpur', now);
+  const url = `${WEATHER_API}?contains=St@location__location_id&date_start=${iso}@date&date_end=${addDaysIso(iso, 2)}@date&limit=100`;
+  return { iso, key: `cuaca-negeri|${iso}`, entry: state.localData.get(`cuaca-negeri|${iso}`, url) };
+}
+
+// MET names its state locations its own way ("WP Kuala Lumpur", "Penang"...).
+function stateNameKey(name) {
+  const aliases = { penang: 'pulau pinang', malacca: 'melaka' };
+  const key = normalizeName(name).replace(/^(w\.?\s?p\.?|wilayah persekutuan)\s+/, '').trim();
+  return aliases[key] ?? key;
+}
+
+function forecastForState(rows, stateName, iso) {
+  const want = stateNameKey(stateName);
+  return rows.find((r) => r.date === iso && stateNameKey(r.location?.location_name ?? '') === want) ?? null;
+}
+
+function statusLine(state, entry, key, what) {
+  if (entry.status === 'loading') return el('p', 'local-status', `Memuatkan ${what.toLowerCase()}…`);
+  const box = el('div', 'load-error');
+  box.append(el('p', 'local-status', loadErrorText(entry, what)), retryButton(state, key));
+  return box;
+}
+
+function renderKeyed(node, key, build) {
+  if (node.dataset.key === key) return;
+  node.dataset.key = key;
+  node.replaceChildren(...build());
+}
+
+function renderMalaysia(state, now) {
+  const minute = Math.floor(now.getTime() / MINUTE_MS);
+  document.getElementById('my-today').textContent = `${now.toLocaleDateString('ms-MY', {
+    timeZone: 'Asia/Kuala_Lumpur', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  })}, ${formatClock(state, 'Asia/Kuala_Lumpur', now.getTime())} waktu Malaysia (UTC+8)`;
+
+  // Warnings still in force.
+  const warnKey = 'amaran';
+  const warnings = state.localData.get(warnKey, `${WARNING_API}?sort=-warning_issue__issued&limit=20`);
+  renderKeyed(document.getElementById('my-warnings'), `${warnings.status}|${minute}`, () => {
+    const heading = el('h3', '', 'Amaran cuaca');
+    if (warnings.status !== 'ok') return [heading, statusLine(state, warnings, warnKey, 'Amaran cuaca')];
+    const active = (Array.isArray(warnings.data) ? warnings.data : [])
+      .filter((w) => !(parseMyt(w.valid_to) < now.getTime()));
+    if (!active.length) return [heading, el('p', 'local-status', 'Tiada amaran cuaca aktif.')];
+    return [heading, ...active.map((w) => {
+      const item = el('article', 'alert');
+      item.append(
+        el('h4', '', w.warning_issue?.title_bm || w.heading_bm || 'Amaran'),
+        el('p', '', w.text_bm || ''),
+      );
+      const until = parseMyt(w.valid_to);
+      if (Number.isFinite(until)) {
+        item.append(el('p', 'local-status', `Sah hingga ${new Date(until).toLocaleString('ms-MY', {
+          timeZone: 'Asia/Kuala_Lumpur', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+          hourCycle: state.hour24 ? 'h23' : 'h12',
+        })}`));
+      }
+      return item;
+    })];
+  });
+
+  // The latest earthquakes MET reports.
+  const quakeKey = 'gempa';
+  const quakes = state.localData.get(quakeKey, `${QUAKE_API}?sort=-utcdatetime&limit=5`);
+  renderKeyed(document.getElementById('my-quakes'), `${quakes.status}|${state.hour24}`, () => {
+    const heading = el('h3', '', 'Gempa bumi terkini');
+    if (quakes.status !== 'ok') return [heading, statusLine(state, quakes, quakeKey, 'Data gempa bumi')];
+    const list = (Array.isArray(quakes.data) ? quakes.data : []).filter((q) => q.visible !== false).slice(0, 3);
+    if (!list.length) return [heading, el('p', 'local-status', 'Tiada laporan gempa bumi.')];
+    return [heading, ...list.map((q) => {
+      const item = el('article', 'alert quake');
+      const when = parseMyt(q.localdatetime);
+      item.append(
+        el('h4', '', `Magnitud ${q.magdefault ?? '?'}: ${q.location || q.location_original || ''}`),
+        el('p', '', q.nbm_distancemas || ''),
+      );
+      if (Number.isFinite(when)) {
+        item.append(el('p', 'local-status', new Date(when).toLocaleString('ms-MY', {
+          timeZone: 'Asia/Kuala_Lumpur', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+          hourCycle: state.hour24 ? 'h23' : 'h12',
+        })));
+      }
+      return item;
+    })];
+  });
+
+  // Every state's forecast for today.
+  const forecasts = stateForecasts(state, now);
+  renderKeyed(document.getElementById('my-weather'), `${forecasts.key}|${forecasts.entry.status}`, () => {
+    if (forecasts.entry.status !== 'ok') return [statusLine(state, forecasts.entry, forecasts.key, 'Ramalan cuaca')];
+    const rows = (Array.isArray(forecasts.entry.data) ? forecasts.entry.data : [])
+      .filter((r) => r.date === forecasts.iso)
+      .sort((a, b) => (a.location?.location_name ?? '').localeCompare(b.location?.location_name ?? ''));
+    if (!rows.length) return [el('p', 'local-status', 'Tiada ramalan negeri untuk hari ini.')];
+    return rows.map((r) => {
+      const tile = el('article', 'weather-tile');
+      const summary = r.summary_forecast || r.afternoon_forecast || '';
+      tile.append(
+        el('span', 'weather-icon', weatherIcon(summary)),
+        el('h3', '', r.location?.location_name ?? ''),
+        el('p', '', summary),
+        el('p', 'weather-temp', `${r.min_temp}–${r.max_temp}°C`),
+      );
+      return tile;
+    });
+  });
+
+  // JAKIM times for each capital.
+  const prayers = MALAYSIA_STATES.map((s) => ({ s, ...prayerFor(state, makeCity(s.capital, s.zone, s.lat, s.lon), now) }));
+  const prayerKey = prayers.map((p) => `${p.key}:${p.entry.status}`).join('|');
+  renderKeyed(document.getElementById('my-prayers'), `${prayerKey}|${minute}|${state.hour24}`, () => {
+    const head = el('thead');
+    const headRow = head.insertRow();
+    for (const label of ['Negeri', ...PRAYER_TIMES.map(([, l]) => l)]) headRow.append(el('th', '', label));
+    const body = el('tbody');
+    for (const p of prayers) {
+      const row = body.insertRow();
+      const name = el('th', '', p.s.state);
+      name.scope = 'row';
+      name.append(el('small', '', p.s.capital));
+      row.append(name);
+      if (p.entry.status !== 'ok' || !p.today) {
+        const cell = row.insertCell();
+        cell.colSpan = PRAYER_TIMES.length;
+        if (p.entry.status === 'error') cell.append(el('span', 'local-status', 'Gagal dimuat. '), retryButton(state, p.key));
+        else cell.append(el('span', 'local-status', p.entry.status === 'loading' ? 'Memuatkan…' : 'Tiada data untuk tarikh ini.'));
+        continue;
+      }
+      const next = nextPrayer(p.today, now);
+      for (const [field] of PRAYER_TIMES) {
+        const cell = row.insertCell();
+        cell.textContent = p.today[field] ? formatClock(state, p.s.zone, p.today[field] * 1000) : '—';
+        if (field === next) cell.className = 'next';
+      }
+    }
+    return [head, body];
+  });
+}
+
+function renderFacts() {
+  const table = document.getElementById('my-facts');
+  const head = el('thead');
+  const headRow = head.insertRow();
+  for (const label of ['Negeri', 'Ibu negeri', 'Penduduk (juta)', 'Keluasan (km²)']) headRow.append(el('th', '', label));
+  const body = el('tbody');
+  const largest = Math.max(...MALAYSIA_STATES.map((s) => s.population));
+  for (const s of [...MALAYSIA_STATES].sort((a, b) => b.population - a.population)) {
+    const row = body.insertRow();
+    const name = el('th', '', s.state);
+    name.scope = 'row';
+    row.append(name, el('td', '', s.capital));
+    const pop = row.insertCell();
+    const bar = el('span', 'bar');
+    bar.style.setProperty('--share', String(s.population / largest));
+    pop.append(bar, el('span', '', s.population.toLocaleString('ms-MY', { minimumFractionDigits: 1 })));
+    row.append(el('td', '', `≈ ${s.area.toLocaleString('ms-MY')}`));
+  }
+  const foot = el('tfoot');
+  const total = foot.insertRow();
+  const label = el('th', '', 'Malaysia');
+  label.scope = 'row';
+  total.append(label, el('td', '', ''), el('td', '', MALAYSIA_TOTAL.population.toLocaleString('ms-MY', { minimumFractionDigits: 1 })),
+    el('td', '', `≈ ${MALAYSIA_TOTAL.area.toLocaleString('ms-MY')}`));
+  table.replaceChildren(head, body, foot);
+}
+
+// Lead photos of each landmark's Wikipedia article, with author and licence
+// from Wikimedia Commons: two batched requests for all 16 cities.
+async function loadLandmarkPhotos() {
+  const titles = MALAYSIA_STATES.map((s) => s.landmark);
+  const base = `${WIKI_API}?action=query&format=json&formatversion=2&origin=*`;
+  const pagesRes = await fetchJson(`${base}&redirects=1&prop=pageimages&piprop=thumbnail|name&pithumbsize=800&titles=${titles.map(encodeURIComponent).join('|')}`);
+  // Follow the API's title normalisation and redirects back to our titles.
+  const rename = new Map([...(pagesRes.query?.normalized ?? []), ...(pagesRes.query?.redirects ?? [])].map((r) => [r.from, r.to]));
+  const finalTitle = (t) => {
+    let title = t.replace(/_/g, ' ');
+    for (let i = 0; i < 3 && rename.has(title); i += 1) title = rename.get(title);
+    return title;
+  };
+  const pages = new Map((pagesRes.query?.pages ?? []).map((p) => [p.title, p]));
+  const photos = new Map();
+  for (const title of titles) {
+    const page = pages.get(finalTitle(title));
+    if (page?.thumbnail?.source && page.pageimage) {
+      photos.set(title, { src: page.thumbnail.source, width: page.thumbnail.width, height: page.thumbnail.height, file: page.pageimage });
+    }
+  }
+  if (!photos.size) return photos;
+
+  try {
+    const files = [...photos.values()].map((p) => `File:${p.file}`);
+    const infoRes = await fetchJson(`${base}&prop=imageinfo&iiprop=extmetadata&iiextmetadatafilter=Artist|LicenseShortName|LicenseUrl&titles=${files.map(encodeURIComponent).join('|')}`);
+    const byFile = new Map((infoRes.query?.pages ?? []).map((p) => [p.title.replace(/^File:/, '').replace(/ /g, '_'), p.imageinfo?.[0]?.extmetadata ?? {}]));
+    for (const photo of photos.values()) {
+      const meta = byFile.get(photo.file.replace(/ /g, '_')) ?? {};
+      // Artist is HTML; keep only its text.
+      photo.artist = new DOMParser().parseFromString(meta.Artist?.value ?? '', 'text/html').body.textContent.trim();
+      photo.license = meta.LicenseShortName?.value ?? '';
+    }
+  } catch (err) {
+    // Photos still show; the credit then links to Commons without the details.
+    console.info('Jam Dunia: maklumat lesen foto tidak dapat dimuat.', err);
+  }
+  return photos;
+}
+
+function photoCredit(photo) {
+  const credit = el('p', 'photo-credit');
+  const parts = [photo.artist, photo.license].filter(Boolean).join(', ');
+  credit.append(`Foto: ${parts ? `${parts}, ` : ''}`);
+  const link = el('a', '', 'Wikimedia Commons');
+  link.href = `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(photo.file)}`;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  credit.append(link);
+  return credit;
+}
+
+function photoElement(s, photo, sizes) {
+  if (!photo) {
+    const blank = el('div', 'photo-missing');
+    blank.append(el('span', '', s.landmarkName));
+    return blank;
+  }
+  const img = el('img');
+  img.src = photo.src;
+  img.alt = `${s.landmarkName}, ${s.capital}`;
+  img.width = photo.width;
+  img.height = photo.height;
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  img.sizes = sizes;
+  return img;
+}
+
+function stateCity(s) {
+  return makeCity(s.capital, s.zone, s.lat, s.lon);
+}
+
+function renderCities(state, now) {
+  const grid = document.getElementById('my-cities');
+  const photos = state.localData.get('foto-landmark', loadLandmarkPhotos);
+  const forecasts = stateForecasts(state, now);
+  const minute = Math.floor(now.getTime() / MINUTE_MS);
+
+  if (!grid.childElementCount) {
+    for (const s of MALAYSIA_STATES) {
+      const card = el('article', 'city-card');
+      card.dataset.state = s.state;
+      const open = el('button', 'city-open');
+      open.type = 'button';
+      open.setAttribute('aria-label', `Butiran ${s.capital}, ${s.state}`);
+      const info = el('div', 'city-info');
+      info.append(el('h3', '', s.capital), el('p', 'city-state', s.state), el('p', 'city-landmark', s.landmarkName), el('p', 'city-now'));
+      open.append(el('div', 'city-photo'), info);
+      open.addEventListener('click', () => openCityDialog(state, s));
+      card.append(open, el('div', 'city-credit'));
+      grid.append(card);
+    }
+  }
+
+  for (const card of grid.children) {
+    const s = MALAYSIA_STATES.find((x) => x.state === card.dataset.state);
+    renderKeyed(card.querySelector('.city-photo'), photos.status, () => {
+      if (photos.status === 'loading') return [el('div', 'photo-missing photo-loading')];
+      return [photoElement(s, photos.data?.get(s.landmark), '(max-width: 600px) 100vw, 400px')];
+    });
+    renderKeyed(card.querySelector('.city-credit'), photos.status, () => {
+      const photo = photos.status === 'ok' ? photos.data.get(s.landmark) : null;
+      return photo ? [photoCredit(photo)] : [];
+    });
+
+    const { entry, today } = prayerFor(state, stateCity(s), now);
+    const forecast = forecasts.entry.status === 'ok' && Array.isArray(forecasts.entry.data)
+      ? forecastForState(forecasts.entry.data, s.state, forecasts.iso) : null;
+    renderKeyed(card.querySelector('.city-now'), `${entry.status}|${forecasts.entry.status}|${minute}|${state.hour24}`, () => {
+      const lines = [];
+      if (forecast) {
+        const summary = forecast.summary_forecast || forecast.afternoon_forecast || '';
+        lines.push(el('span', '', `${weatherIcon(summary)} ${summary}, ${forecast.min_temp}–${forecast.max_temp}°C`));
+      }
+      const next = nextPrayer(today, now);
+      if (next) {
+        const label = PRAYER_TIMES.find(([f]) => f === next)[1];
+        lines.push(el('span', '', `🕌 ${label} ${formatClock(state, s.zone, today[next] * 1000)}`));
+      }
+      return lines;
+    });
+  }
+
+  const dialog = document.getElementById('city-dialog');
+  if (dialog.open && state.dialogState) {
+    const s = state.dialogState;
+    const panel = dialog.querySelector('.local-panel');
+    if (panel) renderLocalPanel(state, panel, stateCity(s), now);
+    renderKeyed(dialog.querySelector('.dialog-photo'), photos.status, () => {
+      const photo = photos.status === 'ok' ? photos.data.get(s.landmark) : null;
+      return [photoElement(s, photo, '(max-width: 700px) 100vw, 640px'), ...(photo ? [photoCredit(photo)] : [])];
+    });
+  }
+}
+
+function openCityDialog(state, s) {
+  const dialog = document.getElementById('city-dialog');
+  state.dialogState = s;
+  const title = el('h2', '', s.capital);
+  title.id = 'city-dialog-title';
+  const panel = el('div', 'local-panel');
+  document.getElementById('city-dialog-body').replaceChildren(
+    el('div', 'dialog-photo'),
+    title,
+    el('p', 'city-state', `${s.state}. ${s.landmarkName}`),
+    panel,
+  );
+  dialog.showModal();
+  tick(state);
+}
+
 // Returns false when the city is already listed.
 function addCity(state, city) {
   if (state.cities.some((c) => cityKey(c) === cityKey(city))) return false;
@@ -521,7 +1118,7 @@ function buildShareUrl(state) {
 }
 
 function clearShareParams() {
-  window.history.replaceState(null, '', window.location.pathname);
+  window.history.replaceState(null, '', window.location.pathname + window.location.hash);
 }
 
 async function copyShareLink(state) {
@@ -595,6 +1192,15 @@ function init() {
     shared: shared.cities !== null,
     viewTime: null,
   };
+  state.localData = createLocalData(() => tick(state));
+  state.dialogState = null;
+  state.tab = showTab(window.location.hash);
+  window.addEventListener('hashchange', () => {
+    state.tab = showTab(window.location.hash);
+    tick(state);
+  });
+  renderFacts();
+  document.getElementById('city-dialog').addEventListener('close', () => { state.dialogState = null; });
   shareBannerEl.hidden = !state.shared;
 
   const globe = createGlobe(document.getElementById('globe'), {
@@ -676,7 +1282,7 @@ function init() {
 
   clocksEl.addEventListener('click', (e) => {
     const card = e.target.closest('.card');
-    if (!card || e.target.closest('.remove')) return;
+    if (!card || e.target.closest('.remove, .local-toggle, .local-panel')) return;
     const city = state.cities.find((c) => cityKey(c) === card.dataset.key);
     if (city) globe.focusCity(city);
   });
