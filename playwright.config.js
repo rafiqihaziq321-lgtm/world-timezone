@@ -32,8 +32,13 @@ module.exports = defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        // Lets environments with a preinstalled Chromium skip `playwright install`.
-        launchOptions: process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {},
+        launchOptions: {
+          // Lets the MapLibre map fall back to software WebGL on CI machines
+          // without a GPU (Chromium no longer does so by default).
+          args: ['--enable-unsafe-swiftshader'],
+          // Lets environments with a preinstalled Chromium skip `playwright install`.
+          ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+        },
       },
     },
   ],

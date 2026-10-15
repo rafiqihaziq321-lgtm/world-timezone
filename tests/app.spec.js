@@ -1,5 +1,6 @@
 // @ts-check
 const { test: base, expect } = require('@playwright/test');
+const { deflateSync, crc32 } = require('node:zlib');
 
 const APP_URL = 'index.html'; // relative to baseURL (the local test server)
 const STORAGE_KEY = 'world-timezone:v1';
@@ -22,7 +23,9 @@ const test = base.extend({
       if (msg.type() !== 'error' && msg.type() !== 'warning') return;
       // Playwright's own note when serviceWorkers: 'block' (the default here) stops registration.
       const tooling = /^Service Worker registration blocked by Playwright$/;
-      if (tooling.test(msg.text())) return;
+      // Chromium's software WebGL notes slow pixel reads made by the map.
+      const gpuNote = /GL Driver Message \(OpenGL, Performance/;
+      if (tooling.test(msg.text()) || gpuNote.test(msg.text())) return;
       if (!expectedConsole.some((pattern) => pattern.test(msg.text()))) problems.push(msg.text());
     });
     await use(page);
@@ -727,9 +730,65 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
   ];
   const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
 
-  async function mockAll(page, { wikiStatus = 200, warningStatus = 200 } = {}) {
-    const calls = { dataGov: [], wiki: 0 };
+  // A 256×256 terrarium elevation tile of sea level, rgb(128, 0, 0).
+  const DEM_TILE = (() => {
+    const chunk = (type, data) => {
+      const typed = Buffer.concat([Buffer.from(type), data]);
+      const out = Buffer.alloc(data.length + 12);
+      out.writeUInt32BE(data.length, 0);
+      typed.copy(out, 4);
+      out.writeUInt32BE(crc32(typed) >>> 0, typed.length + 4);
+      return out;
+    };
+    const header = Buffer.alloc(13);
+    header.writeUInt32BE(256, 0);
+    header.writeUInt32BE(256, 4);
+    header[8] = 8; // bit depth
+    header[9] = 2; // RGB
+    const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(256 * 3, Buffer.from([128, 0, 0]))]);
+    return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header),
+      chunk('IDAT', deflateSync(Buffer.concat(Array(256).fill(row)))), chunk('IEND', Buffer.alloc(0))]);
+  })();
+  const MAP_STYLE = { version: 8, sources: {}, layers: [{ id: 'laut', type: 'background', paint: { 'background-color': '#a9d2ee' } }] };
+
+  // Hourly PM for each capital, in MALAYSIA_STATES order. Hours outside the
+  // last 24 read 999, so averaging the wrong hours shows up in the index.
+  const NOW_S = Math.floor(FIXED_NOW.getTime() / 1000);
+  const airSeries = (pm25, pm10, validHours = 24) => {
+    const time = Array.from({ length: 72 }, (_, i) => Math.floor(NOW_S / 3600) * 3600 + (i - 47) * 3600);
+    const inWindow = (t) => t > NOW_S - 24 * 3600 && t <= NOW_S;
+    const valid = (t) => inWindow(t) && t > NOW_S - validHours * 3600;
+    return {
+      hourly: {
+        time,
+        pm2_5: time.map((t) => (valid(t) ? pm25 : inWindow(t) ? null : 999)),
+        pm10: time.map((t) => (valid(t) ? pm10 : inWindow(t) ? null : 999)),
+      },
+    };
+  };
+  const STATE_ORDER = ['Johor', 'Kedah', 'Kelantan', 'Melaka', 'Negeri Sembilan', 'Pahang', 'Perak', 'Perlis',
+    'Pulau Pinang', 'Sabah', 'Sarawak', 'Selangor', 'Terengganu', 'W.P. Kuala Lumpur', 'W.P. Labuan', 'W.P. Putrajaya'];
+  const airRows = STATE_ORDER.map((state) => ({
+    'W.P. Kuala Lumpur': airSeries(42, 30), // PM2.5 120% of its standard
+    Sarawak: airSeries(10, 160), // PM10 160% of its standard
+    'W.P. Labuan': airSeries(5, 5, 10), // too few hours for an estimate
+  }[state] ?? airSeries(7, 10)));
+
+  const longWarning = 'Ribut petir, hujan lebat dan angin kencang dijangka berlaku sehingga jam 6:00 petang di kawasan berikut: '
+    + 'Perak (Hulu Perak, Kuala Kangsar, Kinta); Pahang (Cameron Highlands, Lipis, Raub); Selangor (Gombak, Petaling).';
+
+  async function mockAll(page, { wikiStatus = 200, warningStatus = 200, warningRows = warnings, styleStatus = 200, airStatus = 200 } = {}) {
+    const calls = { dataGov: [], wiki: 0, air: [] };
     const cors = { 'Access-Control-Allow-Origin': '*' };
+    await page.route('https://tiles.openfreemap.org/**', (route) => (styleStatus === 200
+      ? route.fulfill({ json: MAP_STYLE, headers: cors })
+      : route.fulfill({ status: styleStatus, body: 'error', headers: cors })));
+    await page.route('https://s3.amazonaws.com/elevation-tiles-prod/**', (route) => route.fulfill({ body: DEM_TILE, contentType: 'image/png', headers: cors }));
+    await page.route('https://air-quality-api.open-meteo.com/**', (route) => {
+      calls.air.push(route.request().url());
+      if (airStatus !== 200) return route.fulfill({ status: airStatus, body: 'error', headers: cors });
+      return route.fulfill({ json: airRows, headers: cors });
+    });
     await page.route('https://api.waktusolat.app/**', (route) => route.fulfill({ json: prayerMonth, headers: cors }));
     await page.route('https://api.data.gov.my/**', (route) => {
       const url = route.request().url();
@@ -737,7 +796,7 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       if (url.includes('/warning/earthquake')) return route.fulfill({ json: quakes, headers: cors });
       if (url.includes('/warning')) {
         if (warningStatus !== 200) return route.fulfill({ status: warningStatus, body: 'limit', headers: cors });
-        return route.fulfill({ json: warnings, headers: cors });
+        return route.fulfill({ json: warningRows, headers: cors });
       }
       if (url.includes('contains=St@')) return route.fulfill({ json: stateRows, headers: cors });
       return route.fulfill({ json: [forecast('Tn001', 'Kuala Lumpur', '2026-10-14', 'Hujan di satu dua tempat')], headers: cors });
@@ -833,8 +892,125 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     await expect(dialog).toBeHidden();
   });
 
+  test('amaran MET: pendua dibuang, ringkasan dengan "Baca penuh" yang kekal terbuka', async ({ page }) => {
+    const repeated = { warning_issue: { issued: '2026-10-14T05:00:00', title_bm: 'Amaran Ribut Petir' }, valid_to: '2026-10-14T18:00:00', text_bm: longWarning };
+    await mockAll(page, { warningRows: [repeated, { ...repeated, warning_issue: { ...repeated.warning_issue, issued: '2026-10-14T04:00:00' } }, ...warnings] });
+    await openApp(page, undefined, '#malaysia');
+    const alerts = page.locator('#my-warnings .alert');
+    await expect(alerts).toHaveCount(2); // the repeat and the expired warning are gone
+    const storm = alerts.first();
+    // The lead clause, not cut at the colon in "6:00".
+    await expect(storm.locator('> p').first()).toHaveText('Ribut petir, hujan lebat dan angin kencang dijangka berlaku sehingga jam 6:00 petang di kawasan berikut');
+    await expect(storm.getByText('Hulu Perak')).toBeHidden();
+    await storm.getByText('Baca penuh').click();
+    await expect(storm.getByText(/Hulu Perak/)).toBeVisible();
+    await page.clock.runFor(61_000); // the panel refreshes every minute
+    await expect(storm.getByText(/Hulu Perak/)).toBeVisible();
+    await expect(alerts.nth(1).locator('details')).toHaveCount(0); // a short warning needs no "Baca penuh"
+  });
+
+  test('IPU anggaran: 100 = piawai 24 jam, kategori JAS, hanya 24 jam terakhir', async ({ page }) => {
+    await mockAll(page);
+    await openApp(page);
+    const result = await page.evaluate(([nowS]) => {
+      const series = (pm25, pm10, hours = 24) => {
+        const time = Array.from({ length: hours }, (_, i) => nowS - i * 3600);
+        return { time, pm2_5: time.map(() => pm25), pm10: time.map(() => pm10) };
+      };
+      const pick = (e) => (e ? `${e.index} ${e.band.label}` : null);
+      return {
+        pm25At50: pick(estimateAirIndex(series(17.5, 0), nowS * 1000)),
+        pm25At51: pick(estimateAirIndex(series(17.85, 0), nowS * 1000)),
+        pm10At100: pick(estimateAirIndex(series(0, 100), nowS * 1000)),
+        pm10At101: pick(estimateAirIndex(series(0, 101), nowS * 1000)),
+        at200: pick(estimateAirIndex(series(70, 0), nowS * 1000)),
+        at201: pick(estimateAirIndex(series(0, 201), nowS * 1000)),
+        at300: pick(estimateAirIndex(series(0, 300), nowS * 1000)),
+        at301: pick(estimateAirIndex(series(0, 301), nowS * 1000)),
+        worseWins: pick(estimateAirIndex(series(35, 50), nowS * 1000)),
+        eighteenHours: pick(estimateAirIndex(series(7, 10, 18), nowS * 1000)),
+        seventeenHours: pick(estimateAirIndex(series(7, 10, 17), nowS * 1000)),
+        noData: pick(estimateAirIndex(undefined, nowS * 1000)),
+      };
+    }, [NOW_S]);
+    expect(result).toEqual({
+      pm25At50: '50 Baik', pm25At51: '51 Sederhana', pm10At100: '100 Sederhana', pm10At101: '101 Tidak sihat',
+      at200: '200 Tidak sihat', at201: '201 Sangat tidak sihat', at300: '300 Sangat tidak sihat', at301: '301 Berbahaya',
+      worseWins: '100 Sederhana', eighteenHours: '20 Baik', seventeenHours: null, noData: null,
+    });
+  });
+
+  test('peta: penanda 16 ibu negeri dengan foto, cuaca dan IPU anggaran; klik membuka butiran', async ({ page }) => {
+    const calls = await mockAll(page);
+    await openApp(page, undefined, '#bandar-malaysia');
+    const markers = page.locator('.map-marker');
+    await expect(markers).toHaveCount(16);
+    const marker = (capital) => markers.filter({ has: page.getByRole('button', { name: new RegExp(`^Butiran ${capital},`), includeHidden: true }) });
+
+    const kl = marker('Kuala Lumpur');
+    await expect(kl.locator('.marker-photo img')).toHaveAttribute('src', 'https://upload.wikimedia.org/test/13.png');
+    await expect(kl.locator('.marker-weather')).toHaveText('🌤️'); // "Tiada hujan" for WP Kuala Lumpur
+    await expect(kl.locator('.marker-aqi')).toHaveText('120');
+    await expect(kl).toHaveAttribute('data-aqi', 'unhealthy');
+    await expect(marker('George Town').locator('.marker-weather')).toHaveText('🌫️');
+    await expect(marker('Kuching').locator('.marker-aqi')).toHaveText('160'); // PM10 decides here
+    await expect(marker('Johor Bahru').locator('.marker-aqi')).toHaveText('20');
+    await expect(marker('Johor Bahru')).toHaveAttribute('data-aqi', 'good');
+    await expect(marker('Labuan').locator('.marker-aqi')).toHaveText(''); // not enough hours
+    await expect(page.locator('#map-status')).toBeHidden();
+
+    // One request for all 16 capitals.
+    expect(calls.air).toHaveLength(1);
+    expect(new URL(calls.air[0]).searchParams.get('latitude').split(',')).toHaveLength(16);
+
+    // Putrajaya sits under Kuala Lumpur at country zoom; "+n" zooms in.
+    await expect(marker('Putrajaya')).toHaveClass(/is-covered/);
+    await expect(kl).not.toHaveClass(/is-covered/);
+    const covered = await page.locator('.map-marker.is-covered').count();
+    await kl.locator('.marker-more').click();
+    await expect(page.locator('#my-map')).toHaveClass(/map-labelled/);
+    await expect.poll(() => page.locator('.map-marker.is-covered').count()).toBeLessThan(covered);
+    await expect(kl.locator('.marker-meta')).toHaveText('33°C · 🕌 Zohor 13:10');
+
+    await kl.locator('.marker-open').click();
+    const dialog = page.locator('#city-dialog');
+    await expect(dialog.locator('h2')).toHaveText('Kuala Lumpur');
+    await expect(dialog.locator('.aqi-reading')).toHaveText('120 Tidak sihat');
+    await expect(dialog.getByText(/PM2\.5 42 µg\/m³, PM10 30 µg\/m³.*Bukan IPU rasmi JAS/)).toBeVisible();
+    await expect(dialog.locator('.local-source')).toContainText('Open-Meteo');
+    await dialog.getByRole('button', { name: 'Tutup' }).click();
+
+    const card = page.locator('.city-card', { has: page.locator('h3', { hasText: /^Kuala Lumpur$/ }) });
+    await expect(card.locator('.city-aqi')).toHaveText('IPU anggaran 120, Tidak sihat');
+  });
+
   test.describe('bila perkhidmatan luar gagal', () => {
     test.use({ expectedConsole: [/status of (500|429)/] });
+
+    test('peta dan data udara gagal: mesej dipaparkan, senarai bandar masih berfungsi', async ({ page }) => {
+      await mockAll(page, { styleStatus: 500, airStatus: 500 });
+      await openApp(page, undefined, '#bandar-malaysia');
+      await expect(page.locator('#map-status')).toHaveText(/Sebahagian peta tidak dapat dimuat/);
+      await expect(page.locator('.city-card')).toHaveCount(16);
+      await page.locator('.city-card').first().locator('.city-open').click();
+      const air = page.locator('#city-dialog .local-block', { has: page.locator('h4', { hasText: 'Kualiti udara' }) });
+      await expect(air).toContainText('Anggaran kualiti udara tidak dapat dimuat.');
+      await expect(air.getByRole('button', { name: 'Cuba lagi' })).toBeVisible();
+      await expect(air.locator('.local-link')).toHaveAttribute('href', 'https://eqms.doe.gov.my/');
+    });
+
+    test('tanpa WebGL: mesej dipaparkan, senarai bandar masih berfungsi', async ({ page }) => {
+      await page.addInitScript(() => {
+        const getContext = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function (type, ...rest) {
+          return /webgl/.test(type) ? null : getContext.call(this, type, ...rest);
+        };
+      });
+      await mockAll(page);
+      await openApp(page, undefined, '#bandar-malaysia');
+      await expect(page.locator('#map-status')).toHaveText(/tidak menyokong WebGL/);
+      await expect(page.locator('.city-card')).toHaveCount(16);
+    });
 
     test('foto gagal dimuat: nama landmark dipaparkan sebagai ganti', async ({ page }) => {
       await mockAll(page, { wikiStatus: 500 });
