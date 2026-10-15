@@ -564,14 +564,12 @@ test.describe('PWA dan pratonton pautan', () => {
       await openApp(page);
       await page.clock.resume(); // page-side polling below needs real timers
       await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
-      // Cut the network by failing every request that reaches it. (setOffline
-      // cannot be used: Firefox then refuses navigations before the service
-      // worker can answer.) Requests the service worker answers never get here.
-      await context.route('**', (route) => route.abort('internetdisconnected'));
+      await context.setOffline(true); // the reload fails unless the service worker serves the cache
       await page.reload();
       await expect(page.locator('#hero-title')).toBeVisible();
       await expect(page.locator('.card')).toHaveCount(4);
       expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toContain('Manrope');
+      await context.setOffline(false);
     });
   });
 });
