@@ -32,6 +32,12 @@ const GLOBE_CITIES = [
   { name: 'Honolulu', zone: 'Pacific/Honolulu', lon: -157.86, lat: 21.31 },
 ];
 
+// Identity of a city in the user's list or on the globe: two cities can share
+// a zone (Kuala Lumpur, Johor Bahru), so the name is part of it.
+function cityKey(city) {
+  return `${city.zone}~${city.name}`;
+}
+
 const GLOBE_COLORS = {
   ocean: '#13294b',
   graticule: 'rgba(255, 255, 255, 0.08)',
@@ -64,13 +70,14 @@ function subsolarPoint(date) {
 
 // Draws a rotatable, zoomable globe into `canvas`.
 // Options (all read live, so the globe follows app state without being told):
-//   onCityClick(zone)               a city dot was clicked or tapped
-//   getSelectedZones()              the user's list; the first city on the globe is the arc "home"
+//   onCityClick(city)               a city dot was clicked or tapped ({ name, zone, lat, lon })
+//   getSelectedCities()             the user's list; cities with lat/lon get a dot, and the
+//                                   first of those is the arc "home"
 //   isHour24(), getNow()            label format and the instant to draw
-//   describeCity(zone, now)         -> { time, lines[] } for the tooltip
+//   describeCity(city, now)         -> { time, lines[] } for the tooltip
 //   offsetBetween(from, to, now)    -> short label for the arc between two cities
 function createGlobe(canvas, options) {
-  const { onCityClick, getSelectedZones, isHour24, getNow, describeCity, offsetBetween } = options;
+  const { onCityClick, getSelectedCities, isHour24, getNow, describeCity, offsetBetween } = options;
   const ctx = canvas.getContext('2d');
   const land = topojson.feature(WORLD_LAND_110M, WORLD_LAND_110M.objects.land);
   const graticule = d3.geoGraticule10();
@@ -199,10 +206,8 @@ function createGlobe(canvas, options) {
 
     // Arcs from the first listed city to each other listed city, with the
     // time difference at the midpoint. Dashes march unless motion is reduced.
-    const selectedZones = getSelectedZones();
-    const selectedCities = selectedZones
-      .map((zone) => GLOBE_CITIES.find((c) => c.zone === zone))
-      .filter(Boolean);
+    const selectedCities = getSelectedCities().filter((c) => c.lat !== null && c.lon !== null);
+    const selectedKeys = new Set(selectedCities.map(cityKey));
     const [home, ...others] = selectedCities;
     if (home) {
       ctx.save();
@@ -225,9 +230,9 @@ function createGlobe(canvas, options) {
       }
     }
 
-    // Selected cities first so their labels win when labels collide.
-    const visible = [...GLOBE_CITIES]
-      .sort((a, b) => selectedZones.includes(b.zone) - selectedZones.includes(a.zone))
+    // The user's cities first so their labels win when labels collide, then
+    // the built-in major cities that are not already in the list.
+    const visible = [...selectedCities, ...GLOBE_CITIES.filter((c) => !selectedKeys.has(cityKey(c)))]
       .filter((city) => isFacing([city.lon, city.lat]))
       .map((city) => {
         const [x, y] = projection([city.lon, city.lat]);
@@ -238,7 +243,7 @@ function createGlobe(canvas, options) {
 
     const pulse = reduceMotion ? 0 : (t % 1600) / 1600;
     for (const { city, x, y } of visible) {
-      const selected = selectedZones.includes(city.zone);
+      const selected = selectedKeys.has(cityKey(city));
       const isDay = d3.geoDistance([city.lon, city.lat], sun) < Math.PI / 2;
       const color = isDay ? GLOBE_COLORS.cityDay : GLOBE_COLORS.cityNight;
       if (selected && pulse) {
@@ -259,7 +264,7 @@ function createGlobe(canvas, options) {
     ctx.font = '600 12px system-ui, -apple-system, "Segoe UI", sans-serif';
     for (const target of visible) {
       const { city, x, y } = target;
-      if (city === tipCity) continue; // the tooltip already says it
+      if (tipCity && cityKey(city) === cityKey(tipCity)) continue; // the tooltip already says it
       const text = `${city.name} ${timeLabel(city.zone, now)}`;
       const w = ctx.measureText(text).width;
       const candidates = [[x + 8, y], [x - 8 - w, y], [x - w / 2, y - 13], [x - w / 2, y + 13]];
@@ -281,16 +286,16 @@ function createGlobe(canvas, options) {
   }
 
   function updateTip(now, visible) {
-    const target = tipCity && visible.find((v) => v.city === tipCity);
+    const target = tipCity && visible.find((v) => cityKey(v.city) === cityKey(tipCity));
     if (!target) {
       tip.hidden = true;
       return;
     }
     // Rebuild the content at most once per displayed second.
-    const key = `${tipCity.zone}|${Math.floor(now.getTime() / 1000)}|${isHour24()}`;
+    const key = `${cityKey(tipCity)}|${Math.floor(now.getTime() / 1000)}|${isHour24()}`;
     if (key !== tipKey) {
       tipKey = key;
-      const info = describeCity(tipCity.zone, now);
+      const info = describeCity(tipCity, now);
       const title = document.createElement('strong');
       title.textContent = tipCity.name;
       const time = document.createElement('div');
@@ -404,7 +409,7 @@ function createGlobe(canvas, options) {
     if (!cancelled && drag && !drag.moved && pointers.size === 1) {
       const city = cityAt(e);
       tipCity = city;
-      if (city) onCityClick(city.zone);
+      if (city) onCityClick(city);
     }
     pointers.delete(e.pointerId);
     if (pointers.size < 2) pinch = null;
@@ -434,13 +439,9 @@ function createGlobe(canvas, options) {
   requestFrame();
 
   return {
-    hasZone(zone) {
-      return GLOBE_CITIES.some((c) => c.zone === zone);
-    },
-    // Smoothly rotates the globe to centre on `zone`'s city, if it has one.
-    focusZone(zone) {
-      const city = GLOBE_CITIES.find((c) => c.zone === zone);
-      if (!city) return;
+    // Smoothly rotates the globe to centre on `city`, if its position is known.
+    focusCity(city) {
+      if (city.lat === null || city.lon === null) return;
       const start = performance.now();
       focusAnim = { start, interpolate: d3.geoInterpolate([-rotation[0], -rotation[1]], [city.lon, city.lat]) };
       autoRotateAfter = start + FOCUS_DURATION_MS + IDLE_BEFORE_AUTO_ROTATE_MS;
