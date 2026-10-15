@@ -20,6 +20,9 @@ const test = base.extend({
     page.on('pageerror', (err) => problems.push(err.message));
     page.on('console', (msg) => {
       if (msg.type() !== 'error' && msg.type() !== 'warning') return;
+      // Playwright's own note when serviceWorkers: 'block' (the default here) stops registration.
+      const tooling = /^Service Worker registration blocked by Playwright$/;
+      if (tooling.test(msg.text())) return;
       if (!expectedConsole.some((pattern) => pattern.test(msg.text()))) problems.push(msg.text());
     });
     await use(page);
@@ -554,16 +557,22 @@ test.describe('PWA dan pratonton pautan', () => {
     expect(res.headers()['content-type']).toBe('image/png');
   });
 
-  test('boleh dibuka tanpa internet selepas lawatan pertama', async ({ page, context }) => {
-    await openApp(page);
-    await page.clock.resume(); // page-side polling below needs real timers
-    await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
-    await context.setOffline(true);
-    await page.reload();
-    await expect(page.locator('#hero-title')).toBeVisible();
-    await expect(page.locator('.card')).toHaveCount(4);
-    expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toContain('Manrope');
-    await context.setOffline(false);
+  test.describe('dengan service worker', () => {
+    test.use({ serviceWorkers: 'allow' });
+
+    test('boleh dibuka tanpa internet selepas lawatan pertama', async ({ page, context }) => {
+      await openApp(page);
+      await page.clock.resume(); // page-side polling below needs real timers
+      await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+      // Cut the network by failing every request that reaches it. (setOffline
+      // cannot be used: Firefox then refuses navigations before the service
+      // worker can answer.) Requests the service worker answers never get here.
+      await context.route('**', (route) => route.abort('internetdisconnected'));
+      await page.reload();
+      await expect(page.locator('#hero-title')).toBeVisible();
+      await expect(page.locator('.card')).toHaveCount(4);
+      expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toContain('Manrope');
+    });
   });
 });
 

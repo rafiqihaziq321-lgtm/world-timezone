@@ -21,6 +21,10 @@ module.exports = defineConfig({
     timezoneId: 'Asia/Kuala_Lumpur',
     // Globe auto-rotation and intro animation off, so pixels and positions are stable.
     reducedMotion: 'reduce',
+    // A controlling service worker sits between the page and the network, and
+    // Firefox/WebKit then let requests bypass page.route() mocks (tests would hit
+    // the real APIs). Only the PWA tests turn it back on.
+    serviceWorkers: 'block',
     trace: 'retain-on-failure',
   },
   projects: [
