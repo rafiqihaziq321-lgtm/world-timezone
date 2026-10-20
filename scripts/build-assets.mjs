@@ -26,14 +26,24 @@ for (const [file, size, markRatio] of icons) {
   console.log(file);
 }
 
-// Link preview: the hero without anything time-specific or interactive.
+// Link preview: the hero without anything time-specific or interactive, its
+// lede replaced by what the site offers.
 const page = await browser.newPage({ viewport: { width: 1200, height: 630 }, colorScheme: 'dark', reducedMotion: 'reduce' });
 await page.goto(`file://${root}index.html`);
 await page.addStyleTag({ content: `
-  .site-nav, .notices, #time-control, .hero-clock, .hero-actions, .hint, .globe-zoom { display: none !important; }
+  .site-nav, .notices, #time-control, .hero-clock, .hero-actions, .hint, .globe-zoom, .hero-lede { display: none !important; }
   .hero { min-height: 630px; padding-block: 0; grid-template-areas: "copy globe"; }
-  .hero-lede { font-size: 1.35rem; }
+  .og-features { margin: 28px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; font-size: 1.3rem; font-weight: 700; }
+  .og-features li { display: flex; gap: 12px; align-items: center; }
 ` });
+await page.evaluate(() => {
+  const list = document.createElement('ul');
+  list.className = 'og-features';
+  for (const text of ['🌍 Jam dunia & perancang mesyuarat', '🇲🇾 Cuaca, amaran MET & waktu solat', '🗺️ Peta 3D Malaysia & kualiti udara']) {
+    list.append(Object.assign(document.createElement('li'), { textContent: text }));
+  }
+  document.querySelector('.hero-lede').after(list);
+});
 await page.evaluate(() => document.fonts.ready);
 await page.waitForTimeout(500);
 await page.screenshot({ path: `${root}og-image.png` });

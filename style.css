@@ -45,6 +45,8 @@
   --off-fg: #78350f;
   --sleep-bg: #e2e8f0;
   --sleep-fg: #475569;
+  --weekend-bg: #ede9fe;
+  --weekend-fg: #5b21b6;
   --all-work: #16a34a;
 }
 
@@ -79,6 +81,8 @@
     --off-fg: #fde68a;
     --sleep-bg: rgba(148, 163, 184, 0.12);
     --sleep-fg: #94a3b8;
+    --weekend-bg: rgba(167, 139, 250, 0.32);
+    --weekend-fg: #ddd6fe;
     --all-work: #22c55e;
   }
 }
@@ -113,6 +117,8 @@
   --off-fg: #fde68a;
   --sleep-bg: rgba(148, 163, 184, 0.12);
   --sleep-fg: #94a3b8;
+  --weekend-bg: rgba(167, 139, 250, 0.32);
+  --weekend-fg: #ddd6fe;
   --all-work: #22c55e;
 }
 
@@ -226,6 +232,15 @@ button.secondary,
 }
 
 .error { color: var(--error); margin: 4px 0; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .empty { color: var(--muted); }
 
 /* Shared horizontal rhythm for every full-width band. */
@@ -632,6 +647,26 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 }
 
 .card .remove:hover { opacity: 1; }
+
+.drag-handle {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-left: -6px;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.1rem;
+  font-weight: 400;
+  opacity: 0.55;
+  cursor: grab;
+  touch-action: none; /* a touch drag moves the card, not the page */
+}
+
+.drag-handle:hover, .drag-handle:focus-visible { opacity: 1; }
+.drag-handle:active { transform: none; }
+.card.dragging { z-index: 5; box-shadow: 0 18px 40px rgba(2, 6, 23, 0.45); cursor: grabbing; opacity: 0.95; }
+.card.dragging .drag-handle { cursor: grabbing; }
 
 .card.enter { animation: card-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(var(--i, 0) * 70ms); }
 .card.leaving { animation: card-out 0.25s ease-in forwards; pointer-events: none; }
@@ -1107,6 +1142,7 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 #planner-table .work { background: var(--work-bg); color: var(--work-fg); }
 #planner-table .off { background: var(--off-bg); color: var(--off-fg); }
 #planner-table .sleep { background: var(--sleep-bg); color: var(--sleep-fg); }
+#planner-table .weekend { background: var(--weekend-bg); color: var(--weekend-fg); }
 
 #planner-table thead .all-work button { background: var(--all-work); color: #fff; font-weight: 700; }
 #planner-table .current { outline: 2px solid var(--accent-ink); outline-offset: -1px; }
@@ -1126,6 +1162,44 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 .swatch.work { background: var(--work-bg); }
 .swatch.off { background: var(--off-bg); }
 .swatch.sleep { background: var(--sleep-bg); }
+.swatch.weekend { background: var(--weekend-bg); }
+
+.work-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+  font-size: 0.9rem;
+}
+
+.work-settings legend { float: left; margin-right: 4px; padding: 0; font-weight: 700; }
+.work-settings select {
+  margin-left: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.weekend-days { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.day-toggle { position: relative; cursor: pointer; }
+.day-toggle input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.day-toggle span {
+  display: inline-block;
+  min-width: 42px;
+  padding: 5px 8px;
+  border: 1px solid var(--input-border);
+  border-radius: 999px;
+  text-align: center;
+}
+.day-toggle input:checked + span { background: var(--weekend-bg); color: var(--weekend-fg); border-color: transparent; font-weight: 700; }
+.day-toggle input:focus-visible + span { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
 
 /* ---------- Facts ----------
    One shared column for the offsets (subgrid) so every story starts on the same line. */

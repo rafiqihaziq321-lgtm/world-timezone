@@ -1,7 +1,7 @@
 {
   "name": "Jam Dunia",
   "short_name": "Jam Dunia",
-  "description": "Lihat masa di seluruh dunia pada glob interaktif dan cari masa mesyuarat yang sesuai untuk semua.",
+  "description": "Lihat masa di seluruh dunia pada glob interaktif dan cari masa mesyuarat yang sesuai. Untuk Malaysia: cuaca, amaran MET, waktu solat dan peta 3D.",
   "lang": "ms",
   "start_url": "./",
   "scope": "./",
@@ -12,5 +12,10 @@
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
     { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Malaysia: cuaca, amaran dan waktu solat", "short_name": "Malaysia", "url": "./#malaysia", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Peta 3D Malaysia", "short_name": "Peta", "url": "./#bandar-malaysia", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Perancang mesyuarat", "short_name": "Mesyuarat", "url": "./#perancang", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] }
   ]
 }

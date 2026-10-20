@@ -43,6 +43,7 @@ const themeEl = document.getElementById('theme-toggle');
 const zoomInEl = document.getElementById('zoom-in');
 const zoomOutEl = document.getElementById('zoom-out');
 const shareEl = document.getElementById('share');
+const installEl = document.getElementById('install');
 const shareStatusEl = document.getElementById('share-status');
 const shareBannerEl = document.getElementById('share-banner');
 const shareSaveEl = document.getElementById('share-save');
@@ -54,8 +55,10 @@ const heroDateEl = document.getElementById('hero-date');
 const MINUTE_MS = 60 * 1000;
 const QUARTER_MS = 15 * MINUTE_MS;
 const HOUR_MS = 60 * MINUTE_MS;
-const WORK_START_MIN = 9 * 60;
-const WORK_END_MIN = 17 * 60;
+// The viewer's working day, used for every city in the planner. Minutes from
+// midnight; weekend days as Date#getDay() numbers (0 = Sunday).
+const DEFAULT_WORK = { start: 9 * 60, end: 17 * 60, weekend: [6, 0] };
+const WEEKDAYS = [[1, 'Isnin', 'Isn'], [2, 'Selasa', 'Sel'], [3, 'Rabu', 'Rab'], [4, 'Khamis', 'Kha'], [5, 'Jumaat', 'Jum'], [6, 'Sabtu', 'Sab'], [0, 'Ahad', 'Ahd']];
 const SLEEP_START_MIN = 22 * 60;
 const SLEEP_END_MIN = 7 * 60;
 
@@ -78,13 +81,21 @@ function cityForZone(zone) {
 }
 
 function defaultState() {
-  return { cities: DEFAULT_ZONES.map(cityForZone), hour24: true, theme: null }; // theme null = follow the system
+  // theme null = follow the system
+  return { cities: DEFAULT_ZONES.map(cityForZone), hour24: true, theme: null, work: { ...DEFAULT_WORK } };
 }
 
 function parseStoredCity(raw) {
   if (!raw || typeof raw.name !== 'string' || typeof raw.zone !== 'string' || !isValidZone(raw.zone)) return null;
   const coord = (n) => (Number.isFinite(n) ? n : null);
   return makeCity(raw.name, raw.zone, coord(raw.lat), coord(raw.lon));
+}
+
+// Saved working hours, or the defaults if missing or not a sensible range.
+function parseStoredWork(raw) {
+  const minute = (n) => Number.isInteger(n) && n >= 0 && n <= 24 * 60;
+  if (!raw || !minute(raw.start) || !minute(raw.end) || raw.start >= raw.end || !Array.isArray(raw.weekend)) return { ...DEFAULT_WORK };
+  return { start: raw.start, end: raw.end, weekend: [...new Set(raw.weekend.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))] };
 }
 
 function loadState() {
@@ -110,6 +121,7 @@ function loadState() {
       cities,
       hour24: typeof parsed.hour24 === 'boolean' ? parsed.hour24 : defaults.hour24,
       theme: ['light', 'dark'].includes(parsed.theme) ? parsed.theme : defaults.theme,
+      work: parseStoredWork(parsed.work),
     };
   } catch (err) {
     console.warn('Data tersimpan rosak; guna tetapan lalai.', err);
@@ -123,7 +135,7 @@ function saveState(state) {
   const cities = (state.shared ? state.savedCities : state.cities)
     .map(({ name, zone, lat, lon }) => ({ name, zone, lat, lon }));
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ cities, hour24: state.hour24, theme: state.theme }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ cities, hour24: state.hour24, theme: state.theme, work: state.work }));
   } catch (err) {
     console.warn('Gagal simpan tetapan; perubahan tidak akan kekal selepas reload.', err);
   }
@@ -180,10 +192,21 @@ function minuteOfDay(zone, ms) {
   return ((minutes % 1440) + 1440) % 1440;
 }
 
-function slotCategory(startMin) {
-  if (startMin >= WORK_START_MIN && startMin + 60 <= WORK_END_MIN) return 'work';
+// An hour starting at `startMin` by a city's clock, on a working day or not.
+function slotCategory(startMin, work, isWeekend) {
+  if (!isWeekend && startMin >= work.start && startMin + 60 <= work.end) return 'work';
   if (startMin >= SLEEP_START_MIN || startMin < SLEEP_END_MIN) return 'sleep';
-  return 'off';
+  return isWeekend ? 'weekend' : 'off';
+}
+
+// Day of the week (0 = Sunday) by the zone's own calendar.
+function weekdayOf(zone, ms) {
+  const name = new Intl.DateTimeFormat('en-US', { timeZone: zone, weekday: 'short' }).format(ms);
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(name);
+}
+
+function minuteText(minutes) {
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 }
 
 function hourLabel(minutes, hour24) {
@@ -201,11 +224,59 @@ const PHASES = {
   night: { icon: '🌙', name: 'Malam' },
 };
 
+// Fixed hours, for places whose position we do not know (the viewer's own
+// zone, and cities added by zone alone).
 function dayPhase(minutes) {
   if (minutes >= 5 * 60 && minutes < 7 * 60) return 'dawn';
   if (minutes >= 7 * 60 && minutes < 17 * 60) return 'day';
   if (minutes >= 17 * 60 && minutes < 19 * 60) return 'dusk';
   return 'night';
+}
+
+// Sunrise and sunset (epoch ms) on the city's calendar day containing
+// `ms`, by the standard sunrise equation (accurate to a minute or two).
+// In polar day or night there is no sunrise or sunset: { polar: 'day' | 'night' }.
+function sunTimes(city, ms) {
+  const rad = Math.PI / 180;
+  const { year, month, day } = cityDate(city.zone, new Date(ms));
+  const n = Math.round(Date.UTC(year, month - 1, day, 12) / 864e5 + 2440587.5 - 2451545);
+  const meanNoon = n - city.lon / 360;
+  const anomaly = (357.5291 + 0.98560028 * meanNoon) % 360;
+  const centre = 1.9148 * Math.sin(anomaly * rad) + 0.02 * Math.sin(2 * anomaly * rad) + 0.0003 * Math.sin(3 * anomaly * rad);
+  const ecliptic = (anomaly + centre + 180 + 102.9372) % 360;
+  const transit = 2451545 + meanNoon + 0.0053 * Math.sin(anomaly * rad) - 0.0069 * Math.sin(2 * ecliptic * rad);
+  const declination = Math.asin(Math.sin(ecliptic * rad) * Math.sin(23.4397 * rad));
+  const lat = city.lat * rad;
+  // -0.833°: the sun's radius plus refraction at the horizon.
+  const cosHour = (Math.sin(-0.833 * rad) - Math.sin(lat) * Math.sin(declination)) / (Math.cos(lat) * Math.cos(declination));
+  if (cosHour > 1) return { polar: 'night' };
+  if (cosHour < -1) return { polar: 'day' };
+  const half = Math.acos(cosHour) / rad / 360;
+  const toMs = (julian) => (julian - 2440587.5) * 864e5;
+  return { rise: toMs(transit - half), set: toMs(transit + half) };
+}
+
+// Dawn and dusk are the hour either side of sunrise and sunset.
+function cityPhase(city, ms) {
+  if (city.lat === null || city.lon === null) return dayPhase(minuteOfDay(city.zone, ms));
+  const sun = sunTimes(city, ms);
+  if (sun.polar) return sun.polar;
+  if (Math.abs(ms - sun.rise) < HOUR_MS) return 'dawn';
+  if (Math.abs(ms - sun.set) < HOUR_MS) return 'dusk';
+  return ms > sun.rise && ms < sun.set ? 'day' : 'night';
+}
+
+// "🌅 07:05 · 🌇 19:12" by the city's clock; empty without a position.
+function renderSunLine(state, node, city, now) {
+  if (city.lat === null || city.lon === null) return;
+  const { iso } = cityDate(city.zone, now);
+  renderKeyed(node, `${iso}|${state.hour24}`, () => {
+    const sun = sunTimes(city, now.getTime());
+    if (sun.polar === 'day') return ['☀️ Matahari tidak terbenam hari ini'];
+    if (sun.polar === 'night') return ['🌙 Matahari tidak terbit hari ini'];
+    const clock = (ms) => formatClock(state, city.zone, ms);
+    return [`🌅 ${clock(sun.rise)} · 🌇 ${clock(sun.set)}`];
+  });
 }
 
 const ANALOG_TICKS = Array.from({ length: 12 }, (_, i) => {
@@ -220,6 +291,7 @@ function createCard(state, city) {
   card.dataset.key = cityKey(city);
   card.innerHTML = `
     <div class="card-head">
+      <button class="drag-handle" type="button"></button>
       <span class="phase" aria-hidden="true"></span>
       <span class="city"></span>
       <span class="utc"></span>
@@ -229,6 +301,7 @@ function createCard(state, city) {
         <div class="time"></div>
         <div class="meta date"></div>
         <div class="meta diff"></div>
+        <div class="meta sun"></div>
       </div>
       <svg class="analog" viewBox="0 0 100 100" aria-hidden="true">
         <circle class="face" cx="50" cy="50" r="46"/>
@@ -241,6 +314,7 @@ function createCard(state, city) {
     </div>
     <button class="remove" type="button"></button>`;
   card.querySelector('.city').textContent = city.name;
+  setupReorder(state, card, city);
   const remove = card.querySelector('.remove');
   remove.textContent = '×';
   remove.setAttribute('aria-label', `Buang ${city.name}`);
@@ -274,6 +348,76 @@ function createCard(state, city) {
     card.append(toggle, panel);
   }
   return card;
+}
+
+// Cards are reordered by dragging their handle (mouse or touch) or with the
+// arrow keys on it. The new order is saved, and the planner and globe follow it.
+function commitOrder(state) {
+  const keys = [...clocksEl.querySelectorAll('.card')].map((c) => c.dataset.key);
+  const order = keys.map((key) => state.cities.find((c) => cityKey(c) === key));
+  if (order.every((c, i) => c === state.cities[i])) return;
+  state.cities = order;
+  saveState(state);
+  tick(state);
+}
+
+function setupReorder(state, card, city) {
+  const handle = card.querySelector('.drag-handle');
+  handle.textContent = '⠿';
+  handle.setAttribute('aria-label', `Susun semula ${city.name} (seret, atau guna kekunci anak panah)`);
+  const status = document.getElementById('reorder-status');
+
+  handle.addEventListener('keydown', (e) => {
+    const step = { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const cards = [...clocksEl.querySelectorAll('.card')];
+    const to = cards.indexOf(card) + step;
+    if (to < 0 || to >= cards.length) return;
+    if (step < 0) cards[to].before(card);
+    else cards[to].after(card);
+    handle.focus(); // moving the element drops focus in some browsers
+    commitOrder(state);
+    status.textContent = `${city.name} kini di kedudukan ${to + 1} daripada ${cards.length}.`;
+  });
+
+  handle.addEventListener('pointerdown', (down) => {
+    if (down.button !== 0) return;
+    down.preventDefault();
+    const box = card.getBoundingClientRect();
+    const grab = { x: down.clientX - box.left, y: down.clientY - box.top };
+    card.classList.add('dragging');
+
+    // Listened for on window: moving the card in the DOM drops pointer capture.
+    const move = (e) => {
+      if (e.pointerId !== down.pointerId) return;
+      // The card under the pointer, other than the one being dragged, takes
+      // its place; the dragged card then follows the pointer from its new slot.
+      const target = document.elementsFromPoint(e.clientX, e.clientY)
+        .map((node) => node.closest('.card'))
+        .find((c) => c && c !== card && c.parentElement === clocksEl);
+      if (target) {
+        const cards = [...clocksEl.children];
+        if (cards.indexOf(target) > cards.indexOf(card)) target.after(card);
+        else target.before(card);
+      }
+      card.style.transform = '';
+      const slot = card.getBoundingClientRect();
+      card.style.transform = `translate(${e.clientX - grab.x - slot.left}px, ${e.clientY - grab.y - slot.top}px)`;
+    };
+    const end = (e) => {
+      if (e.pointerId !== down.pointerId) return;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      card.classList.remove('dragging');
+      card.style.transform = '';
+      commitOrder(state);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  });
 }
 
 // Keeps existing card elements so only added cards animate in.
@@ -339,7 +483,7 @@ function tick(state) {
     const offset = utcOffsetMinutes(zone, now);
     const minutes = minuteOfDay(zone, now.getTime());
     const seconds = now.getUTCSeconds();
-    const phase = dayPhase(minutes);
+    const phase = city ? cityPhase(city, now.getTime()) : dayPhase(minutes);
     card.dataset.phase = phase;
     card.querySelector('.phase').textContent = PHASES[phase].icon;
     card.querySelector('.utc').textContent = formatUtcOffset(offset);
@@ -352,6 +496,7 @@ function tick(state) {
       timeZone: zone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
     });
     card.querySelector('.diff').textContent = formatDiff(offset - localOffset);
+    if (city) renderSunLine(state, card.querySelector('.sun'), city, now);
     card.querySelector('.hand.hour').setAttribute('transform', `rotate(${(minutes % 720) / 2} 50 50)`);
     card.querySelector('.hand.minute').setAttribute('transform', `rotate(${(minutes % 60) * 6 + seconds / 10} 50 50)`);
     card.querySelector('.hand.second').setAttribute('transform', `rotate(${seconds * 6} 50 50)`);
@@ -368,7 +513,7 @@ function tick(state) {
 function renderPlanner(state, now) {
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const currentSlot = Math.min(23, Math.floor((now.getTime() - dayStart) / HOUR_MS));
-  const key = JSON.stringify([state.cities.map(cityKey), dayStart, currentSlot, state.hour24]);
+  const key = JSON.stringify([state.cities.map(cityKey), dayStart, currentSlot, state.hour24, state.work]);
   if (plannerTableEl.dataset.key === key) return;
   plannerTableEl.dataset.key = key;
   plannerTableEl.replaceChildren();
@@ -379,7 +524,8 @@ function renderPlanner(state, now) {
   }
 
   const slots = Array.from({ length: 24 }, (_, i) => dayStart + i * HOUR_MS);
-  const categories = state.cities.map(({ zone }) => slots.map((ms) => slotCategory(minuteOfDay(zone, ms))));
+  const categories = state.cities.map(({ zone }) => slots.map((ms) => (
+    slotCategory(minuteOfDay(zone, ms), state.work, state.work.weekend.includes(weekdayOf(zone, ms))))));
   const allWork = slots.map((_, i) => categories.every((row) => row[i] === 'work'));
 
   const head = plannerTableEl.createTHead().insertRow();
@@ -431,7 +577,56 @@ function renderPlanner(state, now) {
   });
   plannerSummaryEl.textContent = ranges.length
     ? `Waktu sesuai untuk semua (waktu anda): ${ranges.map((g) => `${fmt(slots[g.start])}–${fmt(dayStart + g.end * HOUR_MS)}`).join(', ')}`
-    : 'Tiada jam yang berada dalam waktu kerja untuk semua bandar pada hari ini.';
+    : `Tiada jam yang berada dalam waktu kerja untuk semua bandar pada hari ini${
+      categories.some((row) => row.includes('weekend')) ? ' (ada bandar sedang hujung minggu)' : ''}.`;
+}
+
+// The working-hours form above the planner. Built once; changing it saves
+// and redraws the planner.
+function setupWorkSettings(state) {
+  const startEl = document.getElementById('work-start');
+  const endEl = document.getElementById('work-end');
+  const daysEl = document.getElementById('weekend-days');
+  for (let m = 0; m <= 24 * 60; m += 30) {
+    if (m < 24 * 60) startEl.append(new Option(minuteText(m), String(m)));
+    if (m > 0) endEl.append(new Option(minuteText(m), String(m)));
+  }
+  for (const [day, name, short] of WEEKDAYS) {
+    const label = el('label', 'day-toggle');
+    const box = el('input');
+    box.type = 'checkbox';
+    box.value = String(day);
+    box.setAttribute('aria-label', name);
+    label.append(box, el('span', '', short));
+    daysEl.append(label);
+  }
+
+  const show = () => {
+    startEl.value = String(state.work.start);
+    endEl.value = String(state.work.end);
+    for (const box of daysEl.querySelectorAll('input')) box.checked = state.work.weekend.includes(Number(box.value));
+    document.getElementById('work-legend').textContent = `Waktu kerja (${minuteText(state.work.start)}–${minuteText(state.work.end)})`;
+    const names = WEEKDAYS.filter(([d]) => state.work.weekend.includes(d)).map(([, n]) => n);
+    document.getElementById('weekend-legend').textContent = `Hujung minggu${names.length ? ` (${names.join(', ')})` : ': tiada'}`;
+  };
+  // A range always keeps at least an hour; moving one end past the other drags it along.
+  const update = (changed) => {
+    let start = Number(startEl.value);
+    let end = Number(endEl.value);
+    if (start >= end) {
+      if (changed === 'start') end = Math.min(start + 60, 24 * 60);
+      else start = Math.max(end - 60, 0);
+    }
+    const weekend = [...daysEl.querySelectorAll('input:checked')].map((box) => Number(box.value));
+    state.work = { start, end, weekend };
+    saveState(state);
+    show();
+    tick(state);
+  };
+  startEl.addEventListener('change', () => update('start'));
+  endEl.addEventListener('change', () => update('end'));
+  daysEl.addEventListener('change', () => update('days'));
+  show();
 }
 
 // Switches every clock to `ms` (epoch ms), or back to live time when null.
@@ -1330,7 +1525,7 @@ function describeCity(state, city, now) {
   const { zone } = city;
   const offset = utcOffsetMinutes(zone, now);
   const diff = offset - utcOffsetMinutes(LOCAL_ZONE, now);
-  const phase = PHASES[dayPhase(minuteOfDay(zone, now.getTime()))];
+  const phase = PHASES[cityPhase(city, now.getTime())];
   return {
     time: now.toLocaleTimeString('ms-MY', {
       timeZone: zone, hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -1467,6 +1662,7 @@ function init() {
     tick(state);
   });
   renderFacts();
+  setupWorkSettings(state);
   document.getElementById('city-dialog').addEventListener('close', () => { state.dialogState = null; });
   shareBannerEl.hidden = !state.shared;
 
@@ -1490,6 +1686,26 @@ function init() {
 
   applyTheme(state);
   systemDark.addEventListener('change', () => applyTheme(state));
+  // Chromium browsers (Chrome, Edge, Android) announce that the app can be
+  // installed; we keep that offer for our own button. Safari and Firefox
+  // install from their own menus, so the button stays hidden there.
+  let installOffer = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    installOffer = e;
+    installEl.hidden = false;
+  });
+  installEl.addEventListener('click', () => {
+    const offer = installOffer;
+    installOffer = null; // an offer can be shown once; the browser sends another if declined
+    installEl.hidden = true;
+    offer?.prompt().catch((err) => console.warn('Pemasangan app tidak dapat dimulakan.', err));
+  });
+  window.addEventListener('appinstalled', () => {
+    installOffer = null;
+    installEl.hidden = true;
+  });
+
   themeEl.addEventListener('click', () => {
     const dark = (state.theme ?? (systemDark.matches ? 'dark' : 'light')) === 'dark';
     state.theme = dark ? 'light' : 'dark';
@@ -1549,7 +1765,7 @@ function init() {
 
   clocksEl.addEventListener('click', (e) => {
     const card = e.target.closest('.card');
-    if (!card || e.target.closest('.remove, .local-toggle, .local-panel')) return;
+    if (!card || e.target.closest('.remove, .drag-handle, .local-toggle, .local-panel')) return;
     const city = state.cities.find((c) => cityKey(c) === card.dataset.key);
     if (city) globe.focusCity(city);
   });

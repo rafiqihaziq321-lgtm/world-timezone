@@ -33,15 +33,15 @@ const test = base.extend({
   },
 });
 
-async function openApp(page, stored, query = '') {
+async function openApp(page, stored, query = '', now = FIXED_NOW) {
   if (stored) {
     await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [STORAGE_KEY, JSON.stringify(stored)]);
   }
   // install() only sets the starting time; time would then keep flowing in
   // real time (slow browsers drift by seconds). Pause it so tests advance it
   // explicitly with runFor().
-  await page.clock.install({ time: FIXED_NOW.getTime() - 1000 });
-  await page.clock.pauseAt(FIXED_NOW);
+  await page.clock.install({ time: now.getTime() - 1000 });
+  await page.clock.pauseAt(now);
   await page.goto(APP_URL + query);
   await page.clock.runFor(1100);
 }
@@ -217,6 +217,132 @@ test.describe('perancang mesyuarat', () => {
     await page.clock.runFor(1100);
     await expect(card(page, 'Asia/Kuala_Lumpur').locator('.time')).toHaveText('15:00:00');
     await expect(page.locator('#time-slider')).toHaveValue('36');
+  });
+});
+
+test.describe('waktu kerja dan hujung minggu', () => {
+  const row = (page, n) => page.locator('#planner-table tbody tr').nth(n);
+  // FIXED_NOW is Wednesday 14 October in Kuala Lumpur and Tokyo.
+
+  test('hujung minggu dan waktu kerja boleh diubah, dan kekal selepas reload', async ({ page }) => {
+    await openApp(page, { zones: ['Asia/Kuala_Lumpur', 'Asia/Tokyo'], hour24: true });
+    await expect(page.locator('#work-start')).toHaveValue('540');
+    await expect(page.locator('#work-end')).toHaveValue('1020');
+    await expect(page.getByRole('checkbox', { name: 'Sabtu' })).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Ahad' })).toBeChecked();
+    await expect(page.locator('#planner-summary')).toHaveText('Waktu sesuai untuk semua (waktu anda): 09:00–16:00');
+
+    // Wednesday as a weekend day: no working hours today in either city.
+    await page.getByRole('checkbox', { name: 'Rabu' }).check();
+    await expect(row(page, 0).locator('td').nth(10)).toHaveClass(/weekend/);
+    await expect(row(page, 0).locator('td').nth(23)).toHaveClass(/sleep/); // nights stay nights
+    await expect(page.locator('#planner-summary')).toHaveText(
+      'Tiada jam yang berada dalam waktu kerja untuk semua bandar pada hari ini (ada bandar sedang hujung minggu).',
+    );
+    await expect(page.locator('#weekend-legend')).toHaveText('Hujung minggu (Rabu, Sabtu, Ahad)');
+    await page.getByRole('checkbox', { name: 'Rabu' }).uncheck();
+
+    await page.locator('#work-start').selectOption('600');
+    await page.locator('#work-end').selectOption('1080');
+    await expect(row(page, 0).locator('td').nth(9)).toHaveClass(/off/);
+    await expect(row(page, 0).locator('td').nth(17)).toHaveClass(/work/);
+    await expect(page.locator('#work-legend')).toHaveText('Waktu kerja (10:00–18:00)');
+    await expect(page.locator('#planner-summary')).toHaveText('Waktu sesuai untuk semua (waktu anda): 10:00–17:00');
+
+    // A fresh page (openApp's stored list would otherwise be written again on reload).
+    const again = await page.context().newPage();
+    await openApp(again);
+    await expect(again.locator('#work-start')).toHaveValue('600');
+    await expect(again.locator('#work-end')).toHaveValue('1080');
+    await expect(again.getByRole('checkbox', { name: 'Rabu' })).not.toBeChecked();
+    await expect(again.locator('#planner-summary')).toHaveText('Waktu sesuai untuk semua (waktu anda): 10:00–17:00');
+  });
+
+  test('hujung minggu ikut hari di bandar itu, bukan hari anda', async ({ page }) => {
+    await openApp(page, { zones: ['Asia/Kuala_Lumpur', 'America/New_York'], hour24: true });
+    await page.getByRole('checkbox', { name: 'Selasa' }).check();
+    // Midnight Wednesday in Kuala Lumpur is noon Tuesday in New York.
+    await expect(row(page, 1).locator('td').first()).toHaveText('12');
+    await expect(row(page, 1).locator('td').first()).toHaveClass(/weekend/);
+    await expect(row(page, 0).locator('td').nth(10)).toHaveClass(/work/); // Wednesday in Kuala Lumpur
+  });
+
+  test('tamat sebelum mula: julat dibetulkan supaya sekurang-kurangnya sejam', async ({ page }) => {
+    await openApp(page);
+    await page.locator('#work-start').selectOption('600');
+    await page.locator('#work-end').selectOption('600');
+    await expect(page.locator('#work-start')).toHaveValue('540');
+    await page.locator('#work-start').selectOption('1410');
+    await expect(page.locator('#work-end')).toHaveValue('1440');
+    await expect(page.locator('#work-legend')).toHaveText('Waktu kerja (23:30–24:00)');
+  });
+
+  test('tetapan rosak dalam simpanan diganti dengan lalai', async ({ page }) => {
+    await openApp(page, { zones: ['Asia/Kuala_Lumpur'], hour24: true, work: { start: 900, end: 300, weekend: [6, 0] } });
+    await expect(page.locator('#work-legend')).toHaveText('Waktu kerja (09:00–17:00)');
+  });
+});
+
+test.describe('matahari terbit dan terbenam', () => {
+  const cities = [
+    { name: 'London', zone: 'Europe/London', lat: 51.507, lon: -0.128 },
+    { name: 'Tromsø', zone: 'Europe/Oslo', lat: 69.65, lon: 18.96 },
+    { name: 'Kiritimati', zone: 'Pacific/Kiritimati', lat: null, lon: null }, // no position known
+  ];
+  const byName = (page, name) => page.locator('.card', { has: page.locator('.city', { hasText: name }) });
+
+  test('waktu terbit/terbenam pada kad, dan fasa ikut matahari sebenar', async ({ page }) => {
+    // 19:30 in London on the solstice: daylight, though past the fixed 17:00 "day" hours.
+    await openApp(page, { cities, hour24: true }, '', new Date('2026-06-21T18:30:00Z'));
+    await expect(byName(page, 'London').locator('.sun')).toHaveText('🌅 04:43 · 🌇 21:21');
+    await expect(byName(page, 'London')).toHaveAttribute('data-phase', 'day');
+    await expect(byName(page, 'Tromsø').locator('.sun')).toHaveText('☀️ Matahari tidak terbenam hari ini');
+    await expect(byName(page, 'Tromsø')).toHaveAttribute('data-phase', 'day');
+    // Without a position: no times, and the fixed hours decide (08:30 is "day").
+    await expect(byName(page, 'Kiritimati').locator('.sun')).toHaveText('');
+    await expect(byName(page, 'Kiritimati')).toHaveAttribute('data-phase', 'day');
+  });
+
+  test('malam kutub, senja dan format 12 jam', async ({ page }) => {
+    // 15:00 in London in December: within the hour before sunset (15:54).
+    await openApp(page, { cities, hour24: false }, '', new Date('2026-12-21T15:00:00Z'));
+    await expect(byName(page, 'Tromsø').locator('.sun')).toHaveText('🌙 Matahari tidak terbit hari ini');
+    await expect(byName(page, 'Tromsø')).toHaveAttribute('data-phase', 'night');
+    await expect(byName(page, 'London')).toHaveAttribute('data-phase', 'dusk');
+    await expect(byName(page, 'London').locator('.sun')).toHaveText(/^🌅 08:0\d PG · 🌇 03:5\d PTG$/);
+  });
+});
+
+test.describe('susun semula kad', () => {
+  test('seret pemegang kad ke tempat lain; susunan disimpan dan perancang mengikut', async ({ page }) => {
+    await openApp(page);
+    await page.locator('#clocks').scrollIntoViewIfNeeded();
+    const handle = card(page, 'Asia/Tokyo').locator('.drag-handle');
+    const from = await handle.boundingBox();
+    const to = await card(page, 'Asia/Kuala_Lumpur').boundingBox();
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 12 });
+    await expect(card(page, 'Asia/Tokyo')).toHaveClass(/dragging/);
+    await page.mouse.up();
+    await expect(card(page, 'Asia/Tokyo')).not.toHaveClass(/dragging/);
+    expect(await cardZones(page)).toEqual(['Asia/Tokyo', 'Asia/Kuala_Lumpur', 'Europe/London', 'America/New_York']);
+    expect(await storedZones(page)).toEqual(['Asia/Tokyo', 'Asia/Kuala_Lumpur', 'Europe/London', 'America/New_York']);
+    await expect(page.locator('#planner-table tbody th').first()).toContainText('Tokyo');
+  });
+
+  test('kekunci anak panah pada pemegang menggerakkan kad', async ({ page }) => {
+    await openApp(page);
+    const handle = card(page, 'Europe/London').getByRole('button', { name: /^Susun semula London/ });
+    await handle.focus();
+    await page.keyboard.press('ArrowRight');
+    expect(await cardZones(page)).toEqual(['Asia/Kuala_Lumpur', 'America/New_York', 'Europe/London', 'Asia/Tokyo']);
+    await expect(page.locator('#reorder-status')).toHaveText('London kini di kedudukan 3 daripada 4.');
+    await expect(handle).toBeFocused();
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('ArrowUp'); // already first: stays
+    expect(await storedZones(page)).toEqual(['Europe/London', 'Asia/Kuala_Lumpur', 'America/New_York', 'Asia/Tokyo']);
   });
 });
 
@@ -546,6 +672,34 @@ test.describe('PWA dan pratonton pautan', () => {
       const res = await page.request.get(icon);
       expect(res.ok(), icon).toBe(true);
     }
+  });
+
+  test('pintasan app membuka tab yang betul', async ({ page }) => {
+    const manifest = await (await page.request.get('manifest.webmanifest')).json();
+    expect(manifest.shortcuts.map((s) => s.url)).toEqual(['./#malaysia', './#bandar-malaysia', './#perancang']);
+    for (const [url, tab] of [['#malaysia', 'malaysia'], ['#perancang', 'dunia']]) {
+      await openApp(page, undefined, url);
+      await expect(page.locator(`#${tab}`)).toBeVisible();
+    }
+  });
+
+  test('butang pasang muncul bila pelayar menawarkan pemasangan', async ({ page }) => {
+    await openApp(page);
+    const install = page.getByRole('button', { name: 'Pasang app' });
+    await expect(install).toBeHidden(); // no offer yet (and never in Safari or Firefox)
+    const prevented = await page.evaluate(() => {
+      const offer = new Event('beforeinstallprompt', { cancelable: true });
+      offer.prompt = () => {
+        window.promptShown = (window.promptShown ?? 0) + 1;
+        return Promise.resolve();
+      };
+      window.dispatchEvent(offer);
+      return offer.defaultPrevented; // the browser's own banner is held back for our button
+    });
+    expect(prevented).toBe(true);
+    await install.click();
+    expect(await page.evaluate(() => window.promptShown)).toBe(1);
+    await expect(install).toBeHidden();
   });
 
   test('tag pratonton pautan menunjuk ke imej yang wujud', async ({ page }) => {
