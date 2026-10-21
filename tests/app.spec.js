@@ -1257,7 +1257,14 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       await expect(page.locator('.map-marker', { has: page.getByRole('button', { name: /^Butiran Klang,/, includeHidden: true }) })).not.toHaveClass(/is-covered/);
     });
 
+    // Some browsers ask before sharing the compass (Safari, newer Chrome);
+    // answer that prompt explicitly so the test does not depend on the browser.
+    const answerSensorPrompt = (page, answer) => page.addInitScript((a) => {
+      DeviceOrientationEvent.requestPermission = () => Promise.resolve(a);
+    }, answer);
+
     test('kompas kiblat: arah dari lokasi anda, berpusing ikut sensor', async ({ page }) => {
+      await answerSensorPrompt(page, 'granted');
       await mockAll(page);
       await openApp(page, undefined, '#bandar-malaysia');
       await page.getByRole('button', { name: '🧭 Kompas kiblat' }).click();
@@ -1272,6 +1279,18 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       await dialog.getByRole('button', { name: 'Tutup' }).click();
       await page.evaluate(() => window.dispatchEvent(new DeviceOrientationEvent('deviceorientationabsolute', { alpha: 0, beta: 0, gamma: 0, absolute: true })));
       await expect(turn).toHaveAttribute('transform', 'rotate(-270.0 50 50)'); // no longer listening once closed
+    });
+
+    test('kompas kiblat: tanpa kebenaran sensor, arah ditunjuk dari utara', async ({ page }) => {
+      await answerSensorPrompt(page, 'denied');
+      await mockAll(page);
+      await openApp(page, undefined, '#bandar-malaysia');
+      await page.getByRole('button', { name: '🧭 Kompas kiblat' }).click();
+      const dialog = page.locator('#qibla-dialog');
+      await expect(dialog.locator('#qibla-reading')).toHaveText(/^293° dari utara/);
+      await expect(dialog.locator('#qibla-status')).toHaveText('Anak panah menunjuk kiblat dari utara (U). Hadapkan "U" ke utara untuk mengikutnya.');
+      await page.evaluate(() => window.dispatchEvent(new DeviceOrientationEvent('deviceorientationabsolute', { alpha: 90, beta: 0, gamma: 0, absolute: true })));
+      await expect(dialog.locator('.dial-turn')).not.toHaveAttribute('transform', /rotate/); // not listening without permission
     });
   });
 
