@@ -922,16 +922,38 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
   };
   const STATE_ORDER = ['Johor', 'Kedah', 'Kelantan', 'Melaka', 'Negeri Sembilan', 'Pahang', 'Perak', 'Perlis',
     'Pulau Pinang', 'Sabah', 'Sarawak', 'Selangor', 'Terengganu', 'W.P. Kuala Lumpur', 'W.P. Labuan', 'W.P. Putrajaya'];
-  const airRows = STATE_ORDER.map((state) => ({
-    'W.P. Kuala Lumpur': airSeries(42, 30), // PM2.5 120% of its standard
-    Sarawak: airSeries(10, 160), // PM10 160% of its standard
-    'W.P. Labuan': airSeries(5, 5, 10), // too few hours for an estimate
-  }[state] ?? airSeries(7, 10)));
+  // MALAYSIA_TOWNS order, after the capitals in the air-quality request.
+  const TOWN_ORDER = ['Batu Pahat', 'Kluang', 'Muar', 'Sungai Petani', 'Raub', 'Kuala Lipis', 'Taiping', 'Teluk Intan',
+    'Butterworth', 'Sandakan', 'Tawau', 'Lahad Datu', 'Miri', 'Sibu', 'Bintulu', 'Klang', 'Chukai'];
+  const airRows = [
+    ...STATE_ORDER.map((state) => ({
+      'W.P. Kuala Lumpur': airSeries(42, 30), // PM2.5 120% of its standard
+      Sarawak: airSeries(10, 160), // PM10 160% of its standard
+      'W.P. Labuan': airSeries(5, 5, 10), // too few hours for an estimate
+    }[state] ?? airSeries(7, 10))),
+    ...TOWN_ORDER.map((town) => (town === 'Sandakan' ? airSeries(20, 30) : airSeries(7, 10))),
+  ];
+  // Today's forecast for every MET location; Kluang appears under MET's spelling.
+  const allLocationsToday = [
+    forecast('Tn010', 'Sandakan', '2026-10-14', 'Ribut petir di satu dua tempat'),
+    forecast('Tn011', 'Keluang', '2026-10-14', 'Berjerebu'),
+    forecast('Tn012', 'Kuala Lumpur', '2026-10-14', 'Tiada hujan'),
+  ];
 
   const longWarning = 'Ribut petir, hujan lebat dan angin kencang dijangka berlaku sehingga jam 6:00 petang di kawasan berikut: '
     + 'Perak (Hulu Perak, Kuala Kangsar, Kinta); Pahang (Cameron Highlands, Lipis, Raub); Selangor (Gombak, Petaling).';
 
-  async function mockAll(page, { wikiStatus = 200, warningStatus = 200, warningRows = warnings, styleStatus = 200, airStatus = 200 } = {}) {
+  // The same month during Ramadan by JAKIM's calendar: 14 October is 5 Ramadan.
+  const ramadanMonth = {
+    ...prayerMonth,
+    prayers: prayerMonth.prayers.map((p) => ({
+      ...p,
+      imsak: p.fajr - 600,
+      hijri: p.day >= 10 ? `1448-09-${String(p.day - 9).padStart(2, '0')}` : `1448-08-${String(p.day + 20).padStart(2, '0')}`,
+    })),
+  };
+
+  async function mockAll(page, { wikiStatus = 200, warningStatus = 200, warningRows = warnings, styleStatus = 200, airStatus = 200, prayers = prayerMonth } = {}) {
     const calls = { dataGov: [], wiki: 0, air: [] };
     const cors = { 'Access-Control-Allow-Origin': '*' };
     await page.route('https://tiles.openfreemap.org/**', (route) => (styleStatus === 200
@@ -943,7 +965,7 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       if (airStatus !== 200) return route.fulfill({ status: airStatus, body: 'error', headers: cors });
       return route.fulfill({ json: airRows, headers: cors });
     });
-    await page.route('https://api.waktusolat.app/**', (route) => route.fulfill({ json: prayerMonth, headers: cors }));
+    await page.route('https://api.waktusolat.app/**', (route) => route.fulfill({ json: prayers, headers: cors }));
     await page.route('https://api.data.gov.my/**', (route) => {
       const url = route.request().url();
       calls.dataGov.push(url);
@@ -953,7 +975,15 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
         return route.fulfill({ json: warningRows, headers: cors });
       }
       if (url.includes('contains=St@')) return route.fulfill({ json: stateRows, headers: cors });
-      return route.fulfill({ json: [forecast('Tn001', 'Kuala Lumpur', '2026-10-14', 'Hujan di satu dua tempat')], headers: cors });
+      if (url.includes('include=location')) return route.fulfill({ json: allLocationsToday, headers: cors });
+      return route.fulfill({
+        headers: cors,
+        json: [
+          forecast('Tn001', 'Kuala Lumpur', '2026-10-14', 'Hujan di satu dua tempat'),
+          forecast('Tn001', 'Kuala Lumpur', '2026-10-15', 'Ribut petir di beberapa tempat'),
+          forecast('Tn001', 'Kuala Lumpur', '2026-10-16', 'Tiada hujan'),
+        ],
+      });
     });
     await page.route('https://en.wikipedia.org/w/api.php**', (route) => {
       calls.wiki += 1;
@@ -1017,6 +1047,7 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
 
     // data.gov.my allows 4 requests a minute: one each for warnings, earthquakes and all states.
     expect(calls.dataGov).toHaveLength(3);
+    await expect(page.locator('#ramadan')).toBeHidden(); // not Ramadan in this month's data
   });
 
   test('tab Bandar: 16 ibu negeri dengan foto, kredit, cuaca negeri dan solat seterusnya', async ({ page }) => {
@@ -1033,7 +1064,8 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     await expect(byCapital('Kuala Lumpur').locator('.city-now')).toContainText('🕌 Zohor 13:10');
     await expect(byCapital('George Town').locator('.city-now')).toContainText('Berjerebu');
     expect(calls.wiki).toBe(2); // all 16 photos and credits in two batched requests
-    expect(calls.dataGov).toHaveLength(1);
+    // data.gov.my allows 4 requests a minute: all states, every location today, and warnings.
+    expect(calls.dataGov).toHaveLength(3);
 
     await byCapital('Kuala Lumpur').locator('.city-open').click();
     const dialog = page.locator('#city-dialog');
@@ -1098,7 +1130,7 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     const calls = await mockAll(page);
     await openApp(page, undefined, '#bandar-malaysia');
     const markers = page.locator('.map-marker');
-    await expect(markers).toHaveCount(16);
+    await expect(markers).toHaveCount(33); // 16 capitals and 17 towns
     const marker = (capital) => markers.filter({ has: page.getByRole('button', { name: new RegExp(`^Butiran ${capital},`), includeHidden: true }) });
 
     const kl = marker('Kuala Lumpur');
@@ -1113,9 +1145,9 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     await expect(marker('Labuan').locator('.marker-aqi')).toHaveText(''); // not enough hours
     await expect(page.locator('#map-status')).toBeHidden();
 
-    // One request for all 16 capitals.
+    // One request for all 16 capitals and 17 towns.
     expect(calls.air).toHaveLength(1);
-    expect(new URL(calls.air[0]).searchParams.get('latitude').split(',')).toHaveLength(16);
+    expect(new URL(calls.air[0]).searchParams.get('latitude').split(',')).toHaveLength(33);
 
     // Putrajaya sits under Kuala Lumpur at country zoom; "+n" zooms in.
     await expect(marker('Putrajaya')).toHaveClass(/is-covered/);
@@ -1136,6 +1168,141 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
 
     const card = page.locator('.city-card', { has: page.locator('h3', { hasText: /^Kuala Lumpur$/ }) });
     await expect(card.locator('.city-aqi')).toHaveText('IPU anggaran 120, Tidak sihat');
+  });
+
+  test('peta: bandar tambahan tidak dikira dalam "+n" sebelum zum masuk', async ({ page }) => {
+    await mockAll(page);
+    await openApp(page, undefined, '#bandar-malaysia');
+    await expect(page.locator('.map-marker')).toHaveCount(33);
+    await expect(page.locator('.map-marker.town:not(.is-covered)')).toHaveCount(0);
+    // Every capital is either shown or counted in a "+n"; towns are neither.
+    const shown = await page.locator('.map-marker:not(.town):not(.is-covered)').count();
+    const folded = await page.locator('.marker-more:not([hidden])').evaluateAll((els) => els.reduce((n, b) => n + Number(b.textContent.slice(1)), 0));
+    expect(shown + folded).toBe(16);
+
+    // Towns get today's MET forecast from one request, under MET's own spelling too.
+    const town = (name) => page.locator('.map-marker', { has: page.getByRole('button', { name: new RegExp(`^Butiran ${name},`), includeHidden: true }) });
+    await expect(town('Sandakan').locator('.marker-weather')).toHaveText('⛈️');
+    await expect(town('Sandakan').locator('.marker-aqi')).toHaveText('57');
+    await expect(town('Kluang').locator('.marker-weather')).toHaveText('🌫️'); // MET calls it Keluang
+    await expect(town('Miri').locator('.marker-weather')).toHaveText(''); // no forecast for it today
+  });
+
+  test('dialog: ramalan 3 hari, graf IPU 24 jam dan arah kiblat', async ({ page }) => {
+    await mockAll(page);
+    await openApp(page, undefined, '#bandar-malaysia');
+    await page.locator('.city-card', { has: page.locator('h3', { hasText: /^Kuala Lumpur$/ }) }).locator('.city-open').click();
+    const dialog = page.locator('#city-dialog');
+    await expect(dialog.locator('.forecast-days li')).toHaveText(['Esok⛈️Ribut petir di beberapa tempat24–33°C', 'Lusa🌤️Tiada hujan24–33°C']);
+    const chart = dialog.locator('.aqi-chart');
+    await expect(chart.locator('.aqi-bar')).toHaveCount(24);
+    await expect(chart.locator('table tr')).toHaveCount(24); // the same hours as text
+    await expect(chart.locator('table tr').last()).toHaveText('06:00120, Tidak sihat');
+    await chart.locator('.aqi-hit').last().hover();
+    await expect(chart.locator('.aqi-readout')).toHaveText('06:00 · IPU 120, Tidak sihat');
+    await expect(dialog.locator('.qibla p')).toHaveText('293° dari utara (barat laut) · 6,974 km ke Kaabah');
+  });
+
+  test('peta: amaran darat diwarnakan ikut negeri; amaran laut tidak', async ({ page }) => {
+    const rain = { warning_issue: { issued: '2026-10-14T05:00:00', title_bm: 'Amaran Hujan Berterusan (Buruk)' }, valid_to: '2026-10-15T00:00:00', text_bm: 'Hujan berterusan dijangka di kawasan berikut: Perak (Hulu Perak); Pahang (Raub).' };
+    const storm = { warning_issue: { issued: '2026-10-14T04:00:00', title_bm: 'Amaran Ribut Petir' }, valid_to: '2026-10-15T00:00:00', text_bm: 'Ribut petir di kawasan berikut: Selangor (Gombak); Perak (Kinta).' };
+    const sea = { warning_issue: { issued: '2026-10-14T03:00:00', title_bm: 'Amaran Angin Kencang dan Laut Bergelora' }, valid_to: '2026-10-15T00:00:00', text_bm: 'Angin kencang di perairan Sabah.' };
+    await mockAll(page, { warningRows: [rain, storm, sea] });
+    await openApp(page, undefined, '#bandar-malaysia');
+    const list = page.locator('#map-warnings li');
+    await expect(list).toHaveText(['Amaran Hujan Berterusan (Buruk): Pahang, Perak', 'Amaran Ribut Petir: Perak, Selangor']);
+    const levels = await page.evaluate(([a, b, c]) => warningLevels([a, b, c]), [rain, storm, sea]);
+    expect(levels).toEqual({ Perak: 'severe', Pahang: 'severe', Selangor: 'alert' }); // the worst level wins; the sea colours nothing
+    const danger = await page.evaluate((w) => warningLevels([w]), { ...rain, warning_issue: { title_bm: 'Amaran Hujan Berterusan (Bahaya)' } });
+    expect(danger).toEqual({ Perak: 'danger', Pahang: 'danger' });
+  });
+
+  test('Ramadan: kiraan detik ke berbuka, ikut negeri, dan baris dalam panel solat', async ({ page }) => {
+    await mockAll(page, { prayers: ramadanMonth });
+    await openApp(page, undefined, '#malaysia');
+    const section = page.locator('#ramadan');
+    await expect(section).toBeVisible();
+    await expect(section.locator('.ramadan-day')).toHaveText('🌙 Ramadan hari ke-5, 1448H');
+    await expect(section.locator('.ramadan-label')).toHaveText('Berbuka di Kuala Lumpur dalam'); // 06:00, after imsak at 05:45
+    await expect(section.locator('.ramadan-timer')).toHaveText('13:11:52'); // to 19:12:00 from 06:00:08
+    await page.clock.runFor(1000);
+    await expect(section.locator('.ramadan-timer')).toHaveText('13:11:51');
+    await expect(section.locator('tbody tr')).toHaveCount(16);
+    await expect(section.locator('tbody tr').first().locator('td')).toHaveText(['05:45', '19:12']);
+    await section.getByRole('combobox').selectOption('Sabah');
+    await expect(section.locator('.ramadan-label')).toHaveText('Berbuka di Kota Kinabalu dalam');
+
+    await page.goto(`${APP_URL}#dunia`);
+    await page.clock.runFor(1100);
+    const kl = card(page, 'Asia/Kuala_Lumpur');
+    await kl.getByRole('button', { name: 'Solat & cuaca' }).click();
+    await expect(kl.locator('.ramadan-line')).toHaveText('🌙 Ramadan: imsak 05:45 · berbuka 19:12');
+  });
+
+  test.describe('dengan lokasi anda (Klang)', () => {
+    test.use({ geolocation: { latitude: 3.0, longitude: 101.48 }, permissions: ['geolocation'] });
+
+    test('bandar terdekat: zum ke bandar itu dan buka butirannya', async ({ page }) => {
+      await mockAll(page);
+      await openApp(page, undefined, '#bandar-malaysia');
+      await page.getByRole('button', { name: '📍 Bandar terdekat' }).click();
+      await expect(page.locator('#map-tools-status')).toHaveText('Bandar terdekat: Klang, Selangor (kira-kira 8 km dari anda).');
+      const dialog = page.locator('#city-dialog');
+      await expect(dialog.locator('h2')).toHaveText('Klang');
+      await expect(dialog.locator('.city-state')).toHaveText('Selangor');
+      await expect(dialog.locator('.dialog-photo')).toHaveCount(0); // towns have no landmark photo
+      await expect(dialog.locator('.qibla p')).toHaveText('293° dari utara (barat laut) · 6,965 km ke Kaabah');
+      await dialog.getByRole('button', { name: 'Tutup' }).click();
+      await expect(page.locator('#my-map')).toHaveClass(/map-labelled/);
+      await expect(page.locator('.map-marker', { has: page.getByRole('button', { name: /^Butiran Klang,/, includeHidden: true }) })).not.toHaveClass(/is-covered/);
+    });
+
+    // Some browsers ask before sharing the compass (Safari, newer Chrome);
+    // answer that prompt explicitly so the test does not depend on the browser.
+    const answerSensorPrompt = (page, answer) => page.addInitScript((a) => {
+      DeviceOrientationEvent.requestPermission = () => Promise.resolve(a);
+    }, answer);
+
+    test('kompas kiblat: arah dari lokasi anda, berpusing ikut sensor', async ({ page }) => {
+      await answerSensorPrompt(page, 'granted');
+      await mockAll(page);
+      await openApp(page, undefined, '#bandar-malaysia');
+      await page.getByRole('button', { name: '🧭 Kompas kiblat' }).click();
+      const dialog = page.locator('#qibla-dialog');
+      await expect(dialog.locator('#qibla-reading')).toHaveText(/^293° dari utara \(barat laut\) · 6,9\d\d km ke Kaabah$/);
+      await page.clock.runFor(3100);
+      await expect(dialog.locator('#qibla-status')).toHaveText(/^Peranti ini tiada kompas\./);
+      const turn = dialog.locator('.dial-turn');
+      await page.evaluate(() => window.dispatchEvent(new DeviceOrientationEvent('deviceorientationabsolute', { alpha: 90, beta: 0, gamma: 0, absolute: true })));
+      await expect(turn).toHaveAttribute('transform', 'rotate(-270.0 50 50)'); // facing west: alpha 90 is heading 270
+      await expect(dialog.locator('#qibla-status')).toHaveText('Pegang telefon mendatar. Anak panah menunjuk arah kiblat.');
+      await dialog.getByRole('button', { name: 'Tutup' }).click();
+      await page.evaluate(() => window.dispatchEvent(new DeviceOrientationEvent('deviceorientationabsolute', { alpha: 0, beta: 0, gamma: 0, absolute: true })));
+      await expect(turn).toHaveAttribute('transform', 'rotate(-270.0 50 50)'); // no longer listening once closed
+    });
+
+    test('kompas kiblat: tanpa kebenaran sensor, arah ditunjuk dari utara', async ({ page }) => {
+      await answerSensorPrompt(page, 'denied');
+      await mockAll(page);
+      await openApp(page, undefined, '#bandar-malaysia');
+      await page.getByRole('button', { name: '🧭 Kompas kiblat' }).click();
+      const dialog = page.locator('#qibla-dialog');
+      await expect(dialog.locator('#qibla-reading')).toHaveText(/^293° dari utara/);
+      await expect(dialog.locator('#qibla-status')).toHaveText('Anak panah menunjuk kiblat dari utara (U). Hadapkan "U" ke utara untuk mengikutnya.');
+      await page.evaluate(() => window.dispatchEvent(new DeviceOrientationEvent('deviceorientationabsolute', { alpha: 90, beta: 0, gamma: 0, absolute: true })));
+      await expect(dialog.locator('.dial-turn')).not.toHaveAttribute('transform', /rotate/); // not listening without permission
+    });
+  });
+
+  test('lokasi ditolak: mesej yang jelas', async ({ page }) => {
+    // Headless Chromium leaves the permission prompt unanswered; answer it "no".
+    await page.addInitScript(() => {
+      navigator.geolocation.getCurrentPosition = (ok, fail) => fail({ code: 1, message: 'User denied Geolocation' });
+    });
+    await mockAll(page);
+    await openApp(page, undefined, '#bandar-malaysia');
+    await page.getByRole('button', { name: '📍 Bandar terdekat' }).click();
+    await expect(page.locator('#map-tools-status')).toHaveText(/^Kebenaran lokasi ditolak\./);
   });
 
   test.describe('bila perkhidmatan luar gagal', () => {
