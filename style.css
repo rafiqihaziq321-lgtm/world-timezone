@@ -741,6 +741,21 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 .forecast dt { font-weight: 700; }
 .forecast dd { margin: 0; }
 
+.forecast-days { display: grid; gap: 4px; margin: 10px 0 0; padding: 0; list-style: none; }
+.forecast-days li { display: grid; grid-template-columns: 3.2em 1.6em minmax(0, 1fr) auto; align-items: baseline; gap: 6px; }
+.forecast-temp { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.aqi-chart { margin: 12px 0 0; }
+.aqi-chart figcaption { font-size: 0.8rem; font-weight: 700; opacity: 0.85; }
+.aqi-chart svg { display: block; width: 100%; height: auto; max-height: 180px; margin-top: 4px; }
+.aqi-grid { stroke: currentColor; stroke-opacity: 0.15; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.aqi-axis { stroke: currentColor; stroke-opacity: 0.4; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.aqi-tick { fill: currentColor; fill-opacity: 0.7; font-size: 7px; text-anchor: end; }
+.aqi-tick.start { text-anchor: start; }
+.aqi-hit { fill: transparent; }
+.aqi-chart svg:hover .aqi-bar:not(.active) { opacity: 0.45; }
+.aqi-readout { margin: 2px 0 0 !important; font-size: 0.8rem; opacity: 0.85; }
+
 .local-link { font-weight: 700; }
 .local-retry { margin-top: 6px; padding: 4px 12px; font-size: 0.8rem; }
 .local-source { margin-top: 14px !important; font-size: 0.75rem; opacity: 0.7; }
@@ -772,6 +787,30 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 .alert p { margin: 2px 0 0; font-size: 0.9rem; }
 .alert-more summary { margin-top: 4px; color: var(--accent-ink); font-size: 0.85rem; font-weight: 700; cursor: pointer; }
 .alert-more p { color: var(--muted); }
+
+.ramadan-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
+.ramadan-day { margin: 0; font-size: 1.1rem; font-weight: 800; }
+.ramadan-pick select {
+  margin-left: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+}
+.ramadan-count {
+  margin-bottom: 18px;
+  padding: 18px 20px;
+  border-radius: 20px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  text-align: center;
+}
+.ramadan-count p { margin: 0; }
+.ramadan-label { font-weight: 700; }
+.ramadan-timer { margin: 4px 0 !important; font-family: "Unbounded", "Manrope", system-ui, sans-serif; font-size: clamp(2.2rem, 7vw, 3.4rem); font-weight: 800; font-variant-numeric: tabular-nums; color: var(--sun-ink); }
+.ramadan-line { margin-top: 8px !important; font-weight: 700; }
 
 .load-error { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
@@ -866,6 +905,7 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 .tab-panel > section.map-section { max-width: none; padding-inline: 0; padding-top: 96px; } /* clears the sticky nav when the tab opens */
 .map-section .section-head { margin-bottom: 20px; }
 .map-section .section-head,
+.map-section .map-tools,
 .map-section .map-status,
 .map-section .map-note { max-width: 1180px; margin-inline: auto; padding-inline: 20px; }
 .map-section .section-head p { max-width: 640px; }
@@ -893,6 +933,51 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 }
 
 .map-status { margin-top: 12px; color: var(--error); font-weight: 700; }
+
+.map-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+.map-tools .btn { padding: 8px 16px; font-size: 0.9rem; }
+.map-tools p { flex-basis: 100%; margin: 0; font-size: 0.85rem; }
+.map-tools p:empty { display: none; }
+
+.map-warnings {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  max-width: min(420px, calc(100% - 24px));
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(10, 16, 46, 0.85);
+  color: #f8fafc;
+  font-size: 0.78rem;
+}
+
+.map-warnings ul { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.map-warnings-title { margin: 0; font-weight: 800; }
+.warning-dot { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 3px; vertical-align: baseline; }
+
+/* Qibla: a small dial in the city dialog, a large one in the compass. */
+.qibla-row { display: flex; align-items: center; gap: 12px; }
+.qibla-row p { margin: 0; }
+.qibla-svg .dial-face { fill: rgba(255, 255, 255, 0.08); stroke: currentColor; stroke-opacity: 0.4; stroke-width: 2; }
+.qibla-svg .dial-north { fill: var(--error); font-size: 11px; font-weight: 800; text-anchor: middle; }
+.qibla-svg .dial-needle { fill: var(--accent); stroke: #1a1433; stroke-width: 1; }
+.qibla-svg .dial-kaaba { font-size: 12px; text-anchor: middle; }
+
+#qibla-dialog {
+  width: min(420px, calc(100vw - 24px));
+  padding: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+#qibla-dialog::backdrop { background: rgba(2, 6, 23, 0.6); }
+.qibla-body { padding: 4px 24px 24px; text-align: center; }
+.qibla-body h2 { margin: 16px 0 12px; }
+.qibla-dial { display: grid; place-items: center; min-height: 220px; }
+.qibla-reading { margin: 12px 0 4px; font-weight: 800; }
 .map-note { margin-top: 12px; color: var(--muted); font-size: 0.85rem; }
 
 .map-marker { --aqi: #94a3b8; position: relative; width: 48px; height: 48px; }
@@ -902,6 +987,11 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 .map-marker[data-aqi='very-unhealthy'] { --aqi: var(--aqi-very-unhealthy); }
 .map-marker[data-aqi='hazardous'] { --aqi: var(--aqi-hazardous); }
 .map-marker.is-covered { visibility: hidden; }
+
+/* Towns: smaller, no photo, shown only when zoomed in. */
+.map-marker.town { width: 34px; height: 34px; }
+.map-marker.town .marker-photo { width: 34px; height: 34px; border-width: 3px; background: #1e293b; font-size: 0.8rem; }
+.map-marker.town .marker-label { top: 40px; }
 
 .marker-open {
   position: absolute;

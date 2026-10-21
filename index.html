@@ -209,7 +209,7 @@
         <div>
           <h3>Masa dari pelayar anda</h3>
           <p>Masa setiap bandar dikira oleh pelayar anda menggunakan pangkalan data zon waktu IANA, sama seperti telefon dan komputer anda. Tiada akaun; senarai anda disimpan dalam pelayar ini sahaja.</p>
-          <p>Panel Malaysia mengambil data hanya apabila dibuka: waktu solat JAKIM daripada waktusolat.app (kedudukan bandar dihantar untuk mencari zon), ramalan, amaran cuaca dan gempa bumi MET Malaysia daripada data.gov.my, foto landmark daripada Wikipedia serta Wikimedia Commons, anggaran kualiti udara daripada Open-Meteo, serta jubin peta daripada OpenFreeMap dan Amazon Web Services (rupa bumi).</p>
+          <p>Panel Malaysia mengambil data hanya apabila dibuka: waktu solat JAKIM daripada waktusolat.app (kedudukan bandar dihantar untuk mencari zon), ramalan, amaran cuaca dan gempa bumi MET Malaysia daripada data.gov.my, foto landmark daripada Wikipedia serta Wikimedia Commons, anggaran kualiti udara daripada Open-Meteo, serta jubin peta daripada OpenFreeMap dan Amazon Web Services (rupa bumi). Butang Bandar terdekat dan Kompas kiblat meminta lokasi anda hanya apabila ditekan, dan lokasi itu tidak dihantar ke mana-mana.</p>
         </div>
         <div>
           <h3>Waktu jimat siang</h3>
@@ -229,6 +229,14 @@
           <h2 id="my-title">Malaysia hari ini</h2>
           <p id="my-today"></p>
         </div>
+      </section>
+
+      <section id="ramadan" class="section" aria-labelledby="ramadan-title" hidden>
+        <div class="section-head">
+          <h2 id="ramadan-title">Ramadan</h2>
+          <p>Waktu imsak dan berbuka JAKIM. Bulan Ramadan ikut takwim JAKIM.</p>
+        </div>
+        <div id="my-ramadan"></div>
       </section>
 
       <section class="section" aria-labelledby="my-alerts-title">
@@ -271,10 +279,16 @@
       <section class="section map-section" aria-labelledby="map-title">
         <div class="section-head">
           <h2 id="map-title">Peta Malaysia</h2>
-          <p>Ibu negeri setiap negeri dan wilayah persekutuan. Seret untuk menggerakkan peta, klik kanan atau dua jari untuk condong dan putar. Pilih penanda untuk waktu solat, cuaca dan kualiti udara.</p>
+          <p>Ibu negeri setiap negeri dan wilayah persekutuan; zum masuk untuk bandar-bandar besar lain. Seret untuk menggerakkan peta, klik kanan atau dua jari untuk condong dan putar. Pilih penanda untuk waktu solat, cuaca, kualiti udara dan arah kiblat. Negeri yang sedang menerima amaran MET diwarnakan.</p>
+        </div>
+        <div class="map-tools">
+          <button id="map-nearest" type="button" class="btn secondary">📍 Bandar terdekat</button>
+          <button id="qibla-open" type="button" class="btn secondary">🧭 Kompas kiblat</button>
+          <p id="map-tools-status" class="local-status" role="status"></p>
         </div>
         <div class="map-frame">
           <div id="my-map" class="my-map"></div>
+          <div id="map-warnings" class="map-warnings" role="status" hidden></div>
           <ul class="map-legend" aria-label="Petunjuk IPU anggaran">
             <li><span class="aqi-dot aqi-good"></span>Baik</li>
             <li><span class="aqi-dot aqi-moderate"></span>Sederhana</li>
@@ -295,6 +309,17 @@
     </div>
   </main>
 
+  <dialog id="qibla-dialog" aria-labelledby="qibla-title">
+    <form method="dialog" class="dialog-close"><button type="submit" aria-label="Tutup">×</button></form>
+    <div class="qibla-body">
+      <h2 id="qibla-title">Kompas kiblat</h2>
+      <div id="qibla-dial" class="qibla-dial"></div>
+      <p id="qibla-reading" class="qibla-reading"></p>
+      <p id="qibla-status" class="local-status" role="status"></p>
+      <p class="local-source">Lokasi anda hanya digunakan dalam pelayar ini dan tidak dihantar ke mana-mana. Kompas telefon boleh tersasar berhampiran logam atau magnet; jauhkan telefon dan gerakkan dalam bentuk angka 8 untuk menentukur.</p>
+    </div>
+  </dialog>
+
   <dialog id="city-dialog" aria-labelledby="city-dialog-title">
     <form method="dialog" class="dialog-close"><button type="submit" aria-label="Tutup">×</button></form>
     <div id="city-dialog-body"></div>
@@ -309,7 +334,7 @@
         </svg>
         Jam Dunia
       </p>
-      <p>Peta daripada Natural Earth (domain awam). Glob dilukis dengan D3. Peta Malaysia dilukis dengan MapLibre (data © OpenStreetMap melalui OpenFreeMap). Fon Unbounded dan Manrope (SIL Open Font License).</p>
+      <p>Peta daripada Natural Earth (domain awam). Glob dilukis dengan D3. Peta Malaysia dilukis dengan MapLibre (data © OpenStreetMap melalui OpenFreeMap); sempadan negeri daripada DOSM (Lesen Data Terbuka). Fon Unbounded dan Manrope (SIL Open Font License).</p>
       <p><a href="https://github.com/rafiqihaziq321-lgtm/world-timezone">Kod sumber di GitHub</a></p>
     </div>
   </footer>

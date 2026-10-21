@@ -31,3 +31,27 @@ const MALAYSIA_STATES = [
 ];
 
 const MALAYSIA_TOTAL = { population: 34.2, area: 331700 }; // same sources as above
+
+// Larger towns shown on the map when zoomed in: the Malaysian places in
+// vendor/cities.js (Natural Earth, via city-timezones) that are not state
+// capitals, with their Malay spelling. metNames: how MET Malaysia may name
+// the town in its forecasts, tried in order.
+const MALAYSIA_TOWNS = [
+  { name: 'Batu Pahat', state: 'Johor', zone: 'Asia/Kuala_Lumpur', lat: 1.85, lon: 102.93 },
+  { name: 'Kluang', state: 'Johor', zone: 'Asia/Kuala_Lumpur', lat: 2.04, lon: 103.32, metNames: ['Kluang', 'Keluang'] },
+  { name: 'Muar', state: 'Johor', zone: 'Asia/Kuala_Lumpur', lat: 2.03, lon: 102.57 },
+  { name: 'Sungai Petani', state: 'Kedah', zone: 'Asia/Kuala_Lumpur', lat: 5.65, lon: 100.48 },
+  { name: 'Raub', state: 'Pahang', zone: 'Asia/Kuala_Lumpur', lat: 3.79, lon: 101.84 },
+  { name: 'Kuala Lipis', state: 'Pahang', zone: 'Asia/Kuala_Lumpur', lat: 4.18, lon: 102.04, metNames: ['Kuala Lipis', 'Lipis'] },
+  { name: 'Taiping', state: 'Perak', zone: 'Asia/Kuala_Lumpur', lat: 4.86, lon: 100.72 },
+  { name: 'Teluk Intan', state: 'Perak', zone: 'Asia/Kuala_Lumpur', lat: 4.01, lon: 101.03 },
+  { name: 'Butterworth', state: 'Pulau Pinang', zone: 'Asia/Kuala_Lumpur', lat: 5.42, lon: 100.4 },
+  { name: 'Sandakan', state: 'Sabah', zone: 'Asia/Kuching', lat: 5.84, lon: 118.11 },
+  { name: 'Tawau', state: 'Sabah', zone: 'Asia/Kuching', lat: 4.27, lon: 117.9 },
+  { name: 'Lahad Datu', state: 'Sabah', zone: 'Asia/Kuching', lat: 5.05, lon: 118.34 },
+  { name: 'Miri', state: 'Sarawak', zone: 'Asia/Kuching', lat: 4.4, lon: 113.98 },
+  { name: 'Sibu', state: 'Sarawak', zone: 'Asia/Kuching', lat: 2.3, lon: 111.84 },
+  { name: 'Bintulu', state: 'Sarawak', zone: 'Asia/Kuching', lat: 3.17, lon: 113.04 },
+  { name: 'Klang', state: 'Selangor', zone: 'Asia/Kuala_Lumpur', lat: 3.02, lon: 101.55, metNames: ['Klang', 'Kelang'] },
+  { name: 'Chukai', state: 'Terengganu', zone: 'Asia/Kuala_Lumpur', lat: 4.23, lon: 103.45, metNames: ['Chukai', 'Kemaman'] },
+];
