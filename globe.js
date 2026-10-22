@@ -1,8 +1,6 @@
-'use strict';
-
 // IANA zones carry no coordinates, so the globe only knows these cities.
 // Each name matches its zone's city so a globe click and its card agree.
-const GLOBE_CITIES = [
+export const GLOBE_CITIES = [
   { name: 'Kuala Lumpur', zone: 'Asia/Kuala_Lumpur', lon: 101.69, lat: 3.14 },
   { name: 'Singapore', zone: 'Asia/Singapore', lon: 103.82, lat: 1.35 },
   { name: 'Jakarta', zone: 'Asia/Jakarta', lon: 106.85, lat: -6.21 },
@@ -34,7 +32,7 @@ const GLOBE_CITIES = [
 
 // Identity of a city in the user's list or on the globe: two cities can share
 // a zone (Kuala Lumpur, Johor Bahru), so the name is part of it.
-function cityKey(city) {
+export function cityKey(city) {
   return `${city.zone}~${city.name}`;
 }
 
@@ -55,7 +53,7 @@ const GLOBE_COLORS = {
 // Point on Earth where the sun is directly overhead. Low-precision formula
 // (declination + equation of time); accurate to about a degree, which is
 // plenty for shading a 110m-resolution globe.
-function subsolarPoint(date) {
+export function subsolarPoint(date) {
   const startOfYear = Date.UTC(date.getUTCFullYear(), 0, 1);
   const dayOfYear = (date.getTime() - startOfYear) / 864e5;
   const declination = -23.44 * Math.cos((2 * Math.PI / 365) * (dayOfYear + 10));
@@ -76,7 +74,7 @@ function subsolarPoint(date) {
 //   isHour24(), getNow()            label format and the instant to draw
 //   describeCity(city, now)         -> { time, lines[] } for the tooltip
 //   offsetBetween(from, to, now)    -> short label for the arc between two cities
-function createGlobe(canvas, options) {
+export function createGlobe(canvas, options) {
   const { onCityClick, getSelectedCities, isHour24, getNow, describeCity, offsetBetween } = options;
   const ctx = canvas.getContext('2d');
   const land = topojson.feature(WORLD_LAND_110M, WORLD_LAND_110M.objects.land);

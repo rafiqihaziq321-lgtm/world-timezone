@@ -1,5 +1,3 @@
-'use strict';
-
 // The 13 states and 3 federal territories, each represented by its capital.
 //
 // population: millions, 2025, DOSM "Current Population Estimates" (state table,
@@ -11,7 +9,7 @@
 //   of the published figures (Labuan about 5%), so shown as approximate.
 // landmark: English Wikipedia article whose lead photo is shown in the Bandar tab.
 // lat/lon: the capital, from vendor/cities.js (Kuala Lumpur matches the globe).
-const MALAYSIA_STATES = [
+export const MALAYSIA_STATES = [
   { state: 'Johor', capital: 'Johor Bahru', zone: 'Asia/Kuala_Lumpur', lat: 1.48, lon: 103.73, population: 4.2, area: 19300, landmark: 'Sultan_Ibrahim_Building', landmarkName: 'Bangunan Sultan Ibrahim' },
   { state: 'Kedah', capital: 'Alor Setar', zone: 'Asia/Kuala_Lumpur', lat: 6.11, lon: 100.37, population: 2.2, area: 9500, landmark: 'Alor_Setar_Tower', landmarkName: 'Menara Alor Setar' },
   { state: 'Kelantan', capital: 'Kota Bharu', zone: 'Asia/Kuala_Lumpur', lat: 6.13, lon: 102.24, population: 1.9, area: 15200, landmark: 'Istana_Jahar', landmarkName: 'Istana Jahar' },
@@ -30,13 +28,13 @@ const MALAYSIA_STATES = [
   { state: 'W.P. Putrajaya', capital: 'Putrajaya', zone: 'Asia/Kuala_Lumpur', lat: 2.91, lon: 101.7, population: 0.1, area: 49, landmark: 'Putra_Mosque', landmarkName: 'Masjid Putra' },
 ];
 
-const MALAYSIA_TOTAL = { population: 34.2, area: 331700 }; // same sources as above
+export const MALAYSIA_TOTAL = { population: 34.2, area: 331700 }; // same sources as above
 
 // Larger towns shown on the map when zoomed in: the Malaysian places in
 // vendor/cities.js (Natural Earth, via city-timezones) that are not state
 // capitals, with their Malay spelling. metNames: how MET Malaysia may name
 // the town in its forecasts, tried in order.
-const MALAYSIA_TOWNS = [
+export const MALAYSIA_TOWNS = [
   { name: 'Batu Pahat', state: 'Johor', zone: 'Asia/Kuala_Lumpur', lat: 1.85, lon: 102.93 },
   { name: 'Kluang', state: 'Johor', zone: 'Asia/Kuala_Lumpur', lat: 2.04, lon: 103.32, metNames: ['Kluang', 'Keluang'] },
   { name: 'Muar', state: 'Johor', zone: 'Asia/Kuala_Lumpur', lat: 2.03, lon: 102.57 },
