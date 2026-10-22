@@ -1,12 +1,33 @@
 // The meeting planner and its working-hours settings.
 
 import { cityKey } from '../globe.js';
+import { googleCalendarUrl, icsEvent } from './calendar.js';
 import { saveState } from './storage.js';
 import { HOUR_MS, LOCAL_ZONE, formatUtcOffset, hourLabel, minuteOfDay, minuteText, utcOffsetMinutes, weekdayOf } from './time.js';
-import { el } from './util.js';
+import { el, renderKeyed } from './util.js';
 
 export const plannerSummaryEl = document.getElementById('planner-summary');
 export const plannerTableEl = document.getElementById('planner-table');
+const plannerDateEl = document.getElementById('planner-date');
+const plannerPickEl = document.getElementById('planner-pick');
+
+const pad = (n) => String(n).padStart(2, '0');
+
+// The viewer's calendar day of `ms` as YYYY-MM-DD, and its local midnight.
+function isoDay(ms) {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function dayStartOf(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).getTime();
+}
+
+function dayName(ms) {
+  return new Date(ms).toLocaleDateString('ms-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 export const WEEKDAYS = [[1, 'Isnin', 'Isn'], [2, 'Selasa', 'Sel'], [3, 'Rabu', 'Rab'], [4, 'Khamis', 'Kha'], [5, 'Jumaat', 'Jum'], [6, 'Sabtu', 'Sab'], [0, 'Ahad', 'Ahd']];
 export const SLEEP_START_MIN = 22 * 60;
 export const SLEEP_END_MIN = 7 * 60;
@@ -20,10 +41,15 @@ export function slotCategory(startMin, work, isWeekend) {
 
 // 24 one-hour slots across the viewer's local day. Rebuilt only when its
 // inputs change, since tick() calls this every second.
+// state.plannerDay (YYYY-MM-DD) is the day planned; null follows the
+// displayed time. state.plannerPick is the slot chosen for the calendar.
 export function renderPlanner(state, now) {
-  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const currentSlot = Math.min(23, Math.floor((now.getTime() - dayStart) / HOUR_MS));
-  const key = JSON.stringify([state.cities.map(cityKey), dayStart, currentSlot, state.hour24, state.work]);
+  const day = state.plannerDay ?? isoDay(now.getTime());
+  const dayStart = dayStartOf(day);
+  const currentSlot = day === isoDay(now.getTime()) ? Math.min(23, Math.floor((now.getTime() - dayStart) / HOUR_MS)) : -1;
+  if (document.activeElement !== plannerDateEl) plannerDateEl.value = day;
+  renderPick(state);
+  const key = JSON.stringify([state.cities.map(cityKey), dayStart, currentSlot, state.hour24, state.work, state.plannerPick]);
   if (plannerTableEl.dataset.key === key) return;
   plannerTableEl.dataset.key = key;
   plannerTableEl.replaceChildren();
@@ -45,10 +71,11 @@ export function renderPlanner(state, now) {
   head.append(corner);
   slots.forEach((ms, i) => {
     const th = document.createElement('th');
-    th.className = [allWork[i] && 'all-work', i === currentSlot && 'current'].filter(Boolean).join(' ');
+    th.className = [allWork[i] && 'all-work', i === currentSlot && 'current', ms === state.plannerPick && 'picked'].filter(Boolean).join(' ');
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.dataset.slot = ms;
+    btn.setAttribute('aria-pressed', String(ms === state.plannerPick));
     btn.textContent = hourLabel(minuteOfDay(LOCAL_ZONE, ms), state.hour24);
     btn.setAttribute('aria-label', `Lihat masa ${new Date(ms).toLocaleTimeString('ms-MY', {
       hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
@@ -64,12 +91,12 @@ export function renderPlanner(state, now) {
     th.scope = 'row';
     th.textContent = name;
     const utc = document.createElement('small');
-    utc.textContent = formatUtcOffset(utcOffsetMinutes(zone, now));
+    utc.textContent = formatUtcOffset(utcOffsetMinutes(zone, new Date(dayStart + 12 * HOUR_MS))); // that day's offset (DST)
     th.append(utc);
     row.append(th);
     slots.forEach((ms, i) => {
       const td = row.insertCell();
-      td.className = [categories[r][i], i === currentSlot && 'current'].filter(Boolean).join(' ');
+      td.className = [categories[r][i], i === currentSlot && 'current', ms === state.plannerPick && 'picked'].filter(Boolean).join(' ');
       td.dataset.slot = ms;
       td.textContent = hourLabel(minuteOfDay(zone, ms), state.hour24);
     });
@@ -87,7 +114,7 @@ export function renderPlanner(state, now) {
   });
   plannerSummaryEl.textContent = ranges.length
     ? `Waktu sesuai untuk semua (waktu anda): ${ranges.map((g) => `${fmt(slots[g.start])}–${fmt(dayStart + g.end * HOUR_MS)}`).join(', ')}`
-    : `Tiada jam yang berada dalam waktu kerja untuk semua bandar pada hari ini${
+    : `Tiada jam yang berada dalam waktu kerja untuk semua bandar pada ${day === isoDay(Date.now()) ? 'hari ini' : dayName(dayStart)}${
       categories.some((row) => row.includes('weekend')) ? ' (ada bandar sedang hujung minggu)' : ''}.`;
 }
 
@@ -137,4 +164,62 @@ export function setupWorkSettings(state) {
   endEl.addEventListener('change', () => update('end'));
   daysEl.addEventListener('change', () => update('days'));
   show();
+}
+
+// The chosen hour as a calendar event: each city's local time goes in the
+// description, so invitees see their own.
+function meeting(state) {
+  const start = state.plannerPick;
+  const end = start + HOUR_MS;
+  const lines = state.cities.map(({ name, zone }) => {
+    const fmt = (ms) => new Date(ms).toLocaleTimeString('ms-MY', { timeZone: zone, hour: '2-digit', minute: '2-digit', hourCycle: state.hour24 ? 'h23' : 'h12' });
+    const weekday = new Date(start).toLocaleDateString('ms-MY', { timeZone: zone, weekday: 'long' });
+    return `${name}: ${fmt(start)}–${fmt(end)} (${weekday})`;
+  });
+  return { start, end, title: 'Mesyuarat', description: `${lines.join('\n')}\n\nDirancang dengan Jam Dunia`, now: Date.now() };
+}
+
+function renderPick(state) {
+  const key = [state.plannerPick, state.hour24, state.cities.map(cityKey).join(',')].join('|');
+  plannerPickEl.hidden = state.plannerPick === null || state.cities.length === 0;
+  renderKeyed(plannerPickEl, key, () => {
+    if (plannerPickEl.hidden) return [];
+    const event = meeting(state);
+    const fmt = (ms) => new Date(ms).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit', hourCycle: state.hour24 ? 'h23' : 'h12' });
+    const ics = el('button', 'btn', '📅 Muat turun fail kalendar (.ics)');
+    ics.type = 'button';
+    ics.addEventListener('click', () => {
+      const url = URL.createObjectURL(new Blob([icsEvent(meeting(state))], { type: 'text/calendar;charset=utf-8' }));
+      const link = el('a');
+      link.href = url;
+      link.download = `mesyuarat-${isoDay(event.start)}-${pad(new Date(event.start).getHours())}${pad(new Date(event.start).getMinutes())}.ics`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+    const google = el('a', 'btn secondary', 'Buka di Google Calendar');
+    google.href = googleCalendarUrl(event);
+    google.target = '_blank';
+    google.rel = 'noopener';
+    return [el('p', 'planner-pick-when', `Dipilih: ${dayName(event.start)}, ${fmt(event.start)}–${fmt(event.end)} waktu anda`), ics, google];
+  });
+}
+
+// The day controls: a date field, the days either side, and back to today.
+export function setupPlannerDay(state) {
+  const go = (iso) => {
+    state.plannerDay = iso;
+    state.refresh();
+  };
+  plannerDateEl.addEventListener('change', () => {
+    if (plannerDateEl.value) go(plannerDateEl.value);
+  });
+  const shift = (days) => {
+    const start = dayStartOf(plannerDateEl.value || isoDay(Date.now()));
+    const d = new Date(start);
+    d.setDate(d.getDate() + days);
+    go(isoDay(d.getTime()));
+  };
+  document.getElementById('planner-prev').addEventListener('click', () => shift(-1));
+  document.getElementById('planner-next').addEventListener('click', () => shift(1));
+  document.getElementById('planner-today').addEventListener('click', () => go(null));
 }

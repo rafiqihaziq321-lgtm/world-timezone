@@ -597,6 +597,7 @@ body.time-shifted #time-label { color: var(--accent-ink); font-weight: 700; }
 
 .card.on-globe { cursor: pointer; }
 body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow); }
+body.time-shifted .card .weather { display: none; } /* it is the weather now, not at the time shown */
 
 /* Background follows the time of day in that city. */
 .card[data-phase="dawn"] { background: linear-gradient(160deg, #fda4af, #fdba74 55%, #fde68a); color: #7c2d12; }
@@ -820,16 +821,51 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 .reminder p { flex-basis: 100%; margin: 0; }
 .reminder p:empty { display: none; }
 .reminder .btn { padding: 8px 16px; font-size: 0.9rem; }
-.reminder-pick select {
-  margin-left: 6px;
-  padding: 6px 8px;
+.reminder-note { color: var(--muted); font-size: 0.8rem; }
+
+.zone-card {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+}
+.zone-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.zone-pick label { font-weight: 700; }
+.zone-pick select {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px 10px;
   border: 1px solid var(--input-border);
   border-radius: 10px;
   background: var(--input-bg);
   color: var(--text);
   font: inherit;
 }
-.reminder-note { color: var(--muted); font-size: 0.8rem; }
+.zone-pick .secondary { padding: 8px 16px; font-size: 0.9rem; }
+#zone-status:empty { display: none; }
+#zone-status { margin: 8px 0 0; }
+.zone-name { margin: 12px 0 8px; font-weight: 700; }
+.zone-times {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.zone-times li {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--panel-border);
+}
+.zone-times li span { color: var(--muted); font-size: 0.8rem; }
+.zone-times li strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.zone-times li.next { border-color: var(--sun-ink); box-shadow: inset 0 0 0 1px var(--sun-ink); }
+.zone-times li.next strong { color: var(--sun-ink); }
 
 .ramadan-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
 .ramadan-day { margin: 0; font-size: 1.1rem; font-weight: 800; }
@@ -1228,6 +1264,33 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 
 #planner-summary { margin: 0 0 12px; font-weight: 700; }
 
+.planner-day { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+.planner-day input {
+  padding: 8px 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.planner-day .secondary { padding: 8px 16px; font-size: 0.9rem; }
+
+.planner-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 12px 0 0;
+  padding: 12px 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: var(--panel);
+}
+.planner-pick[hidden] { display: none; }
+.planner-pick-when { flex-basis: 100%; margin: 0; font-weight: 700; }
+.planner-pick .btn { padding: 8px 16px; font-size: 0.9rem; }
+
 .planner-scroll { overflow-x: auto; }
 
 #planner-table {
@@ -1282,6 +1345,8 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 
 #planner-table thead .all-work button { background: var(--all-work); color: #fff; font-weight: 700; }
 #planner-table .current { outline: 2px solid var(--accent-ink); outline-offset: -1px; }
+#planner-table td.picked { box-shadow: inset 0 0 0 3px var(--accent-ink); font-weight: 700; }
+#planner-table thead .picked button { background: var(--accent); color: var(--accent-contrast); font-weight: 700; }
 
 .legend { margin: 12px 0 0; color: var(--muted); font-size: 0.8rem; line-height: 1.8; }
 

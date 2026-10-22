@@ -6,7 +6,7 @@ import { addCity, clocksEl, describeCity, flashCard, renderCards, renderSunLine 
 import { renderCities } from './js/cities.js';
 import { renderLocalPanel } from './js/local-panel.js';
 import { renderFacts, renderMalaysia } from './js/malaysia.js';
-import { plannerTableEl, renderPlanner, setupWorkSettings } from './js/planner.js';
+import { plannerTableEl, renderPlanner, setupPlannerDay, setupWorkSettings } from './js/planner.js';
 import { setupMapTools } from './js/qibla.js';
 import { checkReminders, setupReminders } from './js/reminders.js';
 import { createCityListLoader, findCity } from './js/search.js';
@@ -16,6 +16,8 @@ import { showTab } from './js/tabs.js';
 import { applyTheme, systemDark, themeEl } from './js/theme.js';
 import { ALL_ZONES, HOUR_MS, LOCAL_ZONE, MINUTE_MS, PHASES, QUARTER_MS, cityName, cityPhase, dayPhase, displayDate, floorToQuarter, formatDiff, formatUtcOffset, isValidZone, minuteOfDay, signedDuration, utcOffsetMinutes } from './js/time.js';
 import { createLocalData, normalizeName } from './js/util.js';
+import { currentWeather, renderWeatherLine } from './js/weather.js';
+import { setupZone } from './js/zones.js';
 
 const formEl = document.getElementById('add-form');
 const inputEl = document.getElementById('zone-input');
@@ -69,6 +71,7 @@ function tick(state) {
   const now = displayDate(state);
   renderHero(state, now);
   const localOffset = utcOffsetMinutes(LOCAL_ZONE, now);
+  const weatherFor = currentWeather(state);
   for (const card of clocksEl.querySelectorAll('.card')) {
     const zone = card.dataset.zone;
     const city = state.cities.find((c) => cityKey(c) === card.dataset.key);
@@ -91,6 +94,7 @@ function tick(state) {
     });
     card.querySelector('.diff').textContent = formatDiff(offset - localOffset);
     if (city) renderSunLine(state, card.querySelector('.sun'), city, now);
+    renderWeatherLine(card.querySelector('.weather'), city && weatherFor(city));
     card.querySelector('.hand.hour').setAttribute('transform', `rotate(${(minutes % 720) / 2} 50 50)`);
     card.querySelector('.hand.minute').setAttribute('transform', `rotate(${(minutes % 60) * 6 + seconds / 10} 50 50)`);
     card.querySelector('.hand.second').setAttribute('transform', `rotate(${seconds * 6} 50 50)`);
@@ -148,6 +152,8 @@ function init() {
   state.refresh = () => tick(state);
   state.localData = createLocalData(() => tick(state));
   state.dialogState = null;
+  state.plannerDay = null; // the planner follows the displayed day until one is chosen
+  state.plannerPick = null;
   state.mapView = null; // created the first time the Bandar tab opens
   state.ramadanState = 'W.P. Kuala Lumpur'; // whose imsak and berbuka the Ramadan countdown shows
   state.tab = showTab(window.location.hash);
@@ -164,7 +170,9 @@ function init() {
   });
   renderFacts();
   setupWorkSettings(state);
+  setupPlannerDay(state);
   setupMapTools(state);
+  setupZone(state); // before the reminders, which follow its zone
   setupReminders(state);
   document.getElementById('city-dialog').addEventListener('close', () => { state.dialogState = null; });
   shareBannerEl.hidden = !state.shared;
@@ -263,6 +271,7 @@ function init() {
     const cell = e.target.closest('[data-slot]');
     if (!cell) return;
     stopPlay();
+    state.plannerPick = Number(cell.dataset.slot); // offered as a calendar event below the table
     setViewTime(state, Number(cell.dataset.slot));
   });
 

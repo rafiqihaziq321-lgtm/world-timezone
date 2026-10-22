@@ -1,7 +1,7 @@
 // The saved list of cities and settings (localStorage).
 
 import { GLOBE_CITIES } from '../globe.js';
-import { MALAYSIA_STATES } from '../malaysia-data.js';
+import { CAPITAL_ZONES, zoneByCode } from './jakim-zones.js';
 import { cityName, isValidZone } from './time.js';
 
 export const STORAGE_KEY = 'world-timezone:v1';
@@ -25,8 +25,8 @@ export function cityForZone(zone) {
 
 export function defaultState() {
   // theme null = follow the system
-  // reminder null = no prayer-time reminders
-  return { cities: DEFAULT_ZONES.map(cityForZone), hour24: true, theme: null, work: { ...DEFAULT_WORK }, reminder: null };
+  // prayerZone: the viewer's JAKIM zone (null until chosen); reminder: prayer-time notifications for it
+  return { cities: DEFAULT_ZONES.map(cityForZone), hour24: true, theme: null, work: { ...DEFAULT_WORK }, prayerZone: null, reminder: false };
 }
 
 export function parseStoredCity(raw) {
@@ -61,13 +61,16 @@ export function loadState() {
       // Lists saved before cities existed held zone ids only.
       cities = parsed.zones.filter((z) => typeof z === 'string' && isValidZone(z)).map(cityForZone);
     }
+    // Reminders were saved as { state } before zones: that state capital's zone, still on.
+    const legacyZone = CAPITAL_ZONES[parsed.reminder?.state] ?? null;
+    const prayerZone = zoneByCode(parsed.prayerZone)?.code ?? legacyZone;
     return {
       cities,
       hour24: typeof parsed.hour24 === 'boolean' ? parsed.hour24 : defaults.hour24,
       theme: ['light', 'dark'].includes(parsed.theme) ? parsed.theme : defaults.theme,
       work: parseStoredWork(parsed.work),
-      // Prayer-time reminders for one state's capital, if turned on.
-      reminder: MALAYSIA_STATES.some((s) => s.state === parsed.reminder?.state) ? { state: parsed.reminder.state } : null,
+      prayerZone,
+      reminder: prayerZone !== null && (parsed.reminder === true || legacyZone !== null),
     };
   } catch (err) {
     console.warn('Data tersimpan rosak; guna tetapan lalai.', err);
@@ -81,7 +84,7 @@ export function saveState(state) {
   const cities = (state.shared ? state.savedCities : state.cities)
     .map(({ name, zone, lat, lon }) => ({ name, zone, lat, lon }));
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ cities, hour24: state.hour24, theme: state.theme, work: state.work, reminder: state.reminder }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ cities, hour24: state.hour24, theme: state.theme, work: state.work, prayerZone: state.prayerZone, reminder: state.reminder }));
   } catch (err) {
     console.warn('Gagal simpan tetapan; perubahan tidak akan kekal selepas reload.', err);
   }

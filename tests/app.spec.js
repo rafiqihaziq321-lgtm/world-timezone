@@ -223,6 +223,92 @@ test.describe('perancang mesyuarat', () => {
     await expect(card(page, 'Asia/Kuala_Lumpur').locator('.time')).toHaveText('15:00:00');
     await expect(page.locator('#time-slider')).toHaveValue('36');
   });
+
+  test('tarikh boleh dipilih: hari berikutnya, kotak tarikh dan kembali ke hari ini', async ({ page }) => {
+    await openApp(page, { zones: ['Asia/Kuala_Lumpur', 'Asia/Tokyo', 'Europe/London'], hour24: true });
+    const date = page.getByLabel('Tarikh', { exact: true });
+    await expect(date).toHaveValue('2026-10-14');
+    await expect(page.locator('#planner-table td.current')).toHaveCount(3);
+    await expect(page.locator('#planner-table tbody th small').nth(2)).toHaveText('UTC+1');
+
+    // Saturday 17 October: a weekend in every city, and no "now" column.
+    for (let i = 0; i < 3; i += 1) await page.getByRole('button', { name: 'Hari berikutnya' }).click();
+    await expect(date).toHaveValue('2026-10-17');
+    await expect(page.locator('#planner-summary')).toHaveText(
+      'Tiada jam yang berada dalam waktu kerja untuk semua bandar pada Sabtu, 17 Oktober 2026 (ada bandar sedang hujung minggu).',
+    );
+    await expect(page.locator('#planner-table td.current')).toHaveCount(0);
+    await expect(page.locator('#planner-table tbody tr').first().locator('td').nth(10)).toHaveClass(/weekend/);
+
+    // Monday 26 October: London is back on GMT, so its day no longer meets Kuala Lumpur's.
+    await date.fill('2026-10-26');
+    await expect(page.locator('#planner-table tbody th small').nth(2)).toHaveText('UTC+0');
+    await expect(page.locator('#planner-summary')).toHaveText('Tiada jam yang berada dalam waktu kerja untuk semua bandar pada Isnin, 26 Oktober 2026 (ada bandar sedang hujung minggu).');
+    await page.getByRole('button', { name: 'Hari sebelumnya' }).click();
+    await expect(date).toHaveValue('2026-10-25');
+
+    await page.getByRole('button', { name: 'Hari ini' }).click();
+    await expect(date).toHaveValue('2026-10-14');
+    await expect(page.locator('#planner-table td.current')).toHaveCount(3);
+  });
+
+  test('jam yang dipilih boleh disimpan ke kalendar (.ics dan Google Calendar)', async ({ page }) => {
+    await openApp(page, { zones: ['Asia/Kuala_Lumpur', 'Asia/Tokyo', 'Europe/London'], hour24: true });
+    await expect(page.locator('#planner-pick')).toBeHidden();
+    await page.getByRole('button', { name: 'Hari berikutnya' }).click();
+    await page.click('#planner-table thead button[aria-label="Lihat masa 15:00 waktu anda"]');
+    await page.clock.runFor(1100);
+
+    const pick = page.locator('#planner-pick');
+    await expect(pick.locator('.planner-pick-when')).toHaveText('Dipilih: Khamis, 15 Oktober 2026, 15:00–16:00 waktu anda');
+    await expect(page.locator('#planner-table thead button[aria-pressed="true"]')).toHaveAttribute('aria-label', 'Lihat masa 15:00 waktu anda');
+    await expect(page.locator('#planner-table td.picked')).toHaveCount(3);
+
+    const google = new URL(await pick.getByRole('link', { name: 'Buka di Google Calendar' }).getAttribute('href'));
+    expect(google.origin + google.pathname).toBe('https://calendar.google.com/calendar/render');
+    expect(google.searchParams.get('action')).toBe('TEMPLATE');
+    expect(google.searchParams.get('text')).toBe('Mesyuarat');
+    expect(google.searchParams.get('dates')).toBe('20261015T070000Z/20261015T080000Z');
+    expect(google.searchParams.get('details')).toBe(
+      'Kuala Lumpur: 15:00–16:00 (Khamis)\nTokyo: 16:00–17:00 (Khamis)\nLondon: 08:00–09:00 (Khamis)\n\nDirancang dengan Jam Dunia',
+    );
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      pick.getByRole('button', { name: /Muat turun fail kalendar/ }).click(),
+    ]);
+    expect(download.suggestedFilename()).toBe('mesyuarat-2026-10-15-1500.ics');
+    const ics = require('node:fs').readFileSync(await download.path(), 'utf8');
+    const lines = ics.split('\r\n');
+    expect(lines.every((line) => Buffer.byteLength(line) <= 75)).toBe(true);
+    expect(ics.endsWith('END:VCALENDAR\r\n')).toBe(true);
+    const unfolded = ics.replace(/\r\n /g, '');
+    expect(unfolded).toContain('\r\nDTSTART:20261015T070000Z\r\n');
+    expect(unfolded).toContain('\r\nDTEND:20261015T080000Z\r\n');
+    expect(unfolded).toContain('\r\nSUMMARY:Mesyuarat\r\n');
+    expect(unfolded).toContain(
+      '\r\nDESCRIPTION:Kuala Lumpur: 15:00–16:00 (Khamis)\\nTokyo: 16:00–17:00 (Khamis)\\nLondon: 08:00–09:00 (Khamis)\\n\\nDirancang dengan Jam Dunia\r\n',
+    );
+    expect(unfolded).toContain('\r\nUID:20261015T070000Z-20261013T220009Z@jam-dunia\r\n');
+  });
+
+  test('fail .ics: teks dilepaskan dan baris panjang dilipat ikut bait (RFC 5545)', async ({ page }) => {
+    await openApp(page);
+    const ics = await page.evaluate(async () => {
+      const { icsEvent } = await import('./js/calendar.js');
+      return icsEvent({
+        start: Date.UTC(2026, 9, 15, 7), end: Date.UTC(2026, 9, 15, 8), now: Date.UTC(2026, 9, 13, 22),
+        title: 'Mesyuarat; bajet, pelan \\ lain', description: `${'é'.repeat(80)}\nTamat`,
+      });
+    });
+    const lines = ics.split('\r\n');
+    expect(lines.every((line) => Buffer.byteLength(line) <= 75)).toBe(true);
+    // A fold never splits a character: each line is whole UTF-8.
+    expect(lines.every((line) => !line.includes('\uFFFD'))).toBe(true);
+    const unfolded = ics.replace(/\r\n /g, '');
+    expect(unfolded).toContain('\r\nSUMMARY:Mesyuarat\\; bajet\\, pelan \\\\ lain\r\n');
+    expect(unfolded).toContain(`\r\nDESCRIPTION:${'é'.repeat(80)}\\nTamat\r\n`);
+  });
 });
 
 test.describe('waktu kerja dan hujung minggu', () => {
@@ -315,6 +401,60 @@ test.describe('matahari terbit dan terbenam', () => {
     await expect(byName(page, 'Tromsø')).toHaveAttribute('data-phase', 'night');
     await expect(byName(page, 'London')).toHaveAttribute('data-phase', 'dusk');
     await expect(byName(page, 'London').locator('.sun')).toHaveText(/^🌅 08:0\d PG · 🌇 03:5\d PTG$/);
+  });
+});
+
+test.describe('cuaca semasa pada kad', () => {
+  const cities = [
+    { name: 'Tromsø', zone: 'Europe/Oslo', lat: 69.65, lon: 18.96 },
+    { name: 'London', zone: 'Europe/London', lat: 51.507, lon: -0.128 },
+    { name: 'Kiritimati', zone: 'Pacific/Kiritimati', lat: null, lon: null }, // no position known
+  ];
+  const byName = (page, name) => page.locator('.card', { has: page.locator('.city', { hasText: name }) });
+
+  test('satu permintaan untuk semua kad berkedudukan, dikemas kini setiap 15 minit', async ({ page }) => {
+    const requests = [];
+    await page.route('https://api.open-meteo.com/v1/forecast?**', (route) => {
+      const url = new URL(route.request().url());
+      requests.push(url);
+      const current = requests.length === 1
+        ? [{ temperature_2m: 11.6, weather_code: 3, is_day: 1 }, { temperature_2m: -2.4, weather_code: 0, is_day: 0 }]
+        : [{ temperature_2m: 12.2, weather_code: 95, is_day: 1 }, { temperature_2m: -3, weather_code: 73, is_day: 0 }];
+      route.fulfill({ json: current.map((c) => ({ current: c })), headers: { 'Access-Control-Allow-Origin': '*' } });
+    });
+    await openApp(page, { cities, hour24: true });
+    // Sorted places, so the answer's order is known: London, then Tromsø.
+    expect(requests).toHaveLength(1);
+    expect(requests[0].searchParams.get('latitude')).toBe('51.51,69.65');
+    expect(requests[0].searchParams.get('longitude')).toBe('-0.13,18.96');
+    expect(requests[0].searchParams.get('current')).toBe('temperature_2m,weather_code,is_day');
+    await expect(byName(page, 'London').locator('.weather')).toHaveText('☁️ 12°C Mendung');
+    await expect(byName(page, 'Tromsø').locator('.weather')).toHaveText('🌙 −2°C Cerah');
+    await expect(byName(page, 'Kiritimati').locator('.weather')).toHaveText('');
+
+    // The time slider shows another time; the weather is only for now.
+    await page.locator('#time-slider').fill('8');
+    await expect(byName(page, 'London').locator('.weather')).toBeHidden();
+    await page.getByRole('button', { name: /Kembali ke sekarang/ }).click();
+    await expect(byName(page, 'London').locator('.weather')).toBeVisible();
+
+    // 22:14 is still in the same quarter hour; 22:15 is the next.
+    await page.clock.fastForward(14 * 60 * 1000);
+    await page.clock.runFor(1100);
+    expect(requests).toHaveLength(1);
+    await page.clock.fastForward(60 * 1000);
+    await page.clock.runFor(1100);
+    await expect.poll(() => requests.length).toBe(2);
+    await expect(byName(page, 'London').locator('.weather')).toHaveText('⛈️ 12°C Ribut petir');
+    await expect(byName(page, 'Tromsø').locator('.weather')).toHaveText('🌨️ −3°C Salji');
+  });
+
+  test('satu bandar: jawapan objek, bukan senarai', async ({ page }) => {
+    await page.route('https://api.open-meteo.com/v1/forecast?**', (route) => route.fulfill({
+      json: { current: { temperature_2m: 30.4, weather_code: 2, is_day: 1 } }, headers: { 'Access-Control-Allow-Origin': '*' },
+    }));
+    await openApp(page, { cities: [cities[1]], hour24: true });
+    await expect(byName(page, 'London').locator('.weather')).toHaveText('⛅ 30°C Separa berawan');
   });
 });
 
@@ -1333,52 +1473,74 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     }, [permission, answer]);
     const shown = (page) => page.evaluate(() => window.shown);
 
-    test('hidupkan, dapat notifikasi bila waktu solat tiba (sekali sahaja), dan matikan', async ({ page }) => {
+    test('hidupkan untuk zon dipilih, dapat notifikasi bila waktu solat tiba (sekali sahaja), dan matikan', async ({ page }) => {
       await fakeNotifications(page);
       await mockAll(page);
       await openApp(page, undefined, '#malaysia'); // 06:00, after Subuh at 05:55
       const box = page.locator('#prayer-reminder');
+      // No zone yet: nothing to remind about.
+      await expect(box.getByRole('button', { name: '🔔 Ingatkan saya' })).toBeDisabled();
+      await expect(box.getByRole('status')).toHaveText('Pilih zon anda di atas dahulu.');
+
+      await page.getByLabel('Zon JAKIM').selectOption('WLY01');
       await box.getByRole('button', { name: '🔔 Ingatkan saya' }).click();
-      await expect(box.getByRole('status')).toHaveText('Peringatan aktif untuk waktu solat di Kuala Lumpur.');
+      await expect(box.getByRole('status')).toHaveText('Peringatan aktif untuk zon WLY01 (Kuala Lumpur, Putrajaya).');
       await expect(box.getByRole('button', { name: '🔕 Matikan peringatan' })).toHaveAttribute('aria-pressed', 'true');
-      expect((await storedState(page)).reminder).toEqual({ state: 'W.P. Kuala Lumpur' });
+      expect(await storedState(page)).toMatchObject({ prayerZone: 'WLY01', reminder: true });
       await page.clock.runFor(2000);
       expect(await shown(page)).toEqual([]); // Subuh had already passed
 
       await page.clock.fastForward('07:10:30'); // to 13:10:38, past Zohor at 13:10
       await page.clock.runFor(1100);
-      expect(await shown(page)).toEqual([{ title: 'Waktu Zohor di Kuala Lumpur', body: '13:10 · waktu JAKIM', tag: 'solat-dhuhr' }]);
+      expect(await shown(page)).toEqual([{ title: 'Waktu Zohor (WLY01)', body: '13:10 · Kuala Lumpur, Putrajaya · waktu JAKIM', tag: 'solat-dhuhr' }]);
 
       await page.clock.fastForward('06:20:00'); // past Asar (16:20) and Maghrib (19:12) at once: one notice
       await page.clock.runFor(1100);
-      expect((await shown(page)).map((n) => n.title)).toEqual(['Waktu Zohor di Kuala Lumpur', 'Waktu Maghrib di Kuala Lumpur']);
+      expect((await shown(page)).map((n) => n.title)).toEqual(['Waktu Zohor (WLY01)', 'Waktu Maghrib (WLY01)']);
 
       await box.getByRole('button', { name: '🔕 Matikan peringatan' }).click();
-      expect((await storedState(page)).reminder).toBeNull();
+      expect(await storedState(page)).toMatchObject({ prayerZone: 'WLY01', reminder: false });
       await page.clock.fastForward('01:20:00'); // past Isyak
       await page.clock.runFor(1100);
       expect(await shown(page)).toHaveLength(2);
     });
 
-    test('peringatan tersimpan: tiada notifikasi untuk waktu yang lepas sebelum halaman dibuka', async ({ page }) => {
+    test('kosongkan zon mematikan peringatan', async ({ page }) => {
       await fakeNotifications(page, { permission: 'granted' });
       await mockAll(page);
+      await openApp(page, { zones: ['Asia/Kuala_Lumpur'], hour24: true, prayerZone: 'WLY01', reminder: true }, '#malaysia');
+      const box = page.locator('#prayer-reminder');
+      await expect(box.getByRole('status')).toHaveText('Peringatan aktif untuk zon WLY01 (Kuala Lumpur, Putrajaya).');
+      await page.getByLabel('Zon JAKIM').selectOption('');
+      await expect(box.getByRole('status')).toHaveText('Pilih zon anda di atas dahulu.');
+      await expect(box.getByRole('button', { name: '🔔 Ingatkan saya' })).toBeDisabled();
+      expect(await storedState(page)).toMatchObject({ prayerZone: null, reminder: false });
+    });
+
+    test('peringatan lama ikut negeri jadi zon ibu negerinya; tiada notifikasi untuk waktu yang lepas sebelum halaman dibuka', async ({ page }) => {
+      await fakeNotifications(page, { permission: 'granted' });
+      await mockAll(page);
+      const prayerUrls = [];
+      page.on('request', (req) => { if (req.url().includes('waktusolat')) prayerUrls.push(req.url()); });
       await openApp(page, { zones: ['Asia/Kuala_Lumpur'], hour24: true, reminder: { state: 'Sabah' } }, '#malaysia'); // 06:00, Subuh was 05:55
-      await expect(page.locator('#prayer-reminder').getByRole('status')).toHaveText('Peringatan aktif untuk waktu solat di Kota Kinabalu.');
+      await expect(page.getByLabel('Zon JAKIM')).toHaveValue('SBH07');
+      await expect(page.locator('#prayer-reminder').getByRole('status')).toHaveText(/^Peringatan aktif untuk zon SBH07 \(Kota Kinabalu, /);
+      expect(prayerUrls).toContain('https://api.waktusolat.app/v2/solat/SBH07?year=2026&month=10');
       await page.clock.runFor(2000);
       expect(await shown(page)).toEqual([]);
       await page.clock.fastForward('07:10:30');
       await page.clock.runFor(1100);
-      expect((await shown(page)).map((n) => n.title)).toEqual(['Waktu Zohor di Kota Kinabalu']);
+      expect((await shown(page)).map((n) => n.title)).toEqual(['Waktu Zohor (SBH07)']);
     });
 
     test('notifikasi disekat: mesej jelas, tiada peringatan disimpan', async ({ page }) => {
       await fakeNotifications(page, { answer: 'denied' });
       await mockAll(page);
       await openApp(page, undefined, '#malaysia');
+      await page.getByLabel('Zon JAKIM').selectOption('WLY01');
       await page.locator('#prayer-reminder').getByRole('button', { name: '🔔 Ingatkan saya' }).click();
       await expect(page.locator('#prayer-reminder').getByRole('status')).toHaveText(/^Notifikasi disekat\./);
-      expect((await storedState(page))?.reminder ?? null).toBeNull();
+      expect((await storedState(page)).reminder).toBe(false);
     });
 
     test('pelayar tanpa notifikasi: diterangkan, tiada butang', async ({ page }) => {
@@ -1387,6 +1549,79 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       await openApp(page, undefined, '#malaysia');
       await expect(page.locator('#prayer-reminder')).toHaveText(/tidak menyokong notifikasi/);
       await expect(page.locator('#prayer-reminder button')).toHaveCount(0);
+    });
+  });
+
+  test.describe('waktu solat zon anda', () => {
+    test('pilih zon: waktu hari ini untuk zon itu, solat seterusnya ditanda, dan kekal selepas reload', async ({ page }) => {
+      await mockAll(page);
+      const prayerUrls = [];
+      page.on('request', (req) => { if (req.url().includes('waktusolat')) prayerUrls.push(req.url()); });
+      await openApp(page, undefined, '#malaysia'); // 06:00 Wednesday 14 October
+      await expect(page.locator('#zone-times')).toHaveText(/Pilih zon anda/);
+      // 60 zones, grouped by state.
+      await expect(page.locator('#zone-select option')).toHaveCount(61);
+      await expect(page.locator('#zone-select optgroup')).toHaveCount(14);
+      await expect(page.locator('#zone-select optgroup[label="Selangor"] option')).toHaveText([
+        'SGR01 · Gombak, Petaling, Sepang, Hulu Langat, Hulu Selangor, Shah Alam', 'SGR02 · Kuala Selangor, Sabak Bernam', 'SGR03 · Klang, Kuala Langat',
+      ]);
+
+      await page.getByLabel('Zon JAKIM').selectOption('SGR03');
+      const times = page.locator('#zone-times');
+      await expect(times.locator('.zone-name')).toHaveText('SGR03 · Klang, Kuala Langat, Selangor');
+      await expect(times.locator('li')).toHaveText(['Subuh05:55', 'Syuruk07:05', 'Zohor13:10 (seterusnya)', 'Asar16:20', 'Maghrib19:12', 'Isyak20:22']);
+      await expect(times.locator('li.next span').first()).toHaveText('Zohor');
+      expect(prayerUrls).toContain('https://api.waktusolat.app/v2/solat/SGR03?year=2026&month=10');
+      expect(await storedState(page)).toMatchObject({ prayerZone: 'SGR03', reminder: false });
+
+      const again = await page.context().newPage();
+      await mockAll(again);
+      await openApp(again, undefined, '#malaysia');
+      await expect(again.getByLabel('Zon JAKIM')).toHaveValue('SGR03');
+      await expect(again.locator('#zone-times .zone-name')).toHaveText('SGR03 · Klang, Kuala Langat, Selangor');
+    });
+
+    test.describe('dengan lokasi anda (Klang)', () => {
+      test.use({ geolocation: { latitude: 3.0449, longitude: 101.4456 }, permissions: ['geolocation'] });
+
+      test('guna lokasi saya: zon dicari dengan lokasi dibundarkan', async ({ page }) => {
+        await mockAll(page);
+        const lookups = [];
+        await page.route('https://api.waktusolat.app/zones/**', (route) => {
+          lookups.push(new URL(route.request().url()).pathname);
+          route.fulfill({ json: { zone: 'SGR03', state: 'SGR', district: 'Klang' }, headers: { 'Access-Control-Allow-Origin': '*' } });
+        });
+        await openApp(page, undefined, '#malaysia');
+        await page.getByRole('button', { name: '📍 Guna lokasi saya' }).click();
+        await expect(page.locator('#zone-status')).toHaveText('Zon anda: SGR03 (Selangor).');
+        expect(lookups).toEqual(['/zones/3.04/101.45']);
+        await expect(page.getByLabel('Zon JAKIM')).toHaveValue('SGR03');
+        await expect(page.locator('#zone-times .zone-name')).toHaveText('SGR03 · Klang, Kuala Langat, Selangor');
+        expect((await storedState(page)).prayerZone).toBe('SGR03');
+      });
+    });
+
+    test.describe('di luar Malaysia', () => {
+      test.use({ geolocation: { latitude: 1.29, longitude: 103.85 }, permissions: ['geolocation'], expectedConsole: [/status of 500/] });
+
+      test('zon tidak ditemui: mesej jelas, pilihan tidak berubah', async ({ page }) => {
+        await mockAll(page);
+        await page.route('https://api.waktusolat.app/zones/**', (route) => route.fulfill({
+          status: 500, json: { error: 'No zone found for the given coordinates.' }, headers: { 'Access-Control-Allow-Origin': '*' },
+        }));
+        await openApp(page, { zones: ['Asia/Kuala_Lumpur'], hour24: true, prayerZone: 'WLY01' }, '#malaysia');
+        await page.getByRole('button', { name: '📍 Guna lokasi saya' }).click();
+        await expect(page.locator('#zone-status')).toHaveText(/^Zon JAKIM untuk lokasi anda tidak ditemui/);
+        await expect(page.getByLabel('Zon JAKIM')).toHaveValue('WLY01');
+        await expect(page.getByRole('button', { name: '📍 Guna lokasi saya' })).toBeEnabled();
+      });
+    });
+
+    test('zon tersimpan yang tidak sah diabaikan', async ({ page }) => {
+      await mockAll(page);
+      await openApp(page, { zones: ['Asia/Kuala_Lumpur'], hour24: true, prayerZone: 'XYZ99', reminder: true }, '#malaysia');
+      await expect(page.getByLabel('Zon JAKIM')).toHaveValue('');
+      await expect(page.locator('#prayer-reminder').getByRole('button', { name: '🔔 Ingatkan saya' })).toBeDisabled();
     });
   });
 
@@ -1405,9 +1640,20 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       test(`tiada pelanggaran axe pada setiap tab dan dialog (${scheme})`, async ({ page }) => {
         await page.emulateMedia({ colorScheme: scheme });
         await mockAll(page);
+        await page.route('https://api.open-meteo.com/v1/forecast?**', (route) => route.fulfill({
+          json: Array(4).fill({ current: { temperature_2m: 27, weather_code: 2, is_day: 1 } }), headers: { 'Access-Control-Allow-Origin': '*' },
+        }));
+        // A chosen zone and a picked planner hour, so their panels are audited too.
+        const stored = { zones: ['Asia/Kuala_Lumpur', 'Europe/London', 'America/New_York', 'Asia/Tokyo'], hour24: true, prayerZone: 'WLY01' };
         for (const hash of ['#dunia', '#malaysia', '#bandar-malaysia']) {
-          await openApp(page, undefined, hash);
+          await openApp(page, stored, hash);
           await expect(page.locator('.tab-panel:not([hidden]) h1')).toHaveCount(1);
+          if (hash === '#dunia') {
+            await page.click('#planner-table thead button[aria-label="Lihat masa 15:00 waktu anda"]');
+            await expect(page.locator('#planner-pick')).toBeVisible();
+            await expect(page.locator('.card .weather').first()).not.toBeEmpty();
+          }
+          if (hash === '#malaysia') await expect(page.locator('#zone-times li')).toHaveCount(6);
           expect(await audit(page), hash).toEqual([]);
         }
         await page.locator('.city-card').first().locator('.city-open').click();
