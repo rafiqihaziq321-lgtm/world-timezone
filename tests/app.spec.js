@@ -1,6 +1,7 @@
 // @ts-check
 const { test: base, expect } = require('@playwright/test');
 const { deflateSync, crc32 } = require('node:zlib');
+const { AxeBuilder } = require('@axe-core/playwright');
 
 const APP_URL = 'index.html'; // relative to baseURL (the local test server)
 const STORAGE_KEY = 'world-timezone:v1';
@@ -46,6 +47,7 @@ async function openApp(page, stored, query = '', now = FIXED_NOW) {
   await page.clock.runFor(1100);
 }
 
+const storedState = async (page) => JSON.parse(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY));
 const storedCities = async (page) => JSON.parse(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY)).cities;
 const storedZones = async (page) => (await storedCities(page)).map((c) => c.zone);
 
@@ -141,22 +143,25 @@ test.describe('simpanan', () => {
 test.describe('pengiraan masa', () => {
   test('offset UTC ikut DST', async ({ page }) => {
     await openApp(page);
-    const offsets = await page.evaluate(() => [
+    const offsets = await page.evaluate(async () => {
+      const { utcOffsetMinutes } = await import('./js/time.js');
+      return [
       utcOffsetMinutes('Europe/London', new Date('2026-01-15T12:00:00Z')),
       utcOffsetMinutes('Europe/London', new Date('2026-07-15T12:00:00Z')),
       utcOffsetMinutes('America/New_York', new Date('2026-03-08T06:59:00Z')), // 01:59 EST
       utcOffsetMinutes('America/New_York', new Date('2026-03-08T07:00:00Z')), // 03:00 EDT
       utcOffsetMinutes('Asia/Kolkata', new Date('2026-06-01T00:00:00Z')),
-    ]);
+      ];
+    });
     expect(offsets).toEqual([0, 60, -300, -240, 330]);
   });
 
   test('kedudukan matahari pada solstis', async ({ page }) => {
     await openApp(page);
-    const [june, december] = await page.evaluate(() => [
-      subsolarPoint(new Date('2026-06-21T12:00:00Z')),
-      subsolarPoint(new Date('2026-12-21T00:00:00Z')),
-    ]);
+    const [june, december] = await page.evaluate(async () => {
+      const { subsolarPoint } = await import('./globe.js');
+      return [subsolarPoint(new Date('2026-06-21T12:00:00Z')), subsolarPoint(new Date('2026-12-21T00:00:00Z'))];
+    });
     expect(Math.abs(june[0])).toBeLessThan(2);
     expect(june[1]).toBeCloseTo(23.44, 0);
     expect(Math.abs(december[0])).toBeGreaterThan(177);
@@ -331,6 +336,30 @@ test.describe('susun semula kad', () => {
     await expect(page.locator('#planner-table tbody th').first()).toContainText('Tokyo');
   });
 
+  test('memegang kad dekat tepi tetingkap menatal halaman', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 420 });
+    await openApp(page);
+    await card(page, 'Asia/Tokyo').scrollIntoViewIfNeeded();
+    const handle = await card(page, 'Asia/Tokyo').locator('.drag-handle').boundingBox();
+    await page.mouse.move(handle.x + 14, handle.y + 14);
+    await page.mouse.down();
+    const scrollY = () => page.evaluate(() => window.scrollY);
+    const before = await scrollY();
+    await page.mouse.move(handle.x + 14, 415, { steps: 5 }); // the bottom edge
+    await page.clock.runFor(500);
+    const lower = await scrollY();
+    expect(lower).toBeGreaterThan(before);
+    const navBottom = await page.locator('.site-nav').evaluate((n) => n.getBoundingClientRect().bottom);
+    await page.mouse.move(handle.x + 14, navBottom + 8, { steps: 5 }); // just under the sticky header
+    await page.clock.runFor(500);
+    expect(await scrollY()).toBeLessThan(lower);
+    await page.mouse.up();
+    await expect(page.locator('.card.dragging')).toHaveCount(0);
+    const before2 = await scrollY();
+    await page.clock.runFor(500);
+    expect(await scrollY()).toBe(before2); // scrolling stops with the drag
+  });
+
   test('kekunci anak panah pada pemegang menggerakkan kad', async ({ page }) => {
     await openApp(page);
     const handle = card(page, 'Europe/London').getByRole('button', { name: /^Susun semula London/ });
@@ -421,6 +450,24 @@ test.describe('tema dan paparan', () => {
     await page.click('#theme-toggle');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     expect(await bg()).toBe('#060b24');
+  });
+
+  test('header telefon 360px kekal dua baris walaupun butang pasang muncul', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 700 });
+    await openApp(page);
+    await page.evaluate(() => {
+      const offer = new Event('beforeinstallprompt', { cancelable: true });
+      offer.prompt = () => Promise.resolve();
+      window.dispatchEvent(offer);
+    });
+    await expect(page.getByRole('button', { name: 'Pasang app' })).toBeVisible();
+    const rows = await page.evaluate(() => {
+      const mid = (sel) => { const r = document.querySelector(sel).getBoundingClientRect(); return r.top + r.height / 2; };
+      return { brand: mid('.brand'), install: mid('#install'), theme: mid('#theme-toggle'), tabs: mid('.nav-links') };
+    });
+    expect(Math.abs(rows.brand - rows.theme)).toBeLessThan(8); // one row: brand and buttons
+    expect(Math.abs(rows.brand - rows.install)).toBeLessThan(8);
+    expect(rows.tabs).toBeGreaterThan(rows.brand + 20); // second row: tabs
   });
 
   test('muat pada skrin telefon tanpa scroll mendatar', async ({ page }) => {
@@ -659,6 +706,39 @@ test.describe('pangkalan data bandar', () => {
   });
 });
 
+test.describe('prestasi', () => {
+  test('paparan pertama: bajet saiz, dan peta serta pangkalan bandar tidak dimuat', async ({ page }) => {
+    const loaded = [];
+    page.on('response', async (res) => {
+      const url = new URL(res.url());
+      if (url.hostname === 'localhost') loaded.push({ path: url.pathname, bytes: (await res.body()).length });
+    });
+    await openApp(page);
+    await page.waitForLoadState('load');
+    const total = loaded.reduce((n, r) => n + r.bytes, 0);
+    expect(total, loaded.map((r) => `${r.path} ${r.bytes}`).join('\n')).toBeLessThan(450 * 1024); // uncompressed
+    expect(loaded.map((r) => r.path).filter((p) => /maplibre|vendor\/cities\.js|malaysia-states/.test(p))).toEqual([]);
+  });
+
+  test('setiap modul dipramuat dan disimpan untuk luar talian', async ({ page }) => {
+    // Every module the page loads, as fetched while it starts.
+    const modules = [];
+    page.on('request', (req) => {
+      const path = new URL(req.url()).pathname.slice(1);
+      if (/^(js\/[\w-]+\.js|globe\.js|malaysia-data\.js)$/.test(path) && !modules.includes(path)) modules.push(path);
+    });
+    await openApp(page);
+    await page.waitForLoadState('load');
+    const preloaded = await page.locator('link[rel="modulepreload"]').evaluateAll((links) => links.map((l) => l.getAttribute('href')));
+    const sw = await (await page.request.get('sw.js')).text();
+    expect(modules.length).toBeGreaterThan(10);
+    for (const m of modules) {
+      expect(preloaded, `${m} tiada modulepreload`).toContain(m);
+      expect(sw, `${m} tiada dalam precache sw.js`).toContain(`'${m}'`);
+    }
+  });
+});
+
 test.describe('PWA dan pratonton pautan', () => {
   test('manifest dan semua ikon boleh dimuat', async ({ page }) => {
     await openApp(page);
@@ -810,12 +890,12 @@ test.describe('bandar Malaysia: solat, cuaca dan IPU', () => {
     await kl(page).locator('.local-toggle').click();
     const panel = kl(page).locator('.local-panel');
     await expect(panel.locator('.prayer-times li')).toHaveText(['Subuh05:55', 'Syuruk07:05', 'Zohor13:10', 'Asar16:20', 'Maghrib19:12', 'Isyak20:22']);
-    await expect(panel.locator('h4').first()).toContainText('zon WLY01');
+    await expect(panel.locator('h3').first()).toContainText('zon WLY01');
     await expect(panel.locator('.next-prayer')).toHaveText('Seterusnya: Zohor dalam 7j 10m'); // it is 06:00
     await expect(panel.locator('.prayer-times li.next span')).toHaveText('Zohor');
     // Exact location wins over "Kuala Lumpur Utara".
     await expect(panel.locator('.forecast dd')).toHaveText(['Tiada hujan', 'Ribut petir di beberapa tempat', 'Tiada hujan']);
-    await expect(panel.locator('.local-block').nth(1).locator('h4')).toContainText('24–33°C');
+    await expect(panel.locator('.local-block').nth(1).locator('h3')).toContainText('24–33°C');
     await expect(panel.locator('.local-link')).toHaveAttribute('href', 'https://eqms.doe.gov.my/');
   });
 
@@ -929,6 +1009,7 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     ...STATE_ORDER.map((state) => ({
       'W.P. Kuala Lumpur': airSeries(42, 30), // PM2.5 120% of its standard
       Sarawak: airSeries(10, 160), // PM10 160% of its standard
+      Kedah: airSeries(20, 30), // 57, Sederhana: a green badge for the contrast check
       'W.P. Labuan': airSeries(5, 5, 10), // too few hours for an estimate
     }[state] ?? airSeries(7, 10))),
     ...TOWN_ORDER.map((town) => (town === 'Sandakan' ? airSeries(20, 30) : airSeries(7, 10))),
@@ -1098,7 +1179,8 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
   test('IPU anggaran: 100 = piawai 24 jam, kategori JAS, hanya 24 jam terakhir', async ({ page }) => {
     await mockAll(page);
     await openApp(page);
-    const result = await page.evaluate(([nowS]) => {
+    const result = await page.evaluate(async ([nowS]) => {
+      const { estimateAirIndex } = await import('./js/air.js');
       const series = (pm25, pm10, hours = 24) => {
         const time = Array.from({ length: hours }, (_, i) => nowS - i * 3600);
         return { time, pm2_5: time.map(() => pm25), pm10: time.map(() => pm10) };
@@ -1211,9 +1293,9 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     await openApp(page, undefined, '#bandar-malaysia');
     const list = page.locator('#map-warnings li');
     await expect(list).toHaveText(['Amaran Hujan Berterusan (Buruk): Pahang, Perak', 'Amaran Ribut Petir: Perak, Selangor']);
-    const levels = await page.evaluate(([a, b, c]) => warningLevels([a, b, c]), [rain, storm, sea]);
+    const levels = await page.evaluate(async (rows) => (await import('./js/warnings.js')).warningLevels(rows), [rain, storm, sea]);
     expect(levels).toEqual({ Perak: 'severe', Pahang: 'severe', Selangor: 'alert' }); // the worst level wins; the sea colours nothing
-    const danger = await page.evaluate((w) => warningLevels([w]), { ...rain, warning_issue: { title_bm: 'Amaran Hujan Berterusan (Bahaya)' } });
+    const danger = await page.evaluate(async (w) => (await import('./js/warnings.js')).warningLevels([w]), { ...rain, warning_issue: { title_bm: 'Amaran Hujan Berterusan (Bahaya)' } });
     expect(danger).toEqual({ Perak: 'danger', Pahang: 'danger' });
   });
 
@@ -1237,6 +1319,125 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     const kl = card(page, 'Asia/Kuala_Lumpur');
     await kl.getByRole('button', { name: 'Solat & cuaca' }).click();
     await expect(kl.locator('.ramadan-line')).toHaveText('🌙 Ramadan: imsak 05:45 · berbuka 19:12');
+  });
+
+  test.describe('peringatan waktu solat', () => {
+    // A stand-in for the browser's Notification API that records what is shown.
+    const fakeNotifications = (page, { permission = 'default', answer = 'granted' } = {}) => page.addInitScript(([p, a]) => {
+      window.shown = [];
+      window.Notification = class {
+        static permission = p;
+        static async requestPermission() { window.Notification.permission = a; return a; }
+        constructor(title, options) { window.shown.push({ title, body: options.body, tag: options.tag }); }
+      };
+    }, [permission, answer]);
+    const shown = (page) => page.evaluate(() => window.shown);
+
+    test('hidupkan, dapat notifikasi bila waktu solat tiba (sekali sahaja), dan matikan', async ({ page }) => {
+      await fakeNotifications(page);
+      await mockAll(page);
+      await openApp(page, undefined, '#malaysia'); // 06:00, after Subuh at 05:55
+      const box = page.locator('#prayer-reminder');
+      await box.getByRole('button', { name: '🔔 Ingatkan saya' }).click();
+      await expect(box.getByRole('status')).toHaveText('Peringatan aktif untuk waktu solat di Kuala Lumpur.');
+      await expect(box.getByRole('button', { name: '🔕 Matikan peringatan' })).toHaveAttribute('aria-pressed', 'true');
+      expect((await storedState(page)).reminder).toEqual({ state: 'W.P. Kuala Lumpur' });
+      await page.clock.runFor(2000);
+      expect(await shown(page)).toEqual([]); // Subuh had already passed
+
+      await page.clock.fastForward('07:10:30'); // to 13:10:38, past Zohor at 13:10
+      await page.clock.runFor(1100);
+      expect(await shown(page)).toEqual([{ title: 'Waktu Zohor di Kuala Lumpur', body: '13:10 · waktu JAKIM', tag: 'solat-dhuhr' }]);
+
+      await page.clock.fastForward('06:20:00'); // past Asar (16:20) and Maghrib (19:12) at once: one notice
+      await page.clock.runFor(1100);
+      expect((await shown(page)).map((n) => n.title)).toEqual(['Waktu Zohor di Kuala Lumpur', 'Waktu Maghrib di Kuala Lumpur']);
+
+      await box.getByRole('button', { name: '🔕 Matikan peringatan' }).click();
+      expect((await storedState(page)).reminder).toBeNull();
+      await page.clock.fastForward('01:20:00'); // past Isyak
+      await page.clock.runFor(1100);
+      expect(await shown(page)).toHaveLength(2);
+    });
+
+    test('peringatan tersimpan: tiada notifikasi untuk waktu yang lepas sebelum halaman dibuka', async ({ page }) => {
+      await fakeNotifications(page, { permission: 'granted' });
+      await mockAll(page);
+      await openApp(page, { zones: ['Asia/Kuala_Lumpur'], hour24: true, reminder: { state: 'Sabah' } }, '#malaysia'); // 06:00, Subuh was 05:55
+      await expect(page.locator('#prayer-reminder').getByRole('status')).toHaveText('Peringatan aktif untuk waktu solat di Kota Kinabalu.');
+      await page.clock.runFor(2000);
+      expect(await shown(page)).toEqual([]);
+      await page.clock.fastForward('07:10:30');
+      await page.clock.runFor(1100);
+      expect((await shown(page)).map((n) => n.title)).toEqual(['Waktu Zohor di Kota Kinabalu']);
+    });
+
+    test('notifikasi disekat: mesej jelas, tiada peringatan disimpan', async ({ page }) => {
+      await fakeNotifications(page, { answer: 'denied' });
+      await mockAll(page);
+      await openApp(page, undefined, '#malaysia');
+      await page.locator('#prayer-reminder').getByRole('button', { name: '🔔 Ingatkan saya' }).click();
+      await expect(page.locator('#prayer-reminder').getByRole('status')).toHaveText(/^Notifikasi disekat\./);
+      expect((await storedState(page))?.reminder ?? null).toBeNull();
+    });
+
+    test('pelayar tanpa notifikasi: diterangkan, tiada butang', async ({ page }) => {
+      await page.addInitScript(() => { delete window.Notification; });
+      await mockAll(page);
+      await openApp(page, undefined, '#malaysia');
+      await expect(page.locator('#prayer-reminder')).toHaveText(/tidak menyokong notifikasi/);
+      await expect(page.locator('#prayer-reminder button')).toHaveCount(0);
+    });
+  });
+
+  test.describe('kebolehcapaian', () => {
+    // WCAG 2.1 A/AA and axe's best practices. Text over gradients, which axe
+    // cannot measure, was checked by hand against the rendered backgrounds.
+    const audit = async (page) => {
+      await page.clock.resume(); // axe waits on timers of its own
+      const { violations } = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'])
+        .analyze();
+      return violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`);
+    };
+
+    for (const scheme of ['light', 'dark']) {
+      test(`tiada pelanggaran axe pada setiap tab dan dialog (${scheme})`, async ({ page }) => {
+        await page.emulateMedia({ colorScheme: scheme });
+        await mockAll(page);
+        for (const hash of ['#dunia', '#malaysia', '#bandar-malaysia']) {
+          await openApp(page, undefined, hash);
+          await expect(page.locator('.tab-panel:not([hidden]) h1')).toHaveCount(1);
+          expect(await audit(page), hash).toEqual([]);
+        }
+        await page.locator('.city-card').first().locator('.city-open').click();
+        await expect(page.locator('#city-dialog .local-panel h3').first()).toBeVisible();
+        expect(await audit(page), 'dialog bandar').toEqual([]);
+      });
+    }
+
+    test('peta boleh digunakan dengan papan kekunci', async ({ page }) => {
+      await mockAll(page);
+      await openApp(page, undefined, '#bandar-malaysia');
+      const kl = page.locator('#my-map').getByRole('button', { name: 'Butiran Kuala Lumpur, W.P. Kuala Lumpur' });
+      await kl.focus();
+      await expect(kl).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#city-dialog h2')).toHaveText('Kuala Lumpur');
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#city-dialog')).toBeHidden();
+      await expect(kl).toBeFocused(); // focus returns to the marker
+    });
+
+    test('pautan langkau pergi ke tajuk tab semasa tanpa menukar tab', async ({ page }) => {
+      await mockAll(page);
+      await openApp(page, undefined, '#malaysia');
+      await page.getByRole('link', { name: 'Langkau ke kandungan' }).focus();
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#my-title')).toBeFocused();
+      await expect(page.locator('#malaysia')).toBeVisible();
+      expect(new URL(page.url()).hash).toBe('#malaysia');
+    });
   });
 
   test.describe('dengan lokasi anda (Klang)', () => {
@@ -1314,7 +1515,7 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       await expect(page.locator('#map-status')).toHaveText(/Sebahagian peta tidak dapat dimuat/);
       await expect(page.locator('.city-card')).toHaveCount(16);
       await page.locator('.city-card').first().locator('.city-open').click();
-      const air = page.locator('#city-dialog .local-block', { has: page.locator('h4', { hasText: 'Kualiti udara' }) });
+      const air = page.locator('#city-dialog .local-block', { has: page.locator('h3', { hasText: 'Kualiti udara' }) });
       await expect(air).toContainText('Anggaran kualiti udara tidak dapat dimuat.');
       await expect(air.getByRole('button', { name: 'Cuba lagi' })).toBeVisible();
       await expect(air.locator('.local-link')).toHaveAttribute('href', 'https://eqms.doe.gov.my/');

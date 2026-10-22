@@ -1,6 +1,7 @@
 // Renders the app icons (icons/*.png) and the link preview image (og-image.png)
 // with Playwright. Run after changing the brand mark or the hero design:
 //   node scripts/build-assets.mjs        (CHROMIUM_PATH=... to use a preinstalled Chromium)
+import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
@@ -27,9 +28,16 @@ for (const [file, size, markRatio] of icons) {
 }
 
 // Link preview: the hero without anything time-specific or interactive, its
-// lede replaced by what the site offers.
+// lede replaced by what the site offers. Served over http: browsers do not
+// load the page's JavaScript modules from file://.
+const PORT = 4174;
+const server = spawn(process.execPath, [`${root}scripts/serve.mjs`, String(PORT)], { stdio: ['ignore', 'pipe', 'inherit'] });
+await new Promise((resolve, reject) => {
+  server.stdout.once('data', resolve);
+  server.once('exit', (code) => reject(new Error(`serve.mjs exited with code ${code}`)));
+});
 const page = await browser.newPage({ viewport: { width: 1200, height: 630 }, colorScheme: 'dark', reducedMotion: 'reduce' });
-await page.goto(`file://${root}index.html`);
+await page.goto(`http://localhost:${PORT}/index.html`);
 await page.addStyleTag({ content: `
   .site-nav, .notices, #time-control, .hero-clock, .hero-actions, .hint, .globe-zoom, .hero-lede { display: none !important; }
   .hero { min-height: 630px; padding-block: 0; grid-template-areas: "copy globe"; }
@@ -49,3 +57,4 @@ await page.waitForTimeout(500);
 await page.screenshot({ path: `${root}og-image.png` });
 console.log('og-image.png');
 await browser.close();
+server.kill();

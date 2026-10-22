@@ -165,6 +165,9 @@ h1 {
   letter-spacing: -0.025em;
 }
 
+/* Each tab's own title: an h1 while that tab shows, sized like a section title. */
+h1.tab-title { max-width: none; margin: 0 0 12px; font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.4rem); line-height: 1.15; letter-spacing: -0.02em; }
+
 h2 {
   margin: 0 0 12px;
   font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.4rem);
@@ -227,6 +230,7 @@ button.secondary,
   height: 40px;
   padding: 0;
   font-size: 1.05rem;
+  color: var(--text); /* the glyph itself where no colour emoji font exists */
   background: var(--panel);
   border-color: var(--panel-border);
 }
@@ -316,6 +320,17 @@ button.secondary,
   .nav-links a { padding: 6px; font-size: 0.9rem; }
 }
 
+/* Small phones: the brand and all four header buttons share one row, the
+   tabs the second, even when the install button shows. */
+@media (max-width: 400px) {
+  .nav-inner { column-gap: 8px; }
+  .brand { gap: 6px; font-size: 0.95rem; }
+  .brand-mark { width: 22px; height: 22px; }
+  .header-actions { gap: 4px; }
+  .header-actions .icon-btn { width: 34px; height: 34px; font-size: 0.95rem; }
+  .toggle { font-size: 0.85rem; }
+}
+
 /* ---------- Notices (share link) ---------- */
 
 #share-status {
@@ -398,7 +413,7 @@ button.secondary,
 }
 
 .hero-time[data-phase="night"] { color: var(--moon); }
-.hero-seconds { font-size: 0.42em; opacity: 0.6; letter-spacing: 0; }
+.hero-seconds { font-size: 0.42em; opacity: 0.75; letter-spacing: 0; }
 .hero-period { font-size: 0.3em; font-weight: 500; letter-spacing: 0; }
 
 .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; }
@@ -586,7 +601,7 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 /* Background follows the time of day in that city. */
 .card[data-phase="dawn"] { background: linear-gradient(160deg, #fda4af, #fdba74 55%, #fde68a); color: #7c2d12; }
 .card[data-phase="day"] { background: linear-gradient(160deg, #7dd3fc, #bae6fd 60%, #e0f2fe); color: #0c4a6e; }
-.card[data-phase="dusk"] { background: linear-gradient(160deg, #6d28d9, #db2777 60%, #f97316); color: #fff7ed; }
+.card[data-phase="dusk"] { background: linear-gradient(160deg, #5b21b6, #be185d 60%, #c2410c); color: #fff7ed; }
 .card[data-phase="night"] { background: linear-gradient(160deg, #0b1026, #1e1b4b 60%, #312e81); color: #e0e7ff; }
 
 .card-head {
@@ -605,7 +620,6 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.25);
   border: 1px solid currentColor;
-  opacity: 0.85;
 }
 
 .card-body {
@@ -623,7 +637,7 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
   font-variant-numeric: tabular-nums;
 }
 
-.card .meta { font-size: 0.85rem; opacity: 0.85; }
+.card .meta { font-size: 0.85rem; }
 
 .analog { flex: none; width: 68px; height: 68px; }
 .analog .face { fill: rgba(255, 255, 255, 0.18); stroke: currentColor; stroke-opacity: 0.45; stroke-width: 2; }
@@ -643,7 +657,7 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
   color: inherit;
   font-size: 1.2rem;
   font-weight: 400;
-  opacity: 0.6;
+  opacity: 0.8;
 }
 
 .card .remove:hover { opacity: 1; }
@@ -658,7 +672,7 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
   color: inherit;
   font-size: 1.1rem;
   font-weight: 400;
-  opacity: 0.55;
+  opacity: 0.8;
   cursor: grab;
   touch-action: none; /* a touch drag moves the card, not the page */
 }
@@ -695,6 +709,9 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
   border-color: currentColor;
 }
 
+/* On the dark cards a light wash would lower the contrast of light text. */
+.card:is([data-phase="dusk"], [data-phase="night"]) :is(.local-toggle, .utc) { background: rgba(0, 0, 0, 0.2); }
+
 .local-panel {
   margin-top: 12px;
   padding-top: 12px;
@@ -704,8 +721,8 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 }
 
 .local-block + .local-block { margin-top: 14px; }
-.local-block h4 { margin: 0 0 6px; font-size: 0.95rem; }
-.local-block h4 small { font-weight: 600; opacity: 0.75; }
+.local-block h3 { margin: 0 0 6px; font-size: 0.95rem; }
+.local-block h3 small { font-weight: 600; opacity: 0.75; }
 .local-block p { margin: 4px 0 0; }
 .local-status { opacity: 0.8; }
 
@@ -787,6 +804,32 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 .alert p { margin: 2px 0 0; font-size: 0.9rem; }
 .alert-more summary { margin-top: 4px; color: var(--accent-ink); font-size: 0.85rem; font-weight: 700; cursor: pointer; }
 .alert-more p { color: var(--muted); }
+
+.reminder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+}
+.reminder h3 { flex-basis: 100%; margin: 0; font-size: 1rem; }
+.reminder p { flex-basis: 100%; margin: 0; }
+.reminder p:empty { display: none; }
+.reminder .btn { padding: 8px 16px; font-size: 0.9rem; }
+.reminder-pick select {
+  margin-left: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+}
+.reminder-note { color: var(--muted); font-size: 0.8rem; }
 
 .ramadan-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
 .ramadan-day { margin: 0; font-size: 1.1rem; font-weight: 800; }
@@ -899,7 +942,7 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
   font-size: 1.1rem;
   font-variant-numeric: tabular-nums;
 }
-.aqi-unhealthy.aqi-reading strong { color: #1a1433; }
+:is(.aqi-moderate, .aqi-unhealthy, .aqi-very-unhealthy).aqi-reading strong { color: #1a1433; }
 
 /* The map runs the full width of the page, not the 1180px column. */
 .tab-panel > section.map-section { max-width: none; padding-inline: 0; padding-top: 96px; } /* clears the sticky nav when the tab opens */
@@ -973,6 +1016,8 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
   box-shadow: var(--shadow);
 }
 
+.my-map .maplibregl-ctrl-attrib a { text-decoration: underline; } /* not told apart by colour alone */
+
 #qibla-dialog::backdrop { background: rgba(2, 6, 23, 0.6); }
 .qibla-body { padding: 4px 24px 24px; text-align: center; }
 .qibla-body h2 { margin: 16px 0 12px; }
@@ -1041,7 +1086,8 @@ body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow)
 
 .marker-weather:not(:empty) { top: -8px; right: -10px; background: #fff; font-size: 0.85rem; }
 .marker-aqi:not(:empty) { bottom: -6px; right: -12px; padding: 0 5px; background: var(--aqi); color: #fff; font-variant-numeric: tabular-nums; }
-.map-marker[data-aqi='unhealthy'] .marker-aqi { color: #1a1433; }
+/* Dark figures on the light band colours (green, yellow, orange) for contrast. */
+.map-marker:is([data-aqi='moderate'], [data-aqi='unhealthy'], [data-aqi='very-unhealthy']) .marker-aqi { color: #1a1433; }
 
 .marker-label {
   position: absolute;

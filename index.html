@@ -24,10 +24,34 @@
   <meta property="og:image:alt" content="Glob Jam Dunia menunjukkan siang dan malam, dengan senarai ciri: jam dunia, cuaca dan waktu solat Malaysia, serta peta 3D Malaysia">
   <meta name="twitter:card" content="summary_large_image">
 
+  <!-- Fonts and modules fetched in parallel instead of once CSS and each import are read. -->
+  <link rel="preload" href="vendor/fonts/unbounded-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="vendor/fonts/manrope-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
+  <link rel="modulepreload" href="globe.js">
+  <link rel="modulepreload" href="malaysia-data.js">
+  <link rel="modulepreload" href="js/air.js">
+  <link rel="modulepreload" href="js/cards.js">
+  <link rel="modulepreload" href="js/cities.js">
+  <link rel="modulepreload" href="js/dialog.js">
+  <link rel="modulepreload" href="js/local-panel.js">
+  <link rel="modulepreload" href="js/malaysia.js">
+  <link rel="modulepreload" href="js/map.js">
+  <link rel="modulepreload" href="js/places.js">
+  <link rel="modulepreload" href="js/planner.js">
+  <link rel="modulepreload" href="js/qibla.js">
+  <link rel="modulepreload" href="js/reminders.js">
+  <link rel="modulepreload" href="js/search.js">
+  <link rel="modulepreload" href="js/share.js">
+  <link rel="modulepreload" href="js/storage.js">
+  <link rel="modulepreload" href="js/tabs.js">
+  <link rel="modulepreload" href="js/theme.js">
+  <link rel="modulepreload" href="js/time.js">
+  <link rel="modulepreload" href="js/util.js">
+  <link rel="modulepreload" href="js/warnings.js">
 </head>
 <body>
-  <a class="skip-link" href="#bandar">Langkau ke bandar anda</a>
+  <a class="skip-link" href="#kandungan">Langkau ke kandungan</a>
 
   <header class="site-nav">
     <div class="nav-inner">
@@ -66,7 +90,7 @@
     </div>
   </div>
 
-  <main>
+  <main id="kandungan">
     <div id="dunia" class="tab-panel">
     <section id="glob" class="hero" aria-labelledby="hero-title">
       <div class="hero-copy">
@@ -226,7 +250,7 @@
     <div id="malaysia" class="tab-panel" hidden>
       <section class="section my-intro" aria-labelledby="my-title">
         <div class="section-head">
-          <h2 id="my-title">Malaysia hari ini</h2>
+          <h1 id="my-title" class="tab-title">Malaysia hari ini</h1>
           <p id="my-today"></p>
         </div>
       </section>
@@ -263,6 +287,7 @@
           <h2 id="my-prayer-title">Waktu solat setiap negeri</h2>
           <p>Waktu JAKIM bagi ibu negeri setiap negeri. Solat seterusnya ditanda.</p>
         </div>
+        <div id="prayer-reminder" class="reminder"></div>
         <div class="table-scroll"><table id="my-prayers" class="data-table"></table></div>
       </section>
 
@@ -278,7 +303,7 @@
     <div id="bandar-malaysia" class="tab-panel" hidden>
       <section class="section map-section" aria-labelledby="map-title">
         <div class="section-head">
-          <h2 id="map-title">Peta Malaysia</h2>
+          <h1 id="map-title" class="tab-title">Peta Malaysia</h1>
           <p>Ibu negeri setiap negeri dan wilayah persekutuan; zum masuk untuk bandar-bandar besar lain. Seret untuk menggerakkan peta, klik kanan atau dua jari untuk condong dan putar. Pilih penanda untuk waktu solat, cuaca, kualiti udara dan arah kiblat. Negeri yang sedang menerima amaran MET diwarnakan.</p>
         </div>
         <div class="map-tools">
@@ -343,8 +368,6 @@
   <script src="vendor/d3-geo.min.js"></script>
   <script src="vendor/topojson-client.min.js"></script>
   <script src="vendor/land-110m.js"></script>
-  <script src="globe.js"></script>
-  <script src="malaysia-data.js"></script>
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
