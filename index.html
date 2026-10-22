@@ -31,9 +31,11 @@
   <link rel="modulepreload" href="globe.js">
   <link rel="modulepreload" href="malaysia-data.js">
   <link rel="modulepreload" href="js/air.js">
+  <link rel="modulepreload" href="js/calendar.js">
   <link rel="modulepreload" href="js/cards.js">
   <link rel="modulepreload" href="js/cities.js">
   <link rel="modulepreload" href="js/dialog.js">
+  <link rel="modulepreload" href="js/jakim-zones.js">
   <link rel="modulepreload" href="js/local-panel.js">
   <link rel="modulepreload" href="js/malaysia.js">
   <link rel="modulepreload" href="js/map.js">
@@ -49,6 +51,8 @@
   <link rel="modulepreload" href="js/time.js">
   <link rel="modulepreload" href="js/util.js">
   <link rel="modulepreload" href="js/warnings.js">
+  <link rel="modulepreload" href="js/weather.js">
+  <link rel="modulepreload" href="js/zones.js">
 </head>
 <body>
   <a class="skip-link" href="#kandungan">Langkau ke kandungan</a>
@@ -149,7 +153,7 @@
     <section id="perancang" class="section" aria-labelledby="planner-title">
       <div class="section-head">
         <h2 id="planner-title">Perancang mesyuarat</h2>
-        <p>Setiap baris ialah satu bandar dalam senarai anda, sepanjang hari ini mengikut waktu anda. Waktu kerja dan hujung minggu anda dipakai untuk semua bandar.</p>
+        <p>Setiap baris ialah satu bandar dalam senarai anda, sepanjang hari yang dipilih mengikut waktu anda. Klik satu jam untuk melihatnya dan menyimpannya ke kalendar. Waktu kerja dan hujung minggu anda dipakai untuk semua bandar.</p>
       </div>
       <div id="planner">
         <fieldset class="work-settings">
@@ -160,10 +164,18 @@
             <span aria-hidden="true">Hujung minggu:</span>
           </div>
         </fieldset>
+        <div class="planner-day" role="group" aria-label="Hari dirancang">
+          <button id="planner-prev" type="button" class="icon-btn" aria-label="Hari sebelumnya">‹</button>
+          <label class="visually-hidden" for="planner-date">Tarikh</label>
+          <input type="date" id="planner-date">
+          <button id="planner-next" type="button" class="icon-btn" aria-label="Hari berikutnya">›</button>
+          <button id="planner-today" type="button" class="secondary">Hari ini</button>
+        </div>
         <p id="planner-summary"></p>
         <div class="planner-scroll">
           <table id="planner-table"></table>
         </div>
+        <div id="planner-pick" class="planner-pick" role="status" hidden></div>
         <p class="legend">
           <span class="swatch work"></span><span id="work-legend">Waktu kerja (09:00–17:00)</span>
           <span class="swatch off"></span>Luar waktu kerja
@@ -232,8 +244,8 @@
       <div class="about">
         <div>
           <h3>Masa dari pelayar anda</h3>
-          <p>Masa setiap bandar dikira oleh pelayar anda menggunakan pangkalan data zon waktu IANA, sama seperti telefon dan komputer anda. Tiada akaun; senarai anda disimpan dalam pelayar ini sahaja.</p>
-          <p>Panel Malaysia mengambil data hanya apabila dibuka: waktu solat JAKIM daripada waktusolat.app (kedudukan bandar dihantar untuk mencari zon), ramalan, amaran cuaca dan gempa bumi MET Malaysia daripada data.gov.my, foto landmark daripada Wikipedia serta Wikimedia Commons, anggaran kualiti udara daripada Open-Meteo, serta jubin peta daripada OpenFreeMap dan Amazon Web Services (rupa bumi). Butang Bandar terdekat dan Kompas kiblat meminta lokasi anda hanya apabila ditekan, dan lokasi itu tidak dihantar ke mana-mana.</p>
+          <p>Masa setiap bandar dikira oleh pelayar anda menggunakan pangkalan data zon waktu IANA, sama seperti telefon dan komputer anda. Tiada akaun; senarai anda disimpan dalam pelayar ini sahaja. Cuaca semasa pada kad datang daripada Open-Meteo, yang menerima kedudukan bandar dalam senarai anda (bukan lokasi anda), dan dikemas kini setiap 15 minit.</p>
+          <p>Panel Malaysia mengambil data hanya apabila dibuka: waktu solat JAKIM daripada waktusolat.app (kedudukan bandar dihantar untuk mencari zon), ramalan, amaran cuaca dan gempa bumi MET Malaysia daripada data.gov.my, foto landmark daripada Wikipedia serta Wikimedia Commons, anggaran kualiti udara daripada Open-Meteo, serta jubin peta daripada OpenFreeMap dan Amazon Web Services (rupa bumi). Butang Bandar terdekat dan Kompas kiblat meminta lokasi anda hanya apabila ditekan, dan lokasi itu tidak dihantar ke mana-mana. Butang Guna lokasi saya (zon solat) pula menghantar lokasi anda, dibundarkan kepada kira-kira 1 km, ke waktusolat.app untuk mencari zon JAKIM anda.</p>
         </div>
         <div>
           <h3>Waktu jimat siang</h3>
@@ -282,12 +294,28 @@
         <div id="my-weather" class="state-weather"></div>
       </section>
 
+      <section class="section" aria-labelledby="my-zone-title">
+        <div class="section-head">
+          <h2 id="my-zone-title">Waktu solat zon anda</h2>
+          <p>Waktu JAKIM ikut zon, bukan ibu negeri. Pilihan anda disimpan dalam pelayar ini.</p>
+        </div>
+        <div class="zone-card">
+          <div class="zone-pick">
+            <label for="zone-select">Zon JAKIM</label>
+            <select id="zone-select"></select>
+            <button id="zone-locate" type="button" class="secondary">📍 Guna lokasi saya</button>
+          </div>
+          <p id="zone-status" class="local-status" role="status"></p>
+          <div id="zone-times"></div>
+        </div>
+        <div id="prayer-reminder" class="reminder"></div>
+      </section>
+
       <section class="section" aria-labelledby="my-prayer-title">
         <div class="section-head">
           <h2 id="my-prayer-title">Waktu solat setiap negeri</h2>
           <p>Waktu JAKIM bagi ibu negeri setiap negeri. Solat seterusnya ditanda.</p>
         </div>
-        <div id="prayer-reminder" class="reminder"></div>
         <div class="table-scroll"><table id="my-prayers" class="data-table"></table></div>
       </section>
 
@@ -359,7 +387,7 @@
         </svg>
         Jam Dunia
       </p>
-      <p>Peta daripada Natural Earth (domain awam). Glob dilukis dengan D3. Peta Malaysia dilukis dengan MapLibre (data © OpenStreetMap melalui OpenFreeMap); sempadan negeri daripada DOSM (Lesen Data Terbuka). Fon Unbounded dan Manrope (SIL Open Font License).</p>
+      <p>Peta daripada Natural Earth (domain awam). Glob dilukis dengan D3. Peta Malaysia dilukis dengan MapLibre (data © OpenStreetMap melalui OpenFreeMap); sempadan negeri daripada DOSM (Lesen Data Terbuka). Fon Unbounded dan Manrope (SIL Open Font License). Data cuaca dan kualiti udara oleh <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0).</p>
       <p><a href="https://github.com/rafiqihaziq321-lgtm/world-timezone">Kod sumber di GitHub</a></p>
     </div>
   </footer>

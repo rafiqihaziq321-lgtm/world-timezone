@@ -43,6 +43,7 @@ export function createCard(state, city) {
         <div class="meta date"></div>
         <div class="meta diff"></div>
         <div class="meta sun"></div>
+        <div class="meta weather"></div>
       </div>
       <svg class="analog" viewBox="0 0 100 100" aria-hidden="true">
         <circle class="face" cx="50" cy="50" r="46"/>

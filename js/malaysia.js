@@ -5,6 +5,7 @@ import { makeCity } from './storage.js';
 import { MINUTE_MS, addDaysIso, cityDate, formatClock, parseMyt } from './time.js';
 import { el, normalizeName, renderKeyed } from './util.js';
 import { activeWarnings, warningSummary } from './warnings.js';
+import { renderZone } from './zones.js';
 import { MALAYSIA_STATES, MALAYSIA_TOTAL } from '../malaysia-data.js';
 
 export const QUAKE_API = 'https://api.data.gov.my/weather/warning/earthquake';
@@ -171,6 +172,7 @@ export function renderMalaysia(state, now) {
   });
 
   renderRamadan(state, prayers, now);
+  renderZone(state, now);
 }
 
 // Shown only while it is Ramadan by JAKIM's calendar (the same nationwide),
