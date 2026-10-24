@@ -270,9 +270,18 @@ function init() {
   plannerTableEl.addEventListener('click', (e) => {
     const cell = e.target.closest('[data-slot]');
     if (!cell) return;
+    // Choosing an hour leaves the clocks alone; clicking it again lets it go.
+    const ms = Number(cell.dataset.slot);
+    state.plannerPick = state.plannerPick === ms ? null : ms;
+    state.refresh();
+  });
+
+  // "Lihat masa ini" in the chosen hour's bar moves every clock to it.
+  document.getElementById('planner-pick').addEventListener('click', (e) => {
+    const button = e.target.closest('[data-view-time]');
+    if (!button) return;
     stopPlay();
-    state.plannerPick = Number(cell.dataset.slot); // offered as a calendar event below the table
-    setViewTime(state, Number(cell.dataset.slot));
+    setViewTime(state, Number(button.dataset.viewTime));
   });
 
   clocksEl.addEventListener('click', (e) => {

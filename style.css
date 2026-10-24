@@ -48,6 +48,7 @@
   --weekend-bg: #ede9fe;
   --weekend-fg: #5b21b6;
   --all-work: #16a34a;
+  --scroll-shade: rgba(18, 26, 61, 0.2);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -84,6 +85,7 @@
     --weekend-bg: rgba(167, 139, 250, 0.32);
     --weekend-fg: #ddd6fe;
     --all-work: #22c55e;
+    --scroll-shade: rgba(0, 0, 0, 0.55);
   }
 }
 
@@ -120,6 +122,7 @@
   --weekend-bg: rgba(167, 139, 250, 0.32);
   --weekend-fg: #ddd6fe;
   --all-work: #22c55e;
+  --scroll-shade: rgba(0, 0, 0, 0.55);
 }
 
 /* ---------- Base ---------- */
@@ -467,14 +470,21 @@ button.secondary,
   border-color: rgba(157, 180, 255, 0.3);
 }
 
-/* On narrow screens the corner buttons would cover city labels. */
+/* On a phone the city cards are the point: a smaller globe (its zoom buttons
+   fit beside it without covering labels) and the clock without the
+   introduction or the jump links, so the first card shows on the first screen. */
 @media (max-width: 600px) {
-  .globe-zoom {
-    position: static;
-    flex-direction: row;
-    justify-content: center;
-    margin-top: 8px;
-  }
+  .hero { row-gap: 12px; padding-bottom: 0; }
+  #globe { max-width: 220px; }
+  #globe-wrap .hint { display: none; } /* drag and pinch need no telling on a touch screen */
+  .hero-lede, .hero-actions { display: none; }
+  .hero-clock { margin: 8px 0 0; }
+  .hero h1 { font-size: 1.2rem; max-width: none; }
+  #time-control { padding: 12px 14px; }
+  #time-control #time-label { flex-basis: 100px; } /* beside its label, not below it */
+  #bandar { padding-top: 24px; }
+  #bandar .section-head { margin-bottom: 12px; }
+  #bandar .section-head p { display: none; }
 }
 
 .globe-tip {
@@ -1263,6 +1273,42 @@ body.time-shifted .card .weather { display: none; } /* it is the weather now, no
 }
 
 #planner-summary { margin: 0 0 12px; font-weight: 700; }
+.planner-best { display: block; margin: 6px 0 8px; font-weight: 400; color: var(--muted); }
+#planner-summary .btn { padding: 6px 14px; font-size: 0.9rem; }
+
+.planner-settings { margin: 0 0 14px; font-size: 0.9rem; }
+.planner-settings summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 999px;
+  cursor: pointer;
+  list-style: none;
+}
+.planner-settings summary::-webkit-details-marker { display: none; }
+.planner-settings summary::before { content: '⚙️'; }
+.planner-settings summary::after { content: '▾'; color: var(--muted); }
+.planner-settings[open] summary::after { content: '▴'; }
+.planner-settings summary:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+.planner-settings .work-settings { margin: 12px 0 0; }
+
+.planner-scroll-wrap { position: relative; }
+.planner-scroll-wrap::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  pointer-events: none;
+  background: linear-gradient(to left, var(--scroll-shade), transparent);
+  border-radius: 0 6px 6px 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.planner-scroll-wrap.more-right::after { opacity: 1; }
 
 .planner-day { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
 .planner-day input {
@@ -1376,7 +1422,6 @@ body.time-shifted .card .weather { display: none; } /* it is the weather now, no
   font-size: 0.9rem;
 }
 
-.work-settings legend { float: left; margin-right: 4px; padding: 0; font-weight: 700; }
 .work-settings select {
   margin-left: 6px;
   padding: 6px 8px;
