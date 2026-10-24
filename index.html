@@ -153,17 +153,9 @@
     <section id="perancang" class="section" aria-labelledby="planner-title">
       <div class="section-head">
         <h2 id="planner-title">Perancang mesyuarat</h2>
-        <p>Setiap baris ialah satu bandar dalam senarai anda, sepanjang hari yang dipilih mengikut waktu anda. Klik satu jam untuk melihatnya dan menyimpannya ke kalendar. Waktu kerja dan hujung minggu anda dipakai untuk semua bandar.</p>
+        <p>Setiap baris ialah satu bandar dalam senarai anda, sepanjang hari yang dipilih mengikut waktu anda. Klik satu jam untuk memilihnya, kemudian simpan ke kalendar atau lihat masa itu pada semua jam. Waktu kerja dan hujung minggu anda dipakai untuk semua bandar.</p>
       </div>
       <div id="planner">
-        <fieldset class="work-settings">
-          <legend>Waktu kerja anda</legend>
-          <label>Mula <select id="work-start"></select></label>
-          <label>Tamat <select id="work-end"></select></label>
-          <div id="weekend-days" class="weekend-days" role="group" aria-label="Hari hujung minggu">
-            <span aria-hidden="true">Hujung minggu:</span>
-          </div>
-        </fieldset>
         <div class="planner-day" role="group" aria-label="Hari dirancang">
           <button id="planner-prev" type="button" class="icon-btn" aria-label="Hari sebelumnya">‹</button>
           <label class="visually-hidden" for="planner-date">Tarikh</label>
@@ -171,9 +163,22 @@
           <button id="planner-next" type="button" class="icon-btn" aria-label="Hari berikutnya">›</button>
           <button id="planner-today" type="button" class="secondary">Hari ini</button>
         </div>
+        <details class="planner-settings">
+          <summary id="work-summary">Waktu kerja 09:00–17:00 · Hujung minggu: Sabtu, Ahad</summary>
+          <fieldset class="work-settings">
+            <legend class="visually-hidden">Waktu kerja anda</legend>
+            <label>Mula <select id="work-start"></select></label>
+            <label>Tamat <select id="work-end"></select></label>
+            <div id="weekend-days" class="weekend-days" role="group" aria-label="Hari hujung minggu">
+              <span aria-hidden="true">Hujung minggu:</span>
+            </div>
+          </fieldset>
+        </details>
         <p id="planner-summary"></p>
-        <div class="planner-scroll">
-          <table id="planner-table"></table>
+        <div class="planner-scroll-wrap">
+          <div class="planner-scroll">
+            <table id="planner-table"></table>
+          </div>
         </div>
         <div id="planner-pick" class="planner-pick" role="status" hidden></div>
         <p class="legend">
@@ -181,7 +186,7 @@
           <span class="swatch off"></span>Luar waktu kerja
           <span class="swatch weekend"></span><span id="weekend-legend">Hujung minggu (Sabtu, Ahad)</span>
           <span class="swatch sleep"></span>Waktu tidur (22:00–07:00).
-          Klik satu jam untuk lihat masa itu.
+          Klik satu jam untuk memilihnya.
         </p>
       </div>
     </section>
@@ -267,6 +272,23 @@
         </div>
       </section>
 
+      <section class="section" aria-labelledby="my-zone-title">
+        <div class="section-head">
+          <h2 id="my-zone-title">Waktu solat zon anda</h2>
+          <p>Waktu JAKIM ikut zon, bukan ibu negeri. Pilihan anda disimpan dalam pelayar ini.</p>
+        </div>
+        <div class="zone-card">
+          <div class="zone-pick">
+            <label for="zone-select">Zon JAKIM</label>
+            <select id="zone-select"></select>
+            <button id="zone-locate" type="button" class="secondary">📍 Guna lokasi saya</button>
+          </div>
+          <p id="zone-status" class="local-status" role="status"></p>
+          <div id="zone-times"></div>
+        </div>
+        <div id="prayer-reminder" class="reminder"></div>
+      </section>
+
       <section id="ramadan" class="section" aria-labelledby="ramadan-title" hidden>
         <div class="section-head">
           <h2 id="ramadan-title">Ramadan</h2>
@@ -292,23 +314,6 @@
           <p>Ramalan MET Malaysia bagi hari ini.</p>
         </div>
         <div id="my-weather" class="state-weather"></div>
-      </section>
-
-      <section class="section" aria-labelledby="my-zone-title">
-        <div class="section-head">
-          <h2 id="my-zone-title">Waktu solat zon anda</h2>
-          <p>Waktu JAKIM ikut zon, bukan ibu negeri. Pilihan anda disimpan dalam pelayar ini.</p>
-        </div>
-        <div class="zone-card">
-          <div class="zone-pick">
-            <label for="zone-select">Zon JAKIM</label>
-            <select id="zone-select"></select>
-            <button id="zone-locate" type="button" class="secondary">📍 Guna lokasi saya</button>
-          </div>
-          <p id="zone-status" class="local-status" role="status"></p>
-          <div id="zone-times"></div>
-        </div>
-        <div id="prayer-reminder" class="reminder"></div>
       </section>
 
       <section class="section" aria-labelledby="my-prayer-title">
