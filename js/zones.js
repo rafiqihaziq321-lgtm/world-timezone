@@ -86,14 +86,14 @@ export function renderZone(state, now) {
     renderKeyed(timesEl, 'none', () => [el('p', 'local-status', 'Pilih zon anda, atau tekan “Guna lokasi saya”, untuk melihat waktu solat hari ini.')]);
     return;
   }
-  const zone = zoneByCode(code);
   const { key, entry, today } = zonePrayerFor(state, code, now);
   const next = nextPrayer(today, now);
-  renderKeyed(timesEl, [key, entry.status, today?.day, next, state.hour24].join('|'), () => {
-    const title = el('p', 'zone-name', `${zone.code} · ${zone.daerah}, ${zone.negeri}`);
-    if (entry.status === 'loading') return [title, el('p', 'local-status', 'Memuatkan…')];
-    if (entry.status === 'error') return [title, el('p', 'local-status', 'Waktu solat gagal dimuat. '), retryButton(state, key)];
-    if (!today) return [title, el('p', 'local-status', 'Tiada data untuk tarikh ini.')];
+  const minute = Math.floor(now.getTime() / 60000);
+  renderKeyed(timesEl, [key, entry.status, today?.day, next, minute, state.hour24].join('|'), () => {
+    if (entry.status === 'loading') return [el('p', 'local-status', 'Memuatkan…')];
+    if (entry.status === 'error') return [el('p', 'local-status', 'Waktu solat gagal dimuat. '), retryButton(state, key)];
+    if (!today) return [el('p', 'local-status', 'Tiada data untuk tarikh ini.')];
+    // The zone is already named in the picker; the line above the times says what comes next.
     const list = el('ul', 'zone-times');
     for (const [field, label] of PRAYER_TIMES) {
       const item = el('li', field === next ? 'next' : '');
@@ -101,6 +101,20 @@ export function renderZone(state, now) {
       if (field === next) item.append(el('span', 'visually-hidden', ' (seterusnya)'));
       list.append(item);
     }
-    return [title, list];
+    const tomorrow = entry.data.prayers.find((p) => p.day === today.day + 1);
+    const ahead = upcoming(state, today, tomorrow, next, now);
+    return ahead ? [ahead, list] : [list];
   });
+}
+
+// "Zohor dalam 1j 40m (13:10)"; after Isyak, tomorrow's Subuh if the month holds it.
+function upcoming(state, today, tomorrow, next, now) {
+  const [field, day] = next ? [next, today] : tomorrow?.fajr ? ['fajr', tomorrow] : [];
+  if (!field) return null;
+  const minutes = Math.ceil((day[field] * 1000 - now.getTime()) / 60000);
+  const wait = [Math.floor(minutes / 60) && `${Math.floor(minutes / 60)}j`, minutes % 60 && `${minutes % 60}m`].filter(Boolean).join(' ') || 'kurang seminit';
+  const label = PRAYER_TIMES.find(([f]) => f === field)[1];
+  const line = el('p', 'zone-next');
+  line.append(el('strong', '', `${label}${next ? '' : ' esok'}`), ` dalam ${wait} (${formatClock(state, 'Asia/Kuala_Lumpur', day[field] * 1000)})`);
+  return line;
 }

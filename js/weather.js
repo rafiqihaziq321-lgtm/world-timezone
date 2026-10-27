@@ -1,26 +1,27 @@
 // Current weather on the city cards, from Open-Meteo's forecast model.
 
-import { el, renderKeyed } from './util.js';
+import { icon } from './icons.js';
+import { renderKeyed } from './util.js';
 
 export const FORECAST_API = 'https://api.open-meteo.com/v1/forecast';
 const REFRESH_MS = 15 * 60 * 1000;
 
 // WMO weather codes as Open-Meteo reports them: [codes, day icon, night icon, label].
 const WMO_CODES = [
-  [[0], '☀️', '🌙', 'Cerah'],
-  [[1], '🌤️', '🌙', 'Kebanyakannya cerah'],
-  [[2], '⛅', '☁️', 'Separa berawan'],
-  [[3], '☁️', '☁️', 'Mendung'],
-  [[45, 48], '🌫️', '🌫️', 'Berkabus'],
-  [[51, 53, 55], '🌦️', '🌧️', 'Gerimis'],
-  [[56, 57], '🌧️', '🌧️', 'Gerimis beku'],
-  [[61, 63, 65], '🌧️', '🌧️', 'Hujan'],
-  [[66, 67], '🌧️', '🌧️', 'Hujan beku'],
-  [[71, 73, 75, 77], '🌨️', '🌨️', 'Salji'],
-  [[80, 81, 82], '🌦️', '🌧️', 'Hujan sekejap-sekejap'],
-  [[85, 86], '🌨️', '🌨️', 'Salji sekejap-sekejap'],
-  [[95], '⛈️', '⛈️', 'Ribut petir'],
-  [[96, 99], '⛈️', '⛈️', 'Ribut petir dan hujan batu'],
+  [[0], 'sun', 'moon', 'Cerah'],
+  [[1], 'sun-cloud', 'moon', 'Kebanyakannya cerah'],
+  [[2], 'sun-cloud', 'moon-cloud', 'Separa berawan'],
+  [[3], 'cloud', 'cloud', 'Mendung'],
+  [[45, 48], 'fog', 'fog', 'Berkabus'],
+  [[51, 53, 55], 'drizzle', 'drizzle', 'Gerimis'],
+  [[56, 57], 'drizzle', 'drizzle', 'Gerimis beku'],
+  [[61, 63, 65], 'rain', 'rain', 'Hujan'],
+  [[66, 67], 'rain', 'rain', 'Hujan beku'],
+  [[71, 73, 75, 77], 'snow', 'snow', 'Salji'],
+  [[80, 81, 82], 'rain', 'rain', 'Hujan sekejap-sekejap'],
+  [[85, 86], 'snow', 'snow', 'Salji sekejap-sekejap'],
+  [[95], 'storm', 'storm', 'Ribut petir'],
+  [[96, 99], 'storm', 'storm', 'Ribut petir dan hujan batu'],
 ];
 
 export function describeWeather(code, isDay) {
@@ -47,8 +48,6 @@ export function renderWeatherLine(node, current) {
   const weather = current && Number.isFinite(current.temperature_2m) ? describeWeather(current.weather_code, current.is_day === 1) : null;
   renderKeyed(node, weather ? `${current.temperature_2m}|${current.weather_code}|${current.is_day}` : '', () => {
     if (!weather) return [];
-    const icon = el('span', '', weather.icon);
-    icon.setAttribute('aria-hidden', 'true');
-    return [icon, ` ${String(Math.round(current.temperature_2m)).replace('-', '−')}°C ${weather.label}`];
+    return [icon(weather.icon), ` ${String(Math.round(current.temperature_2m)).replace('-', '−')}°C ${weather.label}`];
   });
 }

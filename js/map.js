@@ -1,6 +1,7 @@
 // The 3D map of Malaysia (MapLibre, OpenFreeMap, AWS terrain).
 
 import { openCityDialog } from './dialog.js';
+import { icon } from './icons.js';
 import { PRAYER_TIMES, nextPrayer, prayerFor, weatherIcon } from './local-panel.js';
 import { forecastForState, forecastForTown } from './malaysia.js';
 import { MAP_PLACES, placeName, stateCity } from './places.js';
@@ -130,7 +131,7 @@ export async function createMalaysiaMap(state) {
   const declutter = () => {
     const labelled = map.getZoom() >= LABEL_ZOOM;
     container.classList.toggle('map-labelled', labelled);
-    const [w, h] = labelled ? [130, 96] : [52, 52];
+    const [w, h] = labelled ? [130, 96] : [84, 84]; // zoomed out, the short name tag below each marker sets the size
     const kept = [];
     const order = focused ? [focused, ...MAP_PRIORITY.filter((p) => p !== focused)] : MAP_PRIORITY;
     for (const s of order) {
@@ -191,8 +192,16 @@ export function renderMapWarnings(state, view, now) {
       item.append(dot, el('strong', '', w.warning_issue?.title_bm || w.heading_bm || WARNING_LEVELS[level]), `: ${states.map((n) => n.replace(/^W\.P\. /, '')).join(', ')}`);
       list.append(item);
     }
-    return [el('p', 'map-warnings-title', '⚠️ Amaran MET aktif'), list];
+    const title = el('p', 'map-warnings-title');
+    title.append(icon('warning'), ' Amaran MET aktif');
+    return [title, list];
   });
+}
+
+// "Kuala Lumpur" -> "KL", "Ipoh" -> "Ip": in place of a photo that did not load.
+function initials(name) {
+  const words = name.split(/\s+/);
+  return words.length > 1 ? words.slice(0, 2).map((w) => w[0]).join('') : name.slice(0, 2);
 }
 
 export function renderMapMarkers(state, view, now, photos, forecasts, towns, air) {
@@ -201,7 +210,7 @@ export function renderMapMarkers(state, view, now, photos, forecasts, towns, air
     const { root } = view.markers.get(placeName(s));
     renderKeyed(root.querySelector('.marker-photo'), photos.status, () => {
       const photo = photos.status === 'ok' && s.landmark ? photos.data.get(s.landmark) : null;
-      if (!photo) return [el('span', 'marker-initial', placeName(s)[0])];
+      if (!photo) return [el('span', 'marker-initial', initials(placeName(s)))];
       const img = el('img');
       img.src = photo.src;
       img.alt = '';
@@ -226,8 +235,11 @@ export function renderMapMarkers(state, view, now, photos, forecasts, towns, air
     renderKeyed(root.querySelector('.marker-meta'), `${forecast?.max_temp}|${next}|${minute}|${state.hour24}`, () => {
       const parts = [];
       if (forecast) parts.push(`${forecast.max_temp}°C`);
-      if (next) parts.push(`🕌 ${PRAYER_TIMES.find(([f]) => f === next)[1]} ${formatClock(state, s.zone, today[next] * 1000)}`);
-      return [parts.join(' · ')];
+      if (next) {
+        if (parts.length) parts.push(' · ');
+        parts.push(icon('mosque'), ` ${PRAYER_TIMES.find(([f]) => f === next)[1]} ${formatClock(state, s.zone, today[next] * 1000)}`);
+      }
+      return parts;
     });
   }
 }

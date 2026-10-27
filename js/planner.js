@@ -2,6 +2,7 @@
 
 import { cityKey } from '../globe.js';
 import { googleCalendarUrl, icsEvent } from './calendar.js';
+import { icon } from './icons.js';
 import { saveState } from './storage.js';
 import { HOUR_MS, LOCAL_ZONE, formatClock, formatUtcOffset, hourLabel, minuteOfDay, minuteText, utcOffsetMinutes, weekdayOf } from './time.js';
 import { el, renderKeyed } from './util.js';
@@ -245,7 +246,8 @@ function renderPick(state) {
     if (plannerPickEl.hidden) return [];
     const event = meeting(state);
     const fmt = (ms) => new Date(ms).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit', hourCycle: state.hour24 ? 'h23' : 'h12' });
-    const ics = el('button', 'btn', '📅 Muat turun fail kalendar (.ics)');
+    const ics = el('button', 'btn');
+    ics.append(icon('calendar'), 'Muat turun fail kalendar (.ics)');
     ics.type = 'button';
     ics.addEventListener('click', () => {
       const url = URL.createObjectURL(new Blob([icsEvent(meeting(state))], { type: 'text/calendar;charset=utf-8' }));
@@ -255,7 +257,8 @@ function renderPick(state) {
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
-    const view = el('button', 'btn secondary', '🕒 Lihat masa ini');
+    const view = el('button', 'btn secondary');
+    view.append(icon('clock'), 'Lihat masa ini');
     view.type = 'button';
     view.dataset.viewTime = String(event.start); // handled in app.js, which owns the time slider
     const google = el('a', 'btn secondary', 'Buka di Google Calendar');

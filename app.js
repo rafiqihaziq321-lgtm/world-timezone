@@ -2,8 +2,9 @@
 // redraws every second (tick). Each part of the page lives in js/.
 
 import { cityKey, createGlobe } from './globe.js';
-import { addCity, clocksEl, describeCity, flashCard, renderCards, renderSunLine } from './js/cards.js';
+import { addCity, balanceColumns, clocksEl, describeCity, flashCard, renderCards, renderSunLine } from './js/cards.js';
 import { renderCities } from './js/cities.js';
+import { icon, placeIcons } from './js/icons.js';
 import { renderLocalPanel } from './js/local-panel.js';
 import { renderFacts, renderMalaysia } from './js/malaysia.js';
 import { plannerTableEl, renderPlanner, setupPlannerDay, setupWorkSettings } from './js/planner.js';
@@ -15,7 +16,7 @@ import { cityForZone, loadState, makeCity, saveState } from './js/storage.js';
 import { showTab } from './js/tabs.js';
 import { applyTheme, systemDark, themeEl } from './js/theme.js';
 import { ALL_ZONES, HOUR_MS, LOCAL_ZONE, MINUTE_MS, PHASES, QUARTER_MS, cityName, cityPhase, dayPhase, displayDate, floorToQuarter, formatDiff, formatUtcOffset, isValidZone, minuteOfDay, signedDuration, utcOffsetMinutes } from './js/time.js';
-import { createLocalData, normalizeName } from './js/util.js';
+import { createLocalData, normalizeName, renderKeyed } from './js/util.js';
 import { currentWeather, renderWeatherLine } from './js/weather.js';
 import { setupZone } from './js/zones.js';
 
@@ -82,7 +83,7 @@ function tick(state) {
     const seconds = now.getUTCSeconds();
     const phase = city ? cityPhase(city, now.getTime()) : dayPhase(minutes);
     card.dataset.phase = phase;
-    card.querySelector('.phase').textContent = PHASES[phase].icon;
+    renderKeyed(card.querySelector('.phase'), phase, () => [icon(PHASES[phase].icon)]);
     card.querySelector('.utc').textContent = formatUtcOffset(offset);
     card.querySelector('.time').textContent = now.toLocaleTimeString('ms-MY', {
       timeZone: zone,
@@ -172,7 +173,17 @@ function init() {
   setupWorkSettings(state);
   setupPlannerDay(state);
   setupMapTools(state);
+  placeIcons();
+  document.getElementById('map-legend').open = !window.matchMedia('(max-width: 600px)').matches;
   setupZone(state); // before the reminders, which follow its zone
+  // Columns follow the list's width; a hidden tab reports 0 until shown.
+  new ResizeObserver(() => balanceColumns()).observe(clocksEl);
+  const factsMore = document.getElementById('facts-more');
+  factsMore.addEventListener('click', () => {
+    const open = document.getElementById('facts-list').classList.toggle('expanded');
+    factsMore.setAttribute('aria-expanded', String(open));
+    factsMore.textContent = open ? 'Tunjuk 2 fakta sahaja' : 'Lihat 4 fakta lagi';
+  });
   setupReminders(state);
   document.getElementById('city-dialog').addEventListener('close', () => { state.dialogState = null; });
   shareBannerEl.hidden = !state.shared;

@@ -101,10 +101,10 @@ export function hourLabel(minutes, hour24) {
 
 // Part of the day by the city's own clock; drives the card background and icon.
 export const PHASES = {
-  dawn: { icon: '🌅', name: 'Fajar' },
-  day: { icon: '☀️', name: 'Siang' },
-  dusk: { icon: '🌇', name: 'Senja' },
-  night: { icon: '🌙', name: 'Malam' },
+  dawn: { icon: 'sunrise', name: 'Fajar' }, // icon: a name from js/icons.js
+  day: { icon: 'sun', name: 'Siang' },
+  dusk: { icon: 'sunset', name: 'Senja' },
+  night: { icon: 'moon', name: 'Malam' },
 };
 
 // Fixed hours, for places whose position we do not know (the viewer's own

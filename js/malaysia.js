@@ -1,5 +1,6 @@
 // The Malaysia tab: warnings, earthquakes, weather, prayer times, Ramadan, facts.
 
+import { icon } from './icons.js';
 import { PRAYER_TIMES, WEATHER_API, hijriParts, nextPrayer, prayerFor, retryButton, weatherIcon } from './local-panel.js';
 import { makeCity } from './storage.js';
 import { MINUTE_MS, addDaysIso, cityDate, formatClock, parseMyt } from './time.js';
@@ -59,6 +60,13 @@ export function statusLine(state, entry, key, what) {
   return box;
 }
 
+// "Nothing to report" as a small chip with a tick.
+function allClear(text) {
+  const chip = el('p', 'empty-chip');
+  chip.append(icon('check'), text);
+  return chip;
+}
+
 export function renderMalaysia(state, now) {
   const minute = Math.floor(now.getTime() / MINUTE_MS);
   document.getElementById('my-today').textContent = `${now.toLocaleDateString('ms-MY', {
@@ -72,7 +80,7 @@ export function renderMalaysia(state, now) {
   renderKeyed(document.getElementById('my-warnings'), warnRenderKey, () => {
     const heading = el('h3', '', 'Amaran cuaca');
     if (warnings.status !== 'ok') return [heading, statusLine(state, warnings, warnKey, 'Amaran cuaca')];
-    if (!active.length) return [heading, el('p', 'local-status', 'Tiada amaran cuaca aktif.')];
+    if (!active.length) return [heading, allClear('Tiada amaran cuaca aktif')];
     return [heading, ...active.map((w) => {
       const item = el('article', 'alert');
       const text = w.text_bm || '';
@@ -101,7 +109,7 @@ export function renderMalaysia(state, now) {
     const heading = el('h3', '', 'Gempa bumi terkini');
     if (quakes.status !== 'ok') return [heading, statusLine(state, quakes, quakeKey, 'Data gempa bumi')];
     const list = (Array.isArray(quakes.data) ? quakes.data : []).filter((q) => q.visible !== false).slice(0, 3);
-    if (!list.length) return [heading, el('p', 'local-status', 'Tiada laporan gempa bumi.')];
+    if (!list.length) return [heading, allClear('Tiada laporan gempa bumi')];
     return [heading, ...list.map((q) => {
       const item = el('article', 'alert quake');
       const when = parseMyt(q.localdatetime);
@@ -126,12 +134,14 @@ export function renderMalaysia(state, now) {
     const rows = (Array.isArray(forecasts.entry.data) ? forecasts.entry.data : [])
       .filter((r) => r.date === forecasts.iso)
       .sort((a, b) => (a.location?.location_name ?? '').localeCompare(b.location?.location_name ?? ''));
-    if (!rows.length) return [el('p', 'local-status', 'Tiada ramalan negeri untuk hari ini.')];
+    if (!rows.length) return [el('p', 'empty-chip', 'Tiada ramalan negeri untuk hari ini')];
     return rows.map((r) => {
       const tile = el('article', 'weather-tile');
       const summary = r.summary_forecast || r.afternoon_forecast || '';
+      const symbol = el('span', 'weather-icon');
+      symbol.append(weatherIcon(summary));
       tile.append(
-        el('span', 'weather-icon', weatherIcon(summary)),
+        symbol,
         el('h3', '', r.location?.location_name ?? ''),
         el('p', '', summary),
         el('p', 'weather-temp', `${r.min_temp}–${r.max_temp}°C`),
@@ -196,7 +206,9 @@ export function renderRamadan(state, prayers, now) {
   const statuses = prayers.map((p) => p.entry.status).join('');
   renderKeyed(box, [hijri.day, chosen.s.state, next?.label, statuses, state.hour24].join('|'), () => {
     const head = el('div', 'ramadan-head');
-    head.append(el('p', 'ramadan-day', `🌙 Ramadan hari ke-${hijri.day}, ${hijri.year}H`));
+    const day = el('p', 'ramadan-day');
+    day.append(icon('moon'), ` Ramadan hari ke-${hijri.day}, ${hijri.year}H`);
+    head.append(day);
     const pick = el('label', 'ramadan-pick', 'Negeri ');
     const select = el('select');
     for (const p of prayers) select.append(new Option(`${p.s.state} (${p.s.capital})`, p.s.state));

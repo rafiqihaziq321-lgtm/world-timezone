@@ -1,6 +1,7 @@
 // Qibla direction, the live compass and "nearest town" (the viewer's location).
 
 import { openCityDialog } from './dialog.js';
+import { iconPaths } from './icons.js';
 import { MAP_PLACES, placeName } from './places.js';
 import { MINUTE_MS } from './time.js';
 import { el } from './util.js';
@@ -45,7 +46,7 @@ export function qiblaDial(bearing, size) {
     <text x="50" y="16" class="dial-north">U</text>
     <g transform="rotate(${bearing.toFixed(1)} 50 50)">
       <path d="M50 26 L58 44 L52 41 L52 66 L48 66 L48 41 L42 44 Z" class="dial-needle"/>
-      <text x="50" y="23" class="dial-kaaba">🕋</text>
+      <g class="dial-kaaba" transform="translate(44.5 13.5) scale(0.46)">${iconPaths('kaaba')}</g>
     </g>
   </g>`;
   return svg;
