@@ -2,6 +2,7 @@
 // page is open. Without a server nothing can wake a closed page, so this is
 // a convenience, not a guarantee, and the page says so.
 
+import { icon } from './icons.js';
 import { zoneByCode } from './jakim-zones.js';
 import { PRAYERS, PRAYER_TIMES } from './local-panel.js';
 import { saveState } from './storage.js';
@@ -32,15 +33,19 @@ export function setupReminders(state) {
   }
   const toggle = el('button', 'btn secondary');
   toggle.type = 'button';
-  const note = el('p', 'reminder-note',
-    'Peringatan hanya berfungsi semasa Jam Dunia terbuka; tab di latar belakang boleh lewat sehingga seminit, dan telefon yang tidur mungkin tidak berbunyi. '
-    + 'Untuk peringatan yang dijamin, guna app azan. Di iPhone, pasang Jam Dunia ke skrin utama dahulu.');
+  // One line by default; the limits in full on request.
+  const note = el('details', 'reminder-note');
+  const noteSummary = el('summary');
+  noteSummary.append(icon('info'), 'Hanya berfungsi semasa Jam Dunia terbuka');
+  note.append(noteSummary, el('p', '',
+    'Tab di latar belakang boleh lewat sehingga seminit, dan telefon yang tidur mungkin tidak berbunyi. '
+    + 'Untuk peringatan yang dijamin, guna app azan. Di iPhone, pasang Jam Dunia ke skrin utama dahulu.'));
 
   // Reminders follow the zone chosen above.
   const show = (message = '') => {
     const on = state.reminder && Notification.permission === 'granted';
     const zone = zoneByCode(state.prayerZone);
-    toggle.textContent = on ? '🔕 Matikan peringatan' : '🔔 Ingatkan saya';
+    toggle.replaceChildren(icon(on ? 'bell-off' : 'bell'), on ? 'Matikan peringatan' : 'Ingatkan saya');
     toggle.setAttribute('aria-pressed', String(on));
     toggle.disabled = zone === null;
     status.textContent = message || (zone === null ? 'Pilih zon anda di atas dahulu.'
@@ -67,7 +72,9 @@ export function setupReminders(state) {
   });
   zoneSelectEl.addEventListener('change', () => show());
 
-  box.replaceChildren(el('h3', '', '🔔 Peringatan waktu solat'), toggle, status, note);
+  const heading = el('h3');
+  heading.append(icon('bell'), ' Peringatan waktu solat');
+  box.replaceChildren(heading, toggle, status, note);
   show();
 }
 

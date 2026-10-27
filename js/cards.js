@@ -1,22 +1,25 @@
 // The city cards: creating, ordering and describing them.
 
 import { cityKey } from '../globe.js';
+import { icon } from './icons.js';
 import { isMalaysian } from './local-panel.js';
 import { saveState } from './storage.js';
 import { LOCAL_ZONE, PHASES, cityDate, cityPhase, formatClock, formatUtcOffset, signedDuration, sunTimes, utcOffsetMinutes } from './time.js';
-import { renderKeyed } from './util.js';
+import { el, renderKeyed } from './util.js';
 
 export const clocksEl = document.getElementById('clocks');
-// "🌅 07:05 · 🌇 19:12" by the city's clock; empty without a position.
+// Sunrise 07:05 · sunset 19:12 by the city's clock; empty without a position.
 export function renderSunLine(state, node, city, now) {
   if (city.lat === null || city.lon === null) return;
   const { iso } = cityDate(city.zone, now);
   renderKeyed(node, `${iso}|${state.hour24}`, () => {
     const sun = sunTimes(city, now.getTime());
-    if (sun.polar === 'day') return ['☀️ Matahari tidak terbenam hari ini'];
-    if (sun.polar === 'night') return ['🌙 Matahari tidak terbit hari ini'];
+    if (sun.polar === 'day') return [icon('sun'), ' Matahari tidak terbenam hari ini'];
+    if (sun.polar === 'night') return [icon('moon'), ' Matahari tidak terbit hari ini'];
     const clock = (ms) => formatClock(state, city.zone, ms);
-    return [`🌅 ${clock(sun.rise)} · 🌇 ${clock(sun.set)}`];
+    const rise = el('span', 'visually-hidden', 'Terbit');
+    const set = el('span', 'visually-hidden', 'terbenam');
+    return [icon('sunrise'), rise, ` ${clock(sun.rise)} · `, icon('sunset'), set, ` ${clock(sun.set)}`];
   });
 }
 
@@ -203,6 +206,24 @@ export function renderCards(state) {
     }
     clocksEl.append(card);
   }
+  balanceColumns();
+}
+
+// As many columns as fit, then as few as keep the same number of rows, so the
+// last row is as full as it can be: 4 cards sit 4 across or 2 + 2, never 3 + 1.
+export function balanceColumns() {
+  const count = clocksEl.querySelectorAll('.card').length;
+  const width = clocksEl.clientWidth;
+  if (count === 0 || width === 0) {
+    clocksEl.style.removeProperty('--cols');
+    return;
+  }
+  const style = getComputedStyle(clocksEl);
+  const min = parseFloat(style.getPropertyValue('--card-min'));
+  const gap = parseFloat(style.columnGap) || 0;
+  const fit = Math.max(1, Math.floor((width + gap) / (min + gap)));
+  const rows = Math.ceil(count / fit);
+  clocksEl.style.setProperty('--cols', String(Math.ceil(count / rows)));
 }
 
 // Returns false when the city is already listed.
@@ -237,8 +258,8 @@ export function describeCity(state, city, now) {
     lines: [
       now.toLocaleDateString('ms-MY', { timeZone: zone, weekday: 'long', day: 'numeric', month: 'long' }),
       `${formatUtcOffset(offset)} · ${diff === 0 ? 'sama dengan anda' : `${signedDuration(diff)} dari anda`}`,
-      `${phase.icon} ${phase.name}`,
-      state.cities.some((c) => cityKey(c) === cityKey(city)) ? '✓ Dalam senarai anda' : 'Klik untuk tambah',
+      phase.name,
+      state.cities.some((c) => cityKey(c) === cityKey(city)) ? 'Dalam senarai anda' : 'Klik untuk tambah',
     ],
   };
 }

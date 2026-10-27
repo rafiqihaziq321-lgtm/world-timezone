@@ -1,6 +1,7 @@
 // The prayer, weather, air and qibla panel for a Malaysian city.
 
 import { AIR_BANDS } from './air.js';
+import { icon } from './icons.js';
 import { qiblaSection } from './qibla.js';
 import { MINUTE_MS, addDaysIso, cityDate, formatClock } from './time.js';
 import { el, normalizeName } from './util.js';
@@ -58,7 +59,9 @@ export function prayerSection(state, city, entry, key, now, day) {
   }
   section.append(list);
   if (hijriParts(today).month === 9 && today.imsak && today.maghrib) {
-    section.append(el('p', 'ramadan-line', `🌙 Ramadan: imsak ${fmt(today.imsak)} · berbuka ${fmt(today.maghrib)}`));
+    const line = el('p', 'ramadan-line');
+    line.append(icon('moon'), ` Ramadan: imsak ${fmt(today.imsak)} · berbuka ${fmt(today.maghrib)}`);
+    section.append(line);
   }
   if (next) {
     const label = PRAYER_TIMES.find(([field]) => field === next)[1];
@@ -112,7 +115,9 @@ export function weatherSection(state, city, entry, key, iso) {
     for (const [label, r] of ahead) {
       const summary = r.summary_forecast || r.afternoon_forecast || '';
       const item = el('li');
-      item.append(el('strong', '', label), el('span', 'forecast-icon', weatherIcon(summary)), el('span', '', summary), el('span', 'forecast-temp', `${r.min_temp}–${r.max_temp}°C`));
+      const symbol = el('span', 'forecast-icon');
+      symbol.append(weatherIcon(summary));
+      item.append(el('strong', '', label), symbol, el('span', '', summary), el('span', 'forecast-temp', `${r.min_temp}–${r.max_temp}°C`));
       days.append(item);
     }
     section.append(days);
@@ -252,13 +257,14 @@ export function renderLocalPanel(state, panel, city, now, air = null) {
 
 // ---------- Tabs: Jam dunia / Malaysia / Bandar Malaysia ----------
 
+// The icon for MET Malaysia's wording of a forecast (an SVG element).
 export function weatherIcon(text = '') {
   const t = text.toLowerCase();
-  if (/ribut|petir/.test(t)) return '⛈️';
-  if (/hujan/.test(t) && !/tiada hujan/.test(t)) return '🌧️';
-  if (/jerebu/.test(t)) return '🌫️';
-  if (/mendung|berawan/.test(t)) return '☁️';
-  return '🌤️';
+  if (/ribut|petir/.test(t)) return icon('storm');
+  if (/hujan/.test(t) && !/tiada hujan/.test(t)) return icon('rain');
+  if (/jerebu/.test(t)) return icon('fog');
+  if (/mendung|berawan/.test(t)) return icon('cloud');
+  return icon('sun-cloud');
 }
 
 // JAKIM's Hijri date ("1448-09-05") as numbers.

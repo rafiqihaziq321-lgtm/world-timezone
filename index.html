@@ -35,6 +35,7 @@
   <link rel="modulepreload" href="js/cards.js">
   <link rel="modulepreload" href="js/cities.js">
   <link rel="modulepreload" href="js/dialog.js">
+  <link rel="modulepreload" href="js/icons.js">
   <link rel="modulepreload" href="js/jakim-zones.js">
   <link rel="modulepreload" href="js/local-panel.js">
   <link rel="modulepreload" href="js/malaysia.js">
@@ -76,9 +77,9 @@
           <input type="checkbox" id="format24">
           24 jam
         </label>
-        <button id="install" type="button" class="icon-btn" aria-label="Pasang app" title="Pasang app" hidden>📲</button>
-        <button id="share" type="button" class="icon-btn" aria-label="Kongsi pautan">🔗</button>
-        <button id="theme-toggle" type="button" class="icon-btn">🌙</button>
+        <button id="install" type="button" class="icon-btn" aria-label="Pasang app" title="Pasang app" hidden data-icon="install"></button>
+        <button id="share" type="button" class="icon-btn" aria-label="Kongsi pautan" data-icon="link"></button>
+        <button id="theme-toggle" type="button" class="icon-btn"></button>
       </div>
     </div>
   </header>
@@ -196,7 +197,7 @@
         <h2 id="facts-title">Fakta zon waktu</h2>
         <p>Zon waktu ialah keputusan manusia, bukan hukum alam. Inilah beberapa yang paling pelik.</p>
       </div>
-      <ul class="facts">
+      <ul id="facts-list" class="facts">
         <li>
           <span class="fact-offset">+5:45</span>
           <div>
@@ -240,6 +241,7 @@
           </div>
         </li>
       </ul>
+      <button id="facts-more" type="button" class="btn secondary facts-more" aria-controls="facts-list" aria-expanded="false">Lihat 4 fakta lagi</button>
     </section>
 
     <section id="tentang" class="section" aria-labelledby="about-title">
@@ -249,8 +251,7 @@
       <div class="about">
         <div>
           <h3>Masa dari pelayar anda</h3>
-          <p>Masa setiap bandar dikira oleh pelayar anda menggunakan pangkalan data zon waktu IANA, sama seperti telefon dan komputer anda. Tiada akaun; senarai anda disimpan dalam pelayar ini sahaja. Cuaca semasa pada kad datang daripada Open-Meteo, yang menerima kedudukan bandar dalam senarai anda (bukan lokasi anda), dan dikemas kini setiap 15 minit.</p>
-          <p>Panel Malaysia mengambil data hanya apabila dibuka: waktu solat JAKIM daripada waktusolat.app (kedudukan bandar dihantar untuk mencari zon), ramalan, amaran cuaca dan gempa bumi MET Malaysia daripada data.gov.my, foto landmark daripada Wikipedia serta Wikimedia Commons, anggaran kualiti udara daripada Open-Meteo, serta jubin peta daripada OpenFreeMap dan Amazon Web Services (rupa bumi). Butang Bandar terdekat dan Kompas kiblat meminta lokasi anda hanya apabila ditekan, dan lokasi itu tidak dihantar ke mana-mana. Butang Guna lokasi saya (zon solat) pula menghantar lokasi anda, dibundarkan kepada kira-kira 1 km, ke waktusolat.app untuk mencari zon JAKIM anda.</p>
+          <p>Masa setiap bandar dikira oleh pelayar anda menggunakan pangkalan data zon waktu IANA, sama seperti telefon dan komputer anda. Tiada akaun; senarai anda disimpan dalam pelayar ini sahaja.</p>
         </div>
         <div>
           <h3>Waktu jimat siang</h3>
@@ -261,6 +262,12 @@
           <p>Bayang pada glob dikira daripada titik di Bumi yang matahari berada tepat di atasnya pada saat itu. Kawasan lebih 90° dari titik itu ialah malam, dan jalur di tepinya ialah senja.</p>
         </div>
       </div>
+      <details class="privacy">
+        <summary>Privasi &amp; sumber data</summary>
+        <p>Cuaca semasa pada kad datang daripada Open-Meteo, yang menerima kedudukan bandar dalam senarai anda (bukan lokasi anda), dan dikemas kini setiap 15 minit.</p>
+        <p>Panel Malaysia mengambil data hanya apabila dibuka: waktu solat JAKIM daripada waktusolat.app (kedudukan bandar dihantar untuk mencari zon), ramalan, amaran cuaca dan gempa bumi MET Malaysia daripada data.gov.my, foto landmark daripada Wikipedia serta Wikimedia Commons, anggaran kualiti udara daripada Open-Meteo, serta jubin peta daripada OpenFreeMap dan Amazon Web Services (rupa bumi).</p>
+        <p>Butang Bandar terdekat dan Kompas kiblat meminta lokasi anda hanya apabila ditekan, dan lokasi itu tidak dihantar ke mana-mana. Butang Guna lokasi saya (zon solat) pula menghantar lokasi anda, dibundarkan kepada kira-kira 1 km, ke waktusolat.app untuk mencari zon JAKIM anda.</p>
+      </details>
     </section>
     </div>
 
@@ -281,7 +288,7 @@
           <div class="zone-pick">
             <label for="zone-select">Zon JAKIM</label>
             <select id="zone-select"></select>
-            <button id="zone-locate" type="button" class="secondary">📍 Guna lokasi saya</button>
+            <button id="zone-locate" type="button" class="secondary" data-icon="pin">Guna lokasi saya</button>
           </div>
           <p id="zone-status" class="local-status" role="status"></p>
           <div id="zone-times"></div>
@@ -337,23 +344,26 @@
       <section class="section map-section" aria-labelledby="map-title">
         <div class="section-head">
           <h1 id="map-title" class="tab-title">Peta Malaysia</h1>
-          <p>Ibu negeri setiap negeri dan wilayah persekutuan; zum masuk untuk bandar-bandar besar lain. Seret untuk menggerakkan peta, klik kanan atau dua jari untuk condong dan putar. Pilih penanda untuk waktu solat, cuaca, kualiti udara dan arah kiblat. Negeri yang sedang menerima amaran MET diwarnakan.</p>
+          <p>Ibu negeri dan bandar besar Malaysia (zum masuk untuk lebih banyak). Pilih penanda untuk waktu solat, cuaca, kualiti udara dan arah kiblat; negeri yang menerima amaran MET diwarnakan.<span class="pointer-hint"> Seret untuk menggerakkan peta; klik kanan dan seret untuk condong dan putar.</span></p>
         </div>
         <div class="map-tools">
-          <button id="map-nearest" type="button" class="btn secondary">📍 Bandar terdekat</button>
-          <button id="qibla-open" type="button" class="btn secondary">🧭 Kompas kiblat</button>
+          <button id="map-nearest" type="button" class="btn secondary" data-icon="pin">Bandar terdekat</button>
+          <button id="qibla-open" type="button" class="btn secondary" data-icon="compass">Kompas kiblat</button>
           <p id="map-tools-status" class="local-status" role="status"></p>
         </div>
         <div class="map-frame">
           <div id="my-map" class="my-map"></div>
           <div id="map-warnings" class="map-warnings" role="status" hidden></div>
-          <ul class="map-legend" aria-label="Petunjuk IPU anggaran">
-            <li><span class="aqi-dot aqi-good"></span>Baik</li>
-            <li><span class="aqi-dot aqi-moderate"></span>Sederhana</li>
-            <li><span class="aqi-dot aqi-unhealthy"></span>Tidak sihat</li>
-            <li><span class="aqi-dot aqi-very-unhealthy"></span>Sangat tidak sihat</li>
-            <li><span class="aqi-dot aqi-hazardous"></span>Berbahaya</li>
-          </ul>
+          <details id="map-legend" class="map-legend">
+            <summary>Petunjuk IPU</summary>
+            <ul aria-label="Petunjuk IPU anggaran">
+              <li><span class="aqi-dot aqi-good"></span>Baik</li>
+              <li><span class="aqi-dot aqi-moderate"></span>Sederhana</li>
+              <li><span class="aqi-dot aqi-unhealthy"></span>Tidak sihat</li>
+              <li><span class="aqi-dot aqi-very-unhealthy"></span>Sangat tidak sihat</li>
+              <li><span class="aqi-dot aqi-hazardous"></span>Berbahaya</li>
+            </ul>
+          </details>
         </div>
         <p id="map-status" class="map-status" role="status" hidden></p>
         <p class="map-note">Angka pada penanda ialah <strong>IPU anggaran</strong>: purata PM2.5 dan PM10 24 jam daripada model Copernicus CAMS (melalui Open-Meteo), dengan 100 bersamaan piawai kualiti udara Malaysia. Ia bukan bacaan rasmi Jabatan Alam Sekitar; untuk IPU rasmi, semak <a href="https://eqms.doe.gov.my/" target="_blank" rel="noopener">APIMS</a>.</p>

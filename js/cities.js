@@ -2,6 +2,7 @@
 
 import { stateAirQuality } from './air.js';
 import { openCityDialog } from './dialog.js';
+import { icon } from './icons.js';
 import { PRAYER_TIMES, nextPrayer, prayerFor, renderLocalPanel, weatherIcon } from './local-panel.js';
 import { forecastForState, stateForecasts, townForecasts } from './malaysia.js';
 import { createMalaysiaMap, renderMapMarkers, renderMapWarnings, setMapStatus } from './map.js';
@@ -139,12 +140,16 @@ export function renderCities(state, now) {
       const lines = [];
       if (forecast) {
         const summary = forecast.summary_forecast || forecast.afternoon_forecast || '';
-        lines.push(el('span', '', `${weatherIcon(summary)} ${summary}, ${forecast.min_temp}–${forecast.max_temp}°C`));
+        const line = el('span');
+        line.append(weatherIcon(summary), ` ${summary}, ${forecast.min_temp}–${forecast.max_temp}°C`);
+        lines.push(line);
       }
       const next = nextPrayer(today, now);
       if (next) {
         const label = PRAYER_TIMES.find(([f]) => f === next)[1];
-        lines.push(el('span', '', `🕌 ${label} ${formatClock(state, s.zone, today[next] * 1000)}`));
+        const line = el('span');
+        line.append(icon('mosque'), ` ${label} ${formatClock(state, s.zone, today[next] * 1000)}`);
+        lines.push(line);
       }
       if (estimate) {
         const aqi = el('span', 'city-aqi');
