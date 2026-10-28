@@ -47,6 +47,17 @@ export function renderKeyed(node, key, build) {
   node.replaceChildren(...build());
 }
 
+// "28°C" or "82°F", by the viewer's setting; Celsius in.
+export function formatTemp(state, celsius) {
+  const value = state.tempUnit === 'f' ? Number(celsius) * 9 / 5 + 32 : Number(celsius);
+  return `${String(Math.round(value)).replace('-', '−')}°${state.tempUnit === 'f' ? 'F' : 'C'}`;
+}
+
+// "24–33°C" (MET's daily range).
+export function formatTempRange(state, min, max) {
+  return `${formatTemp(state, min).replace(/°[CF]$/, '')}–${formatTemp(state, max)}`;
+}
+
 // "São Paulo " -> "sao paulo", so searches ignore case and accents.
 export function normalizeName(text) {
   return text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();

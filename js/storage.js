@@ -26,7 +26,8 @@ export function cityForZone(zone) {
 export function defaultState() {
   // theme null = follow the system
   // prayerZone: the viewer's JAKIM zone (null until chosen); reminder: prayer-time notifications for it
-  return { cities: DEFAULT_ZONES.map(cityForZone), hour24: true, theme: null, work: { ...DEFAULT_WORK }, prayerZone: null, reminder: false };
+  // tempUnit: 'c' or 'f', for every temperature shown
+  return { cities: DEFAULT_ZONES.map(cityForZone), hour24: true, theme: null, work: { ...DEFAULT_WORK }, prayerZone: null, reminder: false, tempUnit: 'c' };
 }
 
 export function parseStoredCity(raw) {
@@ -67,6 +68,7 @@ export function loadState() {
     return {
       cities,
       hour24: typeof parsed.hour24 === 'boolean' ? parsed.hour24 : defaults.hour24,
+      tempUnit: parsed.tempUnit === 'f' ? 'f' : defaults.tempUnit,
       theme: ['light', 'dark'].includes(parsed.theme) ? parsed.theme : defaults.theme,
       work: parseStoredWork(parsed.work),
       prayerZone,
@@ -84,7 +86,7 @@ export function saveState(state) {
   const cities = (state.shared ? state.savedCities : state.cities)
     .map(({ name, zone, lat, lon }) => ({ name, zone, lat, lon }));
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ cities, hour24: state.hour24, theme: state.theme, work: state.work, prayerZone: state.prayerZone, reminder: state.reminder }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ cities, hour24: state.hour24, theme: state.theme, work: state.work, prayerZone: state.prayerZone, reminder: state.reminder, tempUnit: state.tempUnit }));
   } catch (err) {
     console.warn('Gagal simpan tetapan; perubahan tidak akan kekal selepas reload.', err);
   }

@@ -6,7 +6,7 @@ import { PRAYER_TIMES, nextPrayer, prayerFor, weatherIcon } from './local-panel.
 import { forecastForState, forecastForTown } from './malaysia.js';
 import { MAP_PLACES, placeName, stateCity } from './places.js';
 import { MINUTE_MS, formatClock } from './time.js';
-import { el, fetchJson, renderKeyed } from './util.js';
+import { el, fetchJson, formatTemp, renderKeyed } from './util.js';
 import { WARNING_LEVELS, activeWarnings, warningArea, warningLevels } from './warnings.js';
 import { MALAYSIA_STATES, MALAYSIA_TOWNS } from '../malaysia-data.js';
 
@@ -234,9 +234,9 @@ export function renderMapMarkers(state, view, now, photos, forecasts, towns, air
     // Capitals only: a town's prayer times are fetched when its dialog opens.
     const today = s.capital ? prayerFor(state, stateCity(s), now).today : null;
     const next = nextPrayer(today, now);
-    renderKeyed(root.querySelector('.marker-meta'), `${forecast?.max_temp}|${next}|${minute}|${state.hour24}`, () => {
+    renderKeyed(root.querySelector('.marker-meta'), `${forecast?.max_temp}|${next}|${minute}|${state.hour24}|${state.tempUnit}`, () => {
       const parts = [];
-      if (forecast) parts.push(`${forecast.max_temp}°C`);
+      if (forecast) parts.push(formatTemp(state, forecast.max_temp));
       if (next) {
         if (parts.length) parts.push(' · ');
         parts.push(icon('mosque'), ` ${PRAYER_TIMES.find(([f]) => f === next)[1]} ${formatClock(state, s.zone, today[next] * 1000)}`);

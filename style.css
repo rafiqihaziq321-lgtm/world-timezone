@@ -47,6 +47,8 @@
   --sleep-fg: #475569;
   --weekend-bg: #ede9fe;
   --weekend-fg: #5b21b6;
+  --holiday-bg: #fce7f3;
+  --holiday-fg: #9d174d;
   --all-work: #16a34a;
   --scroll-shade: rgba(18, 26, 61, 0.2);
   --panel-solid: #fcfdfe; /* --panel over the page, for things that must hide what scrolls under them */
@@ -85,6 +87,8 @@
     --sleep-fg: #94a3b8;
     --weekend-bg: rgba(167, 139, 250, 0.32);
     --weekend-fg: #ddd6fe;
+    --holiday-bg: rgba(244, 114, 182, 0.28);
+    --holiday-fg: #fbcfe8;
     --all-work: #22c55e;
     --scroll-shade: rgba(0, 0, 0, 0.55);
     --panel-solid: #0e1639;
@@ -123,6 +127,8 @@
   --sleep-fg: #94a3b8;
   --weekend-bg: rgba(167, 139, 250, 0.32);
   --weekend-fg: #ddd6fe;
+  --holiday-bg: rgba(244, 114, 182, 0.28);
+  --holiday-fg: #fbcfe8;
   --all-work: #22c55e;
   --scroll-shade: rgba(0, 0, 0, 0.55);
   --panel-solid: #0e1639;
@@ -651,7 +657,45 @@ body.time-shifted #time-label { color: var(--accent-ink); font-weight: 700; }
 
 .card.on-globe { cursor: pointer; }
 body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow); }
-body.time-shifted .card .weather { display: none; } /* it is the weather now, not at the time shown */
+body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the weather now, not at the time shown */
+
+/* The weather line is a button: it opens the next 12 hours under the card. */
+.weather-toggle {
+  display: inline;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-align: left;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.weather-toggle::after { content: ' ▾'; }
+.weather-toggle[aria-expanded="true"]::after { content: ' ▴'; }
+.card .hourly { margin-top: 10px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent); }
+.hourly-list {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 4px;
+  overflow-x: auto;
+  list-style: none;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.hourly-list li { display: flex; flex: 0 0 auto; flex-direction: column; align-items: center; gap: 2px; min-width: 48px; }
+.hourly-list .hourly-time { opacity: 0.8; }
+.hourly-list .hourly-rain { font-size: 0.75rem; opacity: 0.8; }
+.hourly-source { margin: 6px 0 0; font-size: 0.72rem; opacity: 0.75; }
+
+/* °C | °F beside the city search; it applies to every temperature shown. */
+.unit-toggle { display: inline-flex; margin-left: auto; border: 1px solid var(--input-border); border-radius: 999px; overflow: hidden; }
+.unit-toggle button { padding: 6px 12px; border: 0; border-radius: 0; background: transparent; color: var(--muted); font-size: 0.9rem; }
+.unit-toggle button[aria-pressed="true"] { background: var(--accent); color: var(--accent-contrast); }
 
 /* Background follows the time of day in that city. */
 .card[data-phase="dawn"] { background: linear-gradient(160deg, #fda4af, #fdba74 55%, #fde68a); color: #7c2d12; }
@@ -1334,7 +1378,8 @@ dialog { overscroll-behavior: contain; }
 .city-credit { padding: 0 16px 14px; }
 .photo-credit { margin: 6px 0 0; color: var(--muted); font-size: 0.7rem; }
 
-#city-dialog {
+#city-dialog,
+#month-dialog {
   width: min(680px, calc(100vw - 24px));
   max-height: calc(100vh - 24px);
   padding: 0;
@@ -1346,7 +1391,8 @@ dialog { overscroll-behavior: contain; }
   box-shadow: var(--shadow);
 }
 
-#city-dialog::backdrop { background: rgba(2, 6, 23, 0.6); }
+#city-dialog::backdrop,
+#month-dialog::backdrop { background: rgba(2, 6, 23, 0.6); }
 #city-dialog-body { padding: 0 20px 20px; }
 #city-dialog h2 { margin: 16px 0 2px; }
 #city-dialog .local-panel { border-top-color: var(--panel-border); }
@@ -1354,7 +1400,44 @@ dialog { overscroll-behavior: contain; }
 .dialog-photo img, .dialog-photo .photo-missing { display: block; width: 100%; height: auto; max-height: 360px; object-fit: cover; }
 .dialog-photo .photo-credit { padding: 0 20px; }
 
-.dialog-close { position: sticky; top: 0; z-index: 1; height: 0; text-align: right; }
+.dialog-close { position: sticky; top: 0; z-index: 2; height: 0; text-align: right; }
+
+/* A month of prayer times: a table to read or print, and a calendar file. */
+.month-body { padding: 0 20px 20px; }
+.month-body h2 { margin: 16px 48px 2px 0; }
+.month-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+.month-tools .secondary, .month-tools .btn { padding: 8px 16px; font-size: 0.9rem; }
+#month-table tr.today { background: color-mix(in srgb, var(--sun) 22%, transparent); }
+#month-table tr.today > :first-child { background: color-mix(in srgb, var(--sun) 22%, var(--panel-solid)); }
+.month-note { margin: 12px 0 0; font-size: 0.85rem; }
+
+@media print {
+  /* Only the month's table, on white. */
+  body > :not(#month-dialog) { display: none !important; }
+  #month-dialog { position: static; width: auto; max-height: none; overflow: visible; border: 0; box-shadow: none; background: #fff; color: #000; }
+  #month-dialog .dialog-close, .month-tools, .month-note { display: none; }
+  #month-dialog .table-scroll { overflow: visible; border: 0; background: none; }
+  #month-dialog .data-table tr > :first-child { position: static; background: none; }
+  #month-dialog .data-table th, #month-dialog .data-table td { padding: 4px 8px; color: #000; }
+}
+
+.zone-actions { margin-top: 12px; }
+.zone-actions .secondary { padding: 8px 16px; font-size: 0.9rem; }
+.zone-alert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-left: 4px solid var(--sun-ink);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--sun) 14%, transparent);
+  font-size: 0.9rem;
+}
+.zone-alert.level-severe { border-left-color: #ea580c; }
+.zone-alert.level-danger { border-left-color: var(--error); }
+.zone-alert a { margin-left: auto; color: var(--accent-ink); font-weight: 700; }
 .dialog-close button {
   width: 36px;
   height: 36px;
@@ -1448,6 +1531,22 @@ dialog { overscroll-behavior: contain; }
 .planner-pick[hidden] { display: none; }
 .planner-pick-when { flex-basis: 100%; margin: 0; font-weight: 700; }
 .planner-pick .btn { padding: 8px 16px; font-size: 0.9rem; }
+.planner-pick-fields { display: flex; flex-wrap: wrap; flex-basis: 100%; gap: 8px 16px; font-size: 0.9rem; }
+.planner-pick-field { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.planner-pick-field input,
+.planner-pick-field select {
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+}
+.planner-pick-field input { width: min(260px, 60vw); }
+.planner-pick-status:empty { display: none; }
+.planner-pick-status { flex-basis: 100%; font-size: 0.85rem; color: var(--muted); }
+.planner-pick-status input { width: 100%; margin-top: 4px; font: inherit; }
 
 .planner-scroll { overflow-x: auto; }
 
@@ -1500,6 +1599,8 @@ dialog { overscroll-behavior: contain; }
 #planner-table .off { background: var(--off-bg); color: var(--off-fg); }
 #planner-table .sleep { background: var(--sleep-bg); color: var(--sleep-fg); }
 #planner-table .weekend { background: var(--weekend-bg); color: var(--weekend-fg); }
+#planner-table .holiday { background: var(--holiday-bg); color: var(--holiday-fg); }
+#planner-table th[scope="row"] .holiday-name { color: var(--holiday-fg); white-space: normal; max-width: 16ch; }
 
 #planner-table thead .all-work button { background: var(--all-work); color: #fff; font-weight: 700; }
 #planner-table .current { outline: 2px solid var(--accent-ink); outline-offset: -1px; }
@@ -1522,6 +1623,7 @@ dialog { overscroll-behavior: contain; }
 .swatch.off { background: var(--off-bg); }
 .swatch.sleep { background: var(--sleep-bg); }
 .swatch.weekend { background: var(--weekend-bg); }
+.swatch.holiday { background: var(--holiday-bg); }
 
 .work-settings {
   display: flex;
