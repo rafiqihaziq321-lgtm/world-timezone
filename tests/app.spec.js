@@ -329,12 +329,82 @@ test.describe('perancang mesyuarat', () => {
     await expect(page.locator('#planner-table tbody th small').nth(2)).toHaveText('UTC+0');
     await expect(page.locator('#planner-summary')).toHaveText('Tiada jam yang berada dalam waktu kerja untuk semua bandar pada Isnin, 26 Oktober 2026 (ada bandar sedang hujung minggu).'
       + 'Paling sesuai: 15:00–16:00 waktu anda, 2 daripada 3 bandar dalam waktu kerja; London 07:00 (luar waktu kerja).Pilih 15:00');
+    // "Pilih" is redrawn away: focus lands on that hour in the table.
+    await page.getByRole('button', { name: 'Pilih 15:00', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Pilih 15:00 waktu anda' })).toBeFocused();
     await page.getByRole('button', { name: 'Hari sebelumnya' }).click();
     await expect(date).toHaveValue('2026-10-25');
 
     await page.getByRole('button', { name: 'Hari ini' }).click();
     await expect(date).toHaveValue('2026-10-14');
     await expect(page.locator('#planner-table td.current')).toHaveCount(3);
+    // Yesterday has no "now" column either.
+    await page.getByRole('button', { name: 'Hari sebelumnya' }).click();
+    await expect(date).toHaveValue('2026-10-13');
+    await expect(page.locator('#planner-table td.current')).toHaveCount(0);
+
+    // With the clocks a day ahead the planner follows them, but "Hari ini" is the real today.
+    await page.getByRole('button', { name: 'Hari ini' }).click();
+    await page.locator('#time-slider').fill('96');
+    await expect(date).toHaveValue('2026-10-15');
+    await page.getByRole('button', { name: 'Hari ini' }).click();
+    await expect(date).toHaveValue('2026-10-14');
+  });
+
+  test('pilih jam dengan papan kekunci: fokus kekal pada jam itu selepas jadual dilukis semula', async ({ page }) => {
+    await openApp(page, { zones: ['Asia/Kuala_Lumpur', 'Asia/Tokyo'], hour24: true });
+    const hour = page.getByRole('button', { name: 'Pilih 10:00 waktu anda' });
+    await hour.focus();
+    await page.keyboard.press('Enter');
+    await expect(hour).toHaveAttribute('aria-pressed', 'true');
+    await expect(hour).toBeFocused();
+    await page.keyboard.press('Enter'); // again lets it go
+    await expect(hour).toHaveAttribute('aria-pressed', 'false');
+    await expect(hour).toBeFocused();
+  });
+
+  test('lihat masa pada hari yang jauh: penukar menyatakan ia di luar julatnya', async ({ page }) => {
+    await openApp(page, { zones: ['Asia/Kuala_Lumpur', 'Asia/Tokyo'], hour24: true });
+    const slider = page.locator('#time-slider');
+    await page.click('#planner-table thead button[aria-label="Pilih 15:00 waktu anda"]');
+    await page.getByRole('button', { name: 'Lihat masa ini' }).click();
+    await expect(page.locator('#time-label')).toHaveText('+9j dari sekarang · Rab, 14 Okt, 15:00 waktu anda'); // within reach
+    await expect(slider).not.toHaveClass(/beyond/);
+
+    for (let i = 0; i < 3; i += 1) await page.getByRole('button', { name: 'Hari berikutnya' }).click();
+    await page.click('#planner-table thead button[aria-label="Pilih 15:00 waktu anda"]');
+    await page.getByRole('button', { name: 'Lihat masa ini' }).click();
+    await expect(page.locator('#time-label')).toContainText('(di luar julat penukar ±24 jam)');
+    await expect(slider).toHaveClass(/beyond/);
+    await expect(slider).toHaveValue('96'); // resting at its end
+
+    await page.getByRole('button', { name: 'Kembali ke sekarang' }).click();
+    await expect(page.locator('#time-label')).toHaveText('Sekarang');
+    await expect(slider).not.toHaveClass(/beyond/);
+  });
+
+  test('jam "semua dalam waktu kerja": kontras sekurang-kurangnya 4.5:1 dalam mod cerah dan gelap', async ({ page }) => {
+    await openApp(page, { zones: ['Asia/Kuala_Lumpur', 'Asia/Singapore'], hour24: true });
+    const buttons = page.locator('#planner-table thead th.all-work button');
+    await expect(buttons).toHaveCount(8); // 09:00–17:00
+    // axe leaves these out (a pseudo-element hides their background), so the
+    // WCAG ratio is worked out here from the colours as drawn.
+    const ratio = () => buttons.first().evaluate((b) => {
+      const luminance = (rgb) => {
+        const [r, g, bl] = rgb.match(/\d+/g).slice(0, 3).map((v) => {
+          const c = Number(v) / 255;
+          return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+      };
+      const style = getComputedStyle(b);
+      const [hi, lo] = [luminance(style.color), luminance(style.backgroundColor)].sort((x, y) => y - x);
+      return (hi + 0.05) / (lo + 0.05);
+    });
+    for (const scheme of ['light', 'dark']) {
+      await page.emulateMedia({ colorScheme: scheme });
+      expect(await ratio(), scheme).toBeGreaterThanOrEqual(4.5); // small bold text
+    }
   });
 
   test('jam yang dipilih boleh disimpan ke kalendar (.ics dan Google Calendar)', async ({ page }) => {
@@ -659,6 +729,11 @@ test.describe('cuaca semasa pada kad', () => {
     expect(hourlyCalls[0].searchParams.get('latitude')).toBe('51.51');
     await expect(london).toHaveAttribute('data-phase', /.+/); // the click did not spin the globe away
     await expect(byName(page, 'Tromsø').locator('.hourly')).toBeHidden();
+    await london.getByRole('button', { name: /12°C Mendung/ }).click(); // closes again
+    await expect(london.locator('.hourly')).toBeHidden();
+    await expect(london.getByRole('button', { name: /12°C Mendung/ })).toHaveAttribute('aria-expanded', 'false');
+    await london.getByRole('button', { name: /12°C Mendung/ }).click();
+    await expect(hours).toHaveCount(12);
 
     await page.getByRole('group', { name: 'Unit suhu' }).getByRole('button', { name: '°F' }).click();
     await expect(london.locator('.weather')).toHaveText('53°F Mendung, ramalan 12 jam');
@@ -1867,6 +1942,22 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       expect(await shown(page)).toHaveLength(2);
     });
 
+    test('peringatan ikut waktu zon yang dipilih, bukan zon lain', async ({ page }) => {
+      await fakeNotifications(page, { permission: 'granted' });
+      await mockAll(page);
+      // Johor's Zohor is at 13:00, ten minutes before Kuala Lumpur's.
+      await page.route('https://api.waktusolat.app/v2/solat/JHR01**', (route) => route.fulfill({
+        json: { ...prayerMonth, zone: 'JHR01', prayers: prayerMonth.prayers.map((p) => ({ ...p, dhuhr: p.dhuhr - 600 })) },
+        headers: { 'Access-Control-Allow-Origin': '*' },
+      }));
+      await openApp(page, undefined, '#malaysia');
+      await page.getByLabel('Zon JAKIM').selectOption('JHR01');
+      await page.locator('#prayer-reminder').getByRole('button', { name: 'Ingatkan saya' }).click();
+      await page.clock.fastForward('07:00:23'); // to 13:00:30
+      await page.clock.runFor(1100);
+      expect((await shown(page)).map((n) => n.title)).toEqual(['Waktu Zohor (JHR01)']);
+    });
+
     test('kosongkan zon mematikan peringatan', async ({ page }) => {
       await fakeNotifications(page, { permission: 'granted' });
       await mockAll(page);
@@ -1956,14 +2047,17 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     });
 
     test('amaran MET untuk negeri zon dipaparkan dalam kad zon', async ({ page }) => {
-      await mockAll(page);
+      const kl = { warning_issue: { issued: '2026-10-14T05:00:00', title_bm: 'Amaran Ribut Petir (Waspada)' }, valid_from: '2026-10-14T05:00:00', valid_to: '2026-10-15T00:00:00', text_bm: 'Ribut petir dijangka di Kuala Lumpur.' };
+      await mockAll(page, { warningRows: [...warnings, kl] });
       await openApp(page, { zones: ['Asia/Kuala_Lumpur'], hour24: true, prayerZone: 'SGR01' }, '#malaysia');
       const alerts = page.locator('#zone-alerts .zone-alert');
       await expect(alerts).toHaveCount(1); // the Selangor warning
       await expect(alerts).toContainText('Amaran Hujan Lebat (Waspada)');
       await expect(alerts.getByRole('link', { name: 'Baca amaran' })).toHaveAttribute('href', '#my-alerts-title');
       await expect(alerts.locator('svg')).toHaveAttribute('data-glyph', 'warning');
-      await page.getByLabel('Zon JAKIM').selectOption('WLY01'); // Kuala Lumpur: none in force
+      await page.getByLabel('Zon JAKIM').selectOption('WLY01'); // MET names it Kuala Lumpur, not the zone's state
+      await expect(alerts).toHaveText(['Amaran Ribut Petir (Waspada)Baca amaran']);
+      await page.getByLabel('Zon JAKIM').selectOption('WLY02'); // Labuan: none in force
       await expect(alerts).toHaveCount(0);
     });
 
@@ -2086,7 +2180,11 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
             await page.locator('.card .weather-toggle').first().click(); // the hours strip, open
             await expect(page.locator('.card .hourly:not([hidden])')).toHaveCount(1);
           }
-          if (hash === '#malaysia') await expect(page.locator('#zone-times li')).toHaveCount(6);
+          if (hash === '#malaysia') {
+            await expect(page.locator('#zone-times li')).toHaveCount(6);
+            // Tables that scroll sideways can be reached and scrolled from the keyboard.
+            await expect(page.locator('.table-scroll:has(#my-prayers)')).toHaveAttribute('tabindex', '0');
+          }
           expect(await audit(page), hash).toEqual([]);
           if (hash === '#malaysia') {
             await page.getByRole('button', { name: 'Jadual sebulan' }).click();

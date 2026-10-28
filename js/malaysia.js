@@ -245,6 +245,10 @@ export function renderRamadan(state, prayers, now) {
       }
     }
     const scroll = el('div', 'table-scroll');
+    // Focusable so it scrolls from the keyboard (Safari does not focus scrollers by itself).
+    scroll.tabIndex = 0;
+    scroll.setAttribute('role', 'region');
+    scroll.setAttribute('aria-label', 'Jadual imsak dan berbuka');
     scroll.append(table);
     return [head, count, scroll];
   });

@@ -118,13 +118,19 @@ function setViewTime(state, ms) {
   if (shifted) {
     const offsetMin = Math.round((ms - floorToQuarter(Date.now())) / MINUTE_MS);
     timeSliderEl.value = String(Math.round(offsetMin / 15));
+    // A time from the planner can lie past the slider's ±24 hours: its thumb
+    // then rests at an end, so say so rather than let it pass for that hour.
+    const beyond = Math.abs(offsetMin / 15) > Number(timeSliderEl.max);
+    timeSliderEl.classList.toggle('beyond', beyond);
     const when = new Date(ms).toLocaleString('ms-MY', {
       weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
       hourCycle: state.hour24 ? 'h23' : 'h12',
     });
-    timeLabelEl.textContent = `${offsetMin === 0 ? 'Sekarang' : `${signedDuration(offsetMin)} dari sekarang`} · ${when} waktu anda`;
+    timeLabelEl.textContent = `${offsetMin === 0 ? 'Sekarang' : `${signedDuration(offsetMin)} dari sekarang`} · ${when} waktu anda${
+      beyond ? ' (di luar julat penukar ±24 jam)' : ''}`;
   } else {
     timeSliderEl.value = '0';
+    timeSliderEl.classList.remove('beyond');
     timeLabelEl.textContent = 'Sekarang';
   }
   tick(state);
