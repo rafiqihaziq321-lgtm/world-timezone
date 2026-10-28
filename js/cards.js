@@ -58,6 +58,7 @@ export function createCard(state, city) {
         <circle class="pin" cx="50" cy="50" r="3"/>
       </svg>
     </div>
+    <div class="hourly" hidden></div>
     <button class="remove" type="button"></button>`;
   card.querySelector('.city').textContent = city.name;
   setupReorder(state, card, city);

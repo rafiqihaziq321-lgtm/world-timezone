@@ -1,10 +1,12 @@
 // The meeting planner and its working-hours settings.
 
 import { cityKey } from '../globe.js';
-import { googleCalendarUrl, icsEvent } from './calendar.js';
+import { downloadIcs, googleCalendarUrl, icsEvent } from './calendar.js';
+import { holidaysFor, holidaysLoaded } from './holidays.js';
 import { icon } from './icons.js';
+import { copyShareLink } from './share.js';
 import { saveState } from './storage.js';
-import { HOUR_MS, LOCAL_ZONE, formatClock, formatUtcOffset, hourLabel, minuteOfDay, minuteText, utcOffsetMinutes, weekdayOf } from './time.js';
+import { HOUR_MS, LOCAL_ZONE, MINUTE_MS, cityDate, formatClock, formatUtcOffset, hourLabel, minuteOfDay, minuteText, utcOffsetMinutes, weekdayOf } from './time.js';
 import { el, renderKeyed } from './util.js';
 
 export const plannerSummaryEl = document.getElementById('planner-summary');
@@ -51,7 +53,7 @@ export function renderPlanner(state, now) {
   const currentSlot = day === isoDay(now.getTime()) ? Math.min(23, Math.floor((now.getTime() - dayStart) / HOUR_MS)) : -1;
   if (document.activeElement !== plannerDateEl) plannerDateEl.value = day;
   renderPick(state);
-  const key = JSON.stringify([state.cities.map(cityKey), dayStart, currentSlot, state.hour24, state.work, state.plannerPick]);
+  const key = JSON.stringify([state.cities.map(cityKey), dayStart, currentSlot, state.hour24, state.work, state.plannerPick, state.plannerDuration, holidaysLoaded(state)]);
   if (plannerTableEl.dataset.key === key) {
     revealHours(state, day, dayStart, currentSlot);
     return;
@@ -65,8 +67,17 @@ export function renderPlanner(state, now) {
   }
 
   const slots = Array.from({ length: 24 }, (_, i) => dayStart + i * HOUR_MS);
-  const categories = state.cities.map(({ zone }) => slots.map((ms) => (
-    slotCategory(minuteOfDay(zone, ms), state.work, state.work.weekend.includes(weekdayOf(zone, ms))))));
+  // The hours the chosen meeting overlaps: a 30-minute one still marks its
+  // hour, and one from a link made in a half-hour zone (India) its two.
+  const picked = (ms) => state.plannerPick !== null && ms + HOUR_MS > state.plannerPick && ms < state.plannerPick + state.plannerDuration * MINUTE_MS;
+  // A Malaysian public holiday reads like a weekend, in a colour of its own
+  // (a holiday on a weekend stays a weekend).
+  const categories = state.cities.map((city) => slots.map((ms) => {
+    const weekend = state.work.weekend.includes(weekdayOf(city.zone, ms));
+    const holiday = holidaysFor(state, city, cityDate(city.zone, new Date(ms)).iso).length > 0;
+    const category = slotCategory(minuteOfDay(city.zone, ms), state.work, weekend || holiday);
+    return category === 'weekend' && holiday && !weekend ? 'holiday' : category;
+  }));
   const allWork = slots.map((_, i) => categories.every((row) => row[i] === 'work'));
 
   const head = plannerTableEl.createTHead().insertRow();
@@ -76,7 +87,7 @@ export function renderPlanner(state, now) {
   head.append(corner);
   slots.forEach((ms, i) => {
     const th = document.createElement('th');
-    th.className = [allWork[i] && 'all-work', i === currentSlot && 'current', ms === state.plannerPick && 'picked'].filter(Boolean).join(' ');
+    th.className = [allWork[i] && 'all-work', i === currentSlot && 'current', picked(ms) && 'picked'].filter(Boolean).join(' ');
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.dataset.slot = ms;
@@ -90,7 +101,8 @@ export function renderPlanner(state, now) {
   });
 
   const body = plannerTableEl.createTBody();
-  state.cities.forEach(({ name, zone }, r) => {
+  state.cities.forEach((city, r) => {
+    const { name, zone } = city;
     const row = body.insertRow();
     const th = document.createElement('th');
     th.scope = 'row';
@@ -98,10 +110,12 @@ export function renderPlanner(state, now) {
     const utc = document.createElement('small');
     utc.textContent = formatUtcOffset(utcOffsetMinutes(zone, new Date(dayStart + 12 * HOUR_MS))); // that day's offset (DST)
     th.append(utc);
+    const holidays = holidaysFor(state, city, cityDate(zone, new Date(dayStart + 12 * HOUR_MS)).iso);
+    if (holidays.length) th.append(el('small', 'holiday-name', `Cuti: ${holidays.join(', ')}`));
     row.append(th);
     slots.forEach((ms, i) => {
       const td = row.insertCell();
-      td.className = [categories[r][i], i === currentSlot && 'current', ms === state.plannerPick && 'picked'].filter(Boolean).join(' ');
+      td.className = [categories[r][i], i === currentSlot && 'current', picked(ms) && 'picked'].filter(Boolean).join(' ');
       td.dataset.slot = ms;
       td.textContent = hourLabel(minuteOfDay(zone, ms), state.hour24);
     });
@@ -121,13 +135,22 @@ export function renderPlanner(state, now) {
     plannerSummaryEl.textContent = `Waktu sesuai untuk semua (waktu anda): ${ranges.map((g) => `${fmt(slots[g.start])}–${fmt(dayStart + g.end * HOUR_MS)}`).join(', ')}`;
   } else {
     plannerSummaryEl.replaceChildren(`Tiada jam yang berada dalam waktu kerja untuk semua bandar pada ${day === isoDay(Date.now()) ? 'hari ini' : dayName(dayStart)}${
-      categories.some((row) => row.includes('weekend')) ? ' (ada bandar sedang hujung minggu)' : ''}.`, ...bestHour(state, slots, categories, fmt));
+      offReason(categories)}.`, ...bestHour(state, slots, categories, fmt));
   }
   revealHours(state, day, dayStart, currentSlot);
   updateScrollHint(); // the table may have grown or shrunk
 }
 
-const NOT_WORK = { off: 'luar waktu kerja', sleep: 'waktu tidur', weekend: 'hujung minggu' };
+const NOT_WORK = { off: 'luar waktu kerja', sleep: 'waktu tidur', weekend: 'hujung minggu', holiday: 'cuti umum' };
+
+// Why some cities have no working hours that day, if a weekend or holiday is why.
+function offReason(categories) {
+  const has = (category) => categories.some((row) => row.includes(category));
+  if (has('weekend') && has('holiday')) return ' (ada bandar sedang hujung minggu atau cuti umum)';
+  if (has('weekend')) return ' (ada bandar sedang hujung minggu)';
+  if (has('holiday')) return ' (ada bandar sedang cuti umum)';
+  return '';
+}
 
 // With no hour that suits everyone, the closest: most cities at work, then
 // fewest asleep, earliest first. Nothing is offered when nobody is at work.
@@ -230,13 +253,23 @@ export function setupWorkSettings(state) {
 // description, so invitees see their own.
 function meeting(state) {
   const start = state.plannerPick;
-  const end = start + HOUR_MS;
+  const end = start + state.plannerDuration * MINUTE_MS;
   const lines = state.cities.map(({ name, zone }) => {
     const fmt = (ms) => new Date(ms).toLocaleTimeString('ms-MY', { timeZone: zone, hour: '2-digit', minute: '2-digit', hourCycle: state.hour24 ? 'h23' : 'h12' });
     const weekday = new Date(start).toLocaleDateString('ms-MY', { timeZone: zone, weekday: 'long' });
     return `${name}: ${fmt(start)}–${fmt(end)} (${weekday})`;
   });
-  return { start, end, title: 'Mesyuarat', description: `${lines.join('\n')}\n\nDirancang dengan Jam Dunia`, now: Date.now() };
+  return { start, end, title: state.plannerTitle.trim() || 'Mesyuarat', description: `${lines.join('\n')}\n\nDirancang dengan Jam Dunia`, now: Date.now() };
+}
+
+export const MEETING_LENGTHS = [[30, '30 minit'], [60, '1 jam'], [90, '1 jam 30 minit'], [120, '2 jam'], [180, '3 jam']];
+
+// A meeting from a shared link: its day, hour, length and title.
+export function showMeeting(state, { start, duration, title }) {
+  state.plannerDay = isoDay(start);
+  state.plannerPick = start;
+  state.plannerDuration = duration;
+  state.plannerTitle = title;
 }
 
 function renderPick(state) {
@@ -244,28 +277,62 @@ function renderPick(state) {
   plannerPickEl.hidden = state.plannerPick === null || state.cities.length === 0;
   renderKeyed(plannerPickEl, key, () => {
     if (plannerPickEl.hidden) return [];
-    const event = meeting(state);
     const fmt = (ms) => new Date(ms).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit', hourCycle: state.hour24 ? 'h23' : 'h12' });
+    const when = el('p', 'planner-pick-when');
+    const title = el('input');
+    title.name = 'tajuk';
+    title.value = state.plannerTitle;
+    title.maxLength = 120;
+    title.autocomplete = 'off';
+    const titleLabel = el('label', 'planner-pick-field', 'Tajuk ');
+    titleLabel.append(title);
+    const length = el('select');
+    length.name = 'tempoh';
+    for (const [minutes, label] of MEETING_LENGTHS) length.append(new Option(label, String(minutes)));
+    length.value = String(state.plannerDuration);
+    const lengthLabel = el('label', 'planner-pick-field', 'Tempoh ');
+    lengthLabel.append(length);
     const ics = el('button', 'btn');
     ics.append(icon('calendar'), 'Muat turun fail kalendar (.ics)');
     ics.type = 'button';
     ics.addEventListener('click', () => {
-      const url = URL.createObjectURL(new Blob([icsEvent(meeting(state))], { type: 'text/calendar;charset=utf-8' }));
-      const link = el('a');
-      link.href = url;
-      link.download = `mesyuarat-${isoDay(event.start)}-${pad(new Date(event.start).getHours())}${pad(new Date(event.start).getMinutes())}.ics`;
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const event = meeting(state);
+      const start = new Date(event.start);
+      downloadIcs(`mesyuarat-${isoDay(event.start)}-${pad(start.getHours())}${pad(start.getMinutes())}.ics`, icsEvent(event));
     });
+    const google = el('a', 'btn secondary', 'Buka di Google Calendar');
+    google.target = '_blank';
+    google.rel = 'noopener';
     const view = el('button', 'btn secondary');
     view.append(icon('clock'), 'Lihat masa ini');
     view.type = 'button';
-    view.dataset.viewTime = String(event.start); // handled in app.js, which owns the time slider
-    const google = el('a', 'btn secondary', 'Buka di Google Calendar');
-    google.href = googleCalendarUrl(event);
-    google.target = '_blank';
-    google.rel = 'noopener';
-    return [el('p', 'planner-pick-when', `Dipilih: ${dayName(event.start)}, ${fmt(event.start)}–${fmt(event.end)} waktu anda`), ics, google, view];
+    view.dataset.viewTime = String(state.plannerPick); // handled in app.js, which owns the time slider
+    const status = el('span', 'planner-pick-status');
+    status.setAttribute('role', 'status');
+    const share = el('button', 'btn secondary');
+    share.append(icon('link'), 'Salin pautan mesyuarat');
+    share.type = 'button';
+    share.addEventListener('click', () => copyShareLink(state, status));
+    // The bar is built once per chosen hour; the title and length update it
+    // in place, so the field being typed in keeps its focus.
+    const update = () => {
+      const event = meeting(state);
+      when.textContent = `Dipilih: ${dayName(event.start)}, ${fmt(event.start)}–${fmt(event.end)} waktu anda`;
+      google.href = googleCalendarUrl(event);
+    };
+    title.addEventListener('input', () => {
+      state.plannerTitle = title.value;
+      update();
+    });
+    length.addEventListener('change', () => {
+      state.plannerDuration = Number(length.value);
+      update();
+      state.refresh(); // the table marks the hours it now covers
+    });
+    update();
+    const fields = el('div', 'planner-pick-fields');
+    fields.append(titleLabel, lengthLabel);
+    return [when, fields, ics, google, view, share, status];
   });
 }
 
@@ -288,5 +355,13 @@ export function setupPlannerDay(state) {
   document.getElementById('planner-next').addEventListener('click', () => shift(1));
   document.getElementById('planner-today').addEventListener('click', () => go(null));
   plannerScrollEl.addEventListener('scroll', updateScrollHint, { passive: true });
+  // Malaysian holidays are fetched once the planner is about to be seen.
+  const seen = new IntersectionObserver((entries) => {
+    if (!entries.some((e) => e.isIntersecting)) return;
+    seen.disconnect();
+    state.holidaysWanted = true;
+    state.refresh();
+  }, { rootMargin: '300px' });
+  seen.observe(plannerTableEl);
   window.addEventListener('resize', updateScrollHint);
 }

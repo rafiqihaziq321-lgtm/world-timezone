@@ -8,7 +8,7 @@ import { forecastForState, stateForecasts, townForecasts } from './malaysia.js';
 import { createMalaysiaMap, renderMapMarkers, renderMapWarnings, setMapStatus } from './map.js';
 import { stateCity } from './places.js';
 import { MINUTE_MS, formatClock } from './time.js';
-import { el, fetchJson, renderKeyed } from './util.js';
+import { el, fetchJson, formatTempRange, renderKeyed } from './util.js';
 import { MALAYSIA_STATES } from '../malaysia-data.js';
 
 export const WIKI_API = 'https://en.wikipedia.org/w/api.php';
@@ -136,12 +136,12 @@ export function renderCities(state, now) {
     const forecast = forecasts.entry.status === 'ok' && Array.isArray(forecasts.entry.data)
       ? forecastForState(forecasts.entry.data, s.state, forecasts.iso) : null;
     const { estimate } = air.forState(s);
-    renderKeyed(card.querySelector('.city-now'), `${entry.status}|${forecasts.entry.status}|${estimate?.index}|${minute}|${state.hour24}`, () => {
+    renderKeyed(card.querySelector('.city-now'), `${entry.status}|${forecasts.entry.status}|${estimate?.index}|${minute}|${state.hour24}|${state.tempUnit}`, () => {
       const lines = [];
       if (forecast) {
         const summary = forecast.summary_forecast || forecast.afternoon_forecast || '';
         const line = el('span');
-        line.append(weatherIcon(summary), ` ${summary}, ${forecast.min_temp}–${forecast.max_temp}°C`);
+        line.append(weatherIcon(summary), ` ${summary}, ${formatTempRange(state, forecast.min_temp, forecast.max_temp)}`);
         lines.push(line);
       }
       const next = nextPrayer(today, now);

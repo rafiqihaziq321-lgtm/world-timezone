@@ -1,5 +1,5 @@
-// A planned meeting as a calendar event: an .ics file (Apple, Outlook,
-// Google) or a Google Calendar link. Times are written in UTC.
+// Calendar events: an .ics file (Apple, Outlook, Google) or a Google Calendar
+// link, for a planned meeting or a month of prayer times. Times are in UTC.
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -35,24 +35,39 @@ function fold(line) {
   return parts.join('\r\n ');
 }
 
-export function icsEvent({ start, end, title, description, now }) {
-  const lines = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//Jam Dunia//MS',
-    'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
-    'BEGIN:VEVENT',
-    `UID:${utcStamp(start)}-${utcStamp(now)}@jam-dunia`,
-    `DTSTAMP:${utcStamp(now)}`,
-    `DTSTART:${utcStamp(start)}`,
-    `DTEND:${utcStamp(end)}`,
-    `SUMMARY:${icsText(title)}`,
-    `DESCRIPTION:${icsText(description)}`,
-    'END:VEVENT',
-    'END:VCALENDAR',
-  ];
+// One calendar of events, each { uid, start, end, title, description } and,
+// with `alarm`, a reminder that goes off at the start.
+export function icsCalendar(events, now) {
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Jam Dunia//MS', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+  for (const e of events) {
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:${e.uid}`,
+      `DTSTAMP:${utcStamp(now)}`,
+      `DTSTART:${utcStamp(e.start)}`,
+      `DTEND:${utcStamp(e.end)}`,
+      `SUMMARY:${icsText(e.title)}`,
+      `DESCRIPTION:${icsText(e.description)}`,
+    );
+    if (e.alarm) lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsText(e.title)}`, 'TRIGGER:PT0S', 'END:VALARM');
+    lines.push('END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
   return `${lines.map(fold).join('\r\n')}\r\n`;
+}
+
+export function icsEvent({ start, end, title, description, now }) {
+  return icsCalendar([{ uid: `${utcStamp(start)}-${utcStamp(now)}@jam-dunia`, start, end, title, description }], now);
+}
+
+// Saves an .ics file through the browser's download.
+export function downloadIcs(filename, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/calendar;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function googleCalendarUrl({ start, end, title, description }) {

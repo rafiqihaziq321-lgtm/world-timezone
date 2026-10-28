@@ -4,7 +4,7 @@ import { AIR_BANDS } from './air.js';
 import { icon } from './icons.js';
 import { qiblaSection } from './qibla.js';
 import { MINUTE_MS, addDaysIso, cityDate, formatClock } from './time.js';
-import { el, normalizeName } from './util.js';
+import { el, formatTempRange, normalizeName } from './util.js';
 
 export const MALAYSIA_ZONES = ['Asia/Kuala_Lumpur', 'Asia/Kuching'];
 export const PRAYER_API = 'https://api.waktusolat.app/v2/solat/gps'; // JAKIM times; zone found from GPS
@@ -100,7 +100,7 @@ export function weatherSection(state, city, entry, key, iso) {
     section.append(el('p', 'local-status', 'Tiada ramalan untuk tarikh ini.'));
     return section;
   }
-  heading.append(' ', el('small', '', `${record.min_temp}–${record.max_temp}°C`));
+  heading.append(' ', el('small', '', formatTempRange(state, record.min_temp, record.max_temp)));
   const list = el('dl', 'forecast');
   for (const [label, text] of [['Pagi', record.morning_forecast], ['Petang', record.afternoon_forecast], ['Malam', record.night_forecast]]) {
     list.append(el('dt', '', label), el('dd', '', text ?? '—'));
@@ -117,7 +117,7 @@ export function weatherSection(state, city, entry, key, iso) {
       const item = el('li');
       const symbol = el('span', 'forecast-icon');
       symbol.append(weatherIcon(summary));
-      item.append(el('strong', '', label), symbol, el('span', '', summary), el('span', 'forecast-temp', `${r.min_temp}–${r.max_temp}°C`));
+      item.append(el('strong', '', label), symbol, el('span', '', summary), el('span', 'forecast-temp', formatTempRange(state, r.min_temp, r.max_temp)));
       days.append(item);
     }
     section.append(days);
@@ -242,7 +242,7 @@ export function renderLocalPanel(state, panel, city, now, air = null) {
   const { key: prayerKey, entry: prayer, day } = prayerFor(state, city, now);
   const weatherKey = `cuaca|${city.name}`;
   const weather = state.localData.get(weatherKey, `${WEATHER_API}?contains=${encodeURIComponent(city.name)}@location__location_name&limit=50`);
-  const renderKey = [prayerKey, prayer?.status, weather.status, air?.key, air?.entry.status, Math.floor(now.getTime() / MINUTE_MS), state.hour24].join('|');
+  const renderKey = [prayerKey, prayer?.status, weather.status, air?.key, air?.entry.status, Math.floor(now.getTime() / MINUTE_MS), state.hour24, state.tempUnit].join('|');
   if (panel.dataset.key === renderKey) return;
   panel.dataset.key = renderKey;
   panel.replaceChildren(

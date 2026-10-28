@@ -4,7 +4,7 @@ import { icon } from './icons.js';
 import { PRAYER_TIMES, WEATHER_API, hijriParts, nextPrayer, prayerFor, retryButton, weatherIcon } from './local-panel.js';
 import { makeCity } from './storage.js';
 import { MINUTE_MS, addDaysIso, cityDate, formatClock, parseMyt } from './time.js';
-import { el, normalizeName, renderKeyed } from './util.js';
+import { el, formatTempRange, normalizeName, renderKeyed } from './util.js';
 import { activeWarnings, warningSummary } from './warnings.js';
 import { renderZone } from './zones.js';
 import { MALAYSIA_STATES, MALAYSIA_TOTAL } from '../malaysia-data.js';
@@ -129,7 +129,7 @@ export function renderMalaysia(state, now) {
 
   // Every state's forecast for today.
   const forecasts = stateForecasts(state, now);
-  renderKeyed(document.getElementById('my-weather'), `${forecasts.key}|${forecasts.entry.status}`, () => {
+  renderKeyed(document.getElementById('my-weather'), `${forecasts.key}|${forecasts.entry.status}|${state.tempUnit}`, () => {
     if (forecasts.entry.status !== 'ok') return [statusLine(state, forecasts.entry, forecasts.key, 'Ramalan cuaca')];
     const rows = (Array.isArray(forecasts.entry.data) ? forecasts.entry.data : [])
       .filter((r) => r.date === forecasts.iso)
@@ -144,7 +144,7 @@ export function renderMalaysia(state, now) {
         symbol,
         el('h3', '', r.location?.location_name ?? ''),
         el('p', '', summary),
-        el('p', 'weather-temp', `${r.min_temp}–${r.max_temp}°C`),
+        el('p', 'weather-temp', formatTempRange(state, r.min_temp, r.max_temp)),
       );
       return tile;
     });

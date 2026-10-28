@@ -7,7 +7,7 @@ import { renderCities } from './js/cities.js';
 import { icon, placeIcons } from './js/icons.js';
 import { renderLocalPanel } from './js/local-panel.js';
 import { renderFacts, renderMalaysia } from './js/malaysia.js';
-import { plannerTableEl, renderPlanner, setupPlannerDay, setupWorkSettings } from './js/planner.js';
+import { plannerTableEl, renderPlanner, setupPlannerDay, setupWorkSettings, showMeeting } from './js/planner.js';
 import { setupMapTools } from './js/qibla.js';
 import { checkReminders, setupReminders } from './js/reminders.js';
 import { createCityListLoader, findCity } from './js/search.js';
@@ -17,8 +17,8 @@ import { showTab } from './js/tabs.js';
 import { applyTheme, systemDark, themeEl } from './js/theme.js';
 import { ALL_ZONES, HOUR_MS, LOCAL_ZONE, MINUTE_MS, PHASES, QUARTER_MS, cityName, cityPhase, dayPhase, displayDate, floorToQuarter, formatDiff, formatUtcOffset, isValidZone, minuteOfDay, signedDuration, utcOffsetMinutes } from './js/time.js';
 import { createLocalData, normalizeName, renderKeyed } from './js/util.js';
-import { currentWeather, renderWeatherLine } from './js/weather.js';
-import { setupZone } from './js/zones.js';
+import { currentWeather, renderHourly, renderWeatherLine, setupWeather } from './js/weather.js';
+import { setupMonth, setupZone } from './js/zones.js';
 
 const formEl = document.getElementById('add-form');
 const inputEl = document.getElementById('zone-input');
@@ -95,7 +95,8 @@ function tick(state) {
     });
     card.querySelector('.diff').textContent = formatDiff(offset - localOffset);
     if (city) renderSunLine(state, card.querySelector('.sun'), city, now);
-    renderWeatherLine(card.querySelector('.weather'), city && weatherFor(city));
+    renderWeatherLine(state, card.querySelector('.weather'), city && weatherFor(city));
+    if (city) renderHourly(state, card, city);
     card.querySelector('.hand.hour').setAttribute('transform', `rotate(${(minutes % 720) / 2} 50 50)`);
     card.querySelector('.hand.minute').setAttribute('transform', `rotate(${(minutes % 60) * 6 + seconds / 10} 50 50)`);
     card.querySelector('.hand.second').setAttribute('transform', `rotate(${seconds * 6} 50 50)`);
@@ -155,6 +156,10 @@ function init() {
   state.dialogState = null;
   state.plannerDay = null; // the planner follows the displayed day until one is chosen
   state.plannerPick = null;
+  state.plannerDuration = 60; // minutes
+  state.plannerTitle = 'Mesyuarat';
+  state.holidaysWanted = false; // set when the planner nears the screen
+  if (shared.meeting) showMeeting(state, shared.meeting);
   state.mapView = null; // created the first time the Bandar tab opens
   state.ramadanState = 'W.P. Kuala Lumpur'; // whose imsak and berbuka the Ramadan countdown shows
   state.tab = showTab(window.location.hash);
@@ -176,6 +181,8 @@ function init() {
   placeIcons();
   document.getElementById('map-legend').open = !window.matchMedia('(max-width: 600px)').matches;
   setupZone(state); // before the reminders, which follow its zone
+  setupMonth(state);
+  setupWeather(state, clocksEl);
   // Columns follow the list's width; a hidden tab reports 0 until shown.
   new ResizeObserver(() => balanceColumns()).observe(clocksEl);
   const factsMore = document.getElementById('facts-more');
@@ -297,7 +304,7 @@ function init() {
 
   clocksEl.addEventListener('click', (e) => {
     const card = e.target.closest('.card');
-    if (!card || e.target.closest('.remove, .drag-handle, .local-toggle, .local-panel')) return;
+    if (!card || e.target.closest('.remove, .drag-handle, .local-toggle, .local-panel, .weather-toggle, .hourly')) return;
     const city = state.cities.find((c) => cityKey(c) === card.dataset.key);
     if (city) globe.focusCity(city);
   });
@@ -395,6 +402,8 @@ function init() {
   renderCards(state);
   if (shared.time !== null) setViewTime(state, shared.time);
   else tick(state);
+  // A meeting link opens on the planner, unless the link names a place itself.
+  if (shared.meeting && !window.location.hash) document.getElementById('perancang').scrollIntoView();
   setInterval(() => tick(state), 1000);
 }
 

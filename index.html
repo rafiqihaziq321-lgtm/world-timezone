@@ -38,6 +38,7 @@
   <link rel="modulepreload" href="js/cards.js">
   <link rel="modulepreload" href="js/cities.js">
   <link rel="modulepreload" href="js/dialog.js">
+  <link rel="modulepreload" href="js/holidays.js">
   <link rel="modulepreload" href="js/icons.js">
   <link rel="modulepreload" href="js/jakim-zones.js">
   <link rel="modulepreload" href="js/local-panel.js">
@@ -148,6 +149,10 @@
         <input id="zone-input" name="bandar" type="search" list="zone-list" placeholder="Cari bandar, cth. Paris…" autocomplete="off" spellcheck="false" enterkeyhint="search" required aria-label="Cari bandar">
         <datalist id="zone-list"></datalist>
         <button type="submit">Tambah</button>
+        <div class="unit-toggle" role="group" aria-label="Unit suhu">
+          <button type="button" data-unit="c">°C</button>
+          <button type="button" data-unit="f">°F</button>
+        </div>
       </form>
       <p id="form-error" class="error" aria-live="polite" hidden></p>
       <div id="clocks"></div>
@@ -190,6 +195,7 @@
           <span class="swatch work"></span><span id="work-legend">Waktu kerja (09:00–17:00)</span>
           <span class="swatch off"></span>Luar waktu kerja
           <span class="swatch weekend"></span><span id="weekend-legend">Hujung minggu (Sabtu, Ahad)</span>
+          <span class="swatch holiday"></span>Cuti umum Malaysia
           <span class="swatch sleep"></span>Waktu tidur (22:00–07:00).
           Klik satu jam untuk memilihnya.
         </p>
@@ -295,7 +301,11 @@
             <button id="zone-locate" type="button" class="secondary" data-icon="pin">Guna lokasi saya</button>
           </div>
           <p id="zone-status" class="local-status" role="status"></p>
+          <div id="zone-alerts"></div>
           <div id="zone-times"></div>
+          <div class="zone-actions">
+            <button id="zone-month" type="button" class="secondary" data-icon="calendar">Jadual sebulan</button>
+          </div>
         </div>
         <div id="prayer-reminder" class="reminder"></div>
       </section>
@@ -389,6 +399,22 @@
       <p id="qibla-reading" class="qibla-reading"></p>
       <p id="qibla-status" class="local-status" role="status"></p>
       <p class="local-source">Lokasi anda hanya digunakan dalam pelayar ini dan tidak dihantar ke mana-mana. Kompas telefon boleh tersasar berhampiran logam atau magnet; jauhkan telefon dan gerakkan dalam bentuk angka 8 untuk menentukur.</p>
+    </div>
+  </dialog>
+
+  <dialog id="month-dialog" aria-labelledby="month-title">
+    <form method="dialog" class="dialog-close"><button type="submit" aria-label="Tutup">×</button></form>
+    <div class="month-body">
+      <h2 id="month-title">Waktu solat sebulan</h2>
+      <p id="month-zone" class="local-status"></p>
+      <div class="month-tools">
+        <button id="month-prev" type="button" class="icon-btn" aria-label="Bulan sebelumnya">‹</button>
+        <button id="month-next" type="button" class="icon-btn" aria-label="Bulan berikutnya">›</button>
+        <button id="month-print" type="button" class="secondary">Cetak</button>
+        <button id="month-ics" type="button" class="btn" data-icon="calendar">Muat turun .ics (dengan penggera)</button>
+      </div>
+      <div class="table-scroll"><table id="month-table" class="data-table"></table></div>
+      <p class="local-status month-note">Dalam fail .ics, setiap waktu solat ada penggera tepat pada waktunya, jadi telefon berbunyi walaupun Jam Dunia ditutup.</p>
     </div>
   </dialog>
 
