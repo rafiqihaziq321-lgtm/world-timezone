@@ -5,7 +5,6 @@ import { openCityDialog } from './dialog.js';
 import { icon } from './icons.js';
 import { PRAYER_TIMES, nextPrayer, prayerFor, renderLocalPanel, weatherIcon } from './local-panel.js';
 import { forecastForState, stateForecasts, townForecasts } from './malaysia.js';
-import { createMalaysiaMap, renderMapMarkers, renderMapWarnings, setMapStatus } from './map.js';
 import { stateCity } from './places.js';
 import { MINUTE_MS, formatClock } from './time.js';
 import { el, fetchJson, formatTempRange, renderKeyed } from './util.js';
@@ -91,18 +90,22 @@ export function renderCities(state, now) {
 
   if (!state.mapView) {
     state.mapView = { status: 'loading' };
-    createMalaysiaMap(state).then((view) => {
-      Object.assign(state.mapView, { status: 'ready' }, view);
+    // The map's code, like MapLibre itself, is fetched when this tab is first
+    // drawn: most visits never open it, so the first load stays light.
+    import('./map.js').then((lib) => lib.createMalaysiaMap(state).then((view) => ({ lib, view }))).then(({ lib, view }) => {
+      Object.assign(state.mapView, { status: 'ready', lib }, view);
       state.refresh();
     }, (err) => {
       state.mapView.status = 'error';
       console.info('Jam Dunia: peta 3D tidak dapat dipaparkan.', err);
-      setMapStatus('Peta 3D tidak dapat dipaparkan: pelayar ini mungkin tidak menyokong WebGL, atau fail peta gagal dimuat. Senarai bandar di bawah masih berfungsi.');
+      const status = document.getElementById('map-status');
+      status.textContent = 'Peta 3D tidak dapat dipaparkan: pelayar ini mungkin tidak menyokong WebGL, atau fail peta gagal dimuat. Senarai bandar di bawah masih berfungsi.';
+      status.hidden = false;
     });
   }
   if (state.mapView.status === 'ready') {
-    renderMapMarkers(state, state.mapView, now, photos, forecasts, townForecasts(state, now), air);
-    renderMapWarnings(state, state.mapView, now);
+    state.mapView.lib.renderMapMarkers(state, state.mapView, now, photos, forecasts, townForecasts(state, now), air);
+    state.mapView.lib.renderMapWarnings(state, state.mapView, now);
   }
 
   if (!grid.childElementCount) {

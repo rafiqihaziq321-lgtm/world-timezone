@@ -59,6 +59,9 @@ export function renderPlanner(state, now) {
     return;
   }
   plannerTableEl.dataset.key = key;
+  // Every redraw (a pick, the holidays arriving, a new hour) replaces the
+  // buttons: the hour that had focus gets it back below.
+  const focusedSlot = plannerTableEl.contains(document.activeElement) ? document.activeElement.dataset.slot : undefined;
   plannerTableEl.replaceChildren();
 
   if (state.cities.length === 0) {
@@ -137,6 +140,7 @@ export function renderPlanner(state, now) {
     plannerSummaryEl.replaceChildren(`Tiada jam yang berada dalam waktu kerja untuk semua bandar pada ${day === isoDay(Date.now()) ? 'hari ini' : dayName(dayStart)}${
       offReason(categories)}.`, ...bestHour(state, slots, categories, fmt));
   }
+  if (focusedSlot !== undefined) focusSlot(focusedSlot);
   revealHours(state, day, dayStart, currentSlot);
   updateScrollHint(); // the table may have grown or shrunk
 }
@@ -173,9 +177,16 @@ function bestHour(state, slots, categories, fmt) {
   pick.addEventListener('click', () => {
     state.plannerPick = slots[best];
     state.refresh();
+    focusSlot(slots[best]); // this button is gone with the redraw
   });
   const text = `Paling sesuai: ${fmt(slots[best])}–${fmt(slots[best] + (end - best) * HOUR_MS)} waktu anda, ${top.work} daripada ${state.cities.length} bandar dalam waktu kerja; ${others.join(', ')}.`;
   return [el('span', 'planner-best', text), pick];
+}
+
+// Focus on an hour's header button (a redraw or "Pilih" removed the one the
+// reader was on), so keyboard and screen reader users keep their place.
+function focusSlot(ms) {
+  plannerTableEl.querySelector(`thead button[data-slot="${ms}"]`)?.focus({ preventScroll: true });
 }
 
 // On a narrow screen the table scrolls sideways and starts at midnight.
@@ -353,7 +364,9 @@ export function setupPlannerDay(state) {
   };
   document.getElementById('planner-prev').addEventListener('click', () => shift(-1));
   document.getElementById('planner-next').addEventListener('click', () => shift(1));
-  document.getElementById('planner-today').addEventListener('click', () => go(null));
+  // The real today, even while the clocks show another time; following the
+  // clocks (null) only when they are live.
+  document.getElementById('planner-today').addEventListener('click', () => go(state.viewTime === null ? null : isoDay(Date.now())));
   plannerScrollEl.addEventListener('scroll', updateScrollHint, { passive: true });
   // Malaysian holidays are fetched once the planner is about to be seen.
   const seen = new IntersectionObserver((entries) => {
