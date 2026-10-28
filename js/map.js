@@ -212,6 +212,8 @@ export function renderMapMarkers(state, view, now, photos, forecasts, towns, air
       const photo = photos.status === 'ok' && s.landmark ? photos.data.get(s.landmark) : null;
       if (!photo) return [el('span', 'marker-initial', initials(placeName(s)))];
       const img = el('img');
+      img.width = 48; // a square thumbnail; CSS sets the drawn size
+      img.height = 48;
       img.src = photo.src;
       img.alt = '';
       img.decoding = 'async';

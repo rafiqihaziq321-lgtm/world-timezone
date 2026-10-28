@@ -8,6 +8,7 @@ import { LOCAL_ZONE, PHASES, cityDate, cityPhase, formatClock, formatUtcOffset, 
 import { el, renderKeyed } from './util.js';
 
 export const clocksEl = document.getElementById('clocks');
+const undoEl = document.getElementById('undo-bar');
 // Sunrise 07:05 · sunset 19:12 by the city's clock; empty without a position.
 export function renderSunLine(state, node, city, now) {
   if (city.lat === null || city.lon === null) return;
@@ -66,10 +67,12 @@ export function createCard(state, city) {
   remove.addEventListener('click', () => {
     card.classList.add('leaving');
     card.addEventListener('animationend', () => {
+      const index = state.cities.findIndex((c) => cityKey(c) === cityKey(city));
       state.cities = state.cities.filter((c) => cityKey(c) !== cityKey(city));
       saveState(state);
       renderCards(state);
       state.refresh();
+      offerUndo(state, city, index);
     }, { once: true });
   });
   card.addEventListener('animationend', (e) => {
@@ -207,6 +210,27 @@ export function renderCards(state) {
     clocksEl.append(card);
   }
   balanceColumns();
+}
+
+// A removed card can be put back, where it was, for a few seconds. The
+// pending timer lives on the bar itself, so a second removal replaces the first.
+function offerUndo(state, city, index) {
+  clearTimeout(Number(undoEl.dataset.timer));
+  const restore = el('button', 'btn secondary', 'Batal');
+  restore.type = 'button';
+  restore.addEventListener('click', () => {
+    clearTimeout(Number(undoEl.dataset.timer));
+    undoEl.hidden = true;
+    if (state.cities.some((c) => cityKey(c) === cityKey(city))) return;
+    state.cities.splice(Math.min(index, state.cities.length), 0, city);
+    saveState(state);
+    renderCards(state);
+    state.refresh();
+  });
+  undoEl.replaceChildren(el('span', '', `${city.name} dibuang.`), restore);
+  undoEl.hidden = false;
+  undoEl.dataset.timer = String(setTimeout(() => { undoEl.hidden = true; }, 8000));
+  restore.focus(); // the removed card's button is gone; keyboard focus lands here
 }
 
 // As many columns as fit, then as few as keep the same number of rows, so the

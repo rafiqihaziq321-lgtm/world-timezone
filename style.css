@@ -135,7 +135,21 @@
 /* Component display rules (e.g. buttons as inline-flex) must not un-hide elements. */
 [hidden] { display: none !important; }
 
-html { scroll-behavior: smooth; }
+/* Anchors and keyboard focus stop below the sticky header (two rows on narrow screens). */
+:root { --nav-h: 64px; }
+@media (max-width: 860px) { :root { --nav-h: 96px; } }
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--nav-h) + 8px);
+  -webkit-tap-highlight-color: rgba(245, 196, 81, 0.3); /* a gold flash, not the platform's grey box */
+}
+
+/* No double-tap zoom delay on anything tapped. */
+a, button, input, select, summary, label, #planner-table td { touch-action: manipulation; }
+
+/* Headings break into even lines; paragraphs avoid a lone last word. */
+h1, h2, h3 { text-wrap: balance; }
+p { text-wrap: pretty; }
 
 body {
   margin: 0;
@@ -237,6 +251,16 @@ button:active, .btn:active { transform: scale(0.96); }
   stroke-linejoin: round;
 }
 button, .btn { gap: 6px; }
+
+/* Hover gives feedback only where a pointer can hover; it raises contrast. */
+@media (hover: hover) {
+  .btn:not(.secondary):hover,
+  button[type="submit"]:hover,
+  .play-btn:hover { background: color-mix(in srgb, var(--accent) 86%, #000); }
+  .btn.secondary:hover,
+  button.secondary:hover,
+  .icon-btn:hover { background: var(--panel); border-color: var(--input-border); }
+}
 .icon-btn .icon { width: 20px; height: 20px; }
 
 button.secondary,
@@ -400,7 +424,6 @@ button.secondary,
   row-gap: 24px;
   min-height: calc(100svh - 64px);
   padding-block: 32px 56px;
-  scroll-margin-top: 64px;
 }
 
 .hero-copy { grid-area: copy; }
@@ -582,7 +605,6 @@ body.time-shifted #time-label { color: var(--accent-ink); font-weight: 700; }
 
 .section {
   padding-block: clamp(64px, 8vw, 112px) 0;
-  scroll-margin-top: 64px;
 }
 
 .section-head { max-width: 640px; margin-bottom: 32px; }
@@ -1107,6 +1129,28 @@ body.time-shifted .card .weather { display: none; } /* it is the weather now, no
 .qibla-svg .dial-north { fill: var(--error); font-size: 11px; font-weight: 800; text-anchor: middle; }
 .qibla-svg .dial-needle { fill: var(--accent); stroke: #1a1433; stroke-width: 1; }
 .qibla-svg .dial-kaaba { fill: var(--panel); stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+
+/* "London dibuang. Batal": a small bar at the foot of the screen, clear of a phone's home bar. */
+.undo-bar {
+  position: fixed;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px 10px 18px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: var(--panel-solid);
+  box-shadow: var(--shadow);
+  transform: translateX(-50%);
+}
+.undo-bar .btn { padding: 6px 14px; font-size: 0.9rem; }
+.undo-bar span { white-space: nowrap; }
+
+/* Scrolling inside a dialog never carries on into the page behind it. */
+dialog { overscroll-behavior: contain; }
 
 #qibla-dialog {
   width: min(420px, calc(100vw - 24px));
