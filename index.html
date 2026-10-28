@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Jam Dunia</title>
   <meta name="description" content="Lihat masa di seluruh dunia pada glob interaktif dan cari masa mesyuarat yang sesuai untuk semua. Untuk Malaysia: amaran dan ramalan cuaca MET, waktu solat setiap negeri, serta peta 3D dengan anggaran kualiti udara.">
-  <meta name="theme-color" content="#060b24">
+  <!-- The browser's own bar matches the page; theme.js follows a theme chosen by hand. -->
+  <meta name="theme-color" content="#eef3fb" media="(prefers-color-scheme: light)" data-default="#eef3fb">
+  <meta name="theme-color" content="#060b24" media="(prefers-color-scheme: dark)" data-default="#060b24">
   <link rel="canonical" href="https://rafiqihaziq321-lgtm.github.io/world-timezone/">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -25,6 +27,7 @@
   <meta name="twitter:card" content="summary_large_image">
 
   <!-- Fonts and modules fetched in parallel instead of once CSS and each import are read. -->
+  <link rel="preconnect" href="https://api.open-meteo.com" crossorigin><!-- the cards' weather, fetched on first load -->
   <link rel="preload" href="vendor/fonts/unbounded-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/manrope-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
@@ -60,7 +63,7 @@
 
   <header class="site-nav">
     <div class="nav-inner">
-      <a class="brand" href="#glob">
+      <a class="brand" href="#glob" translate="no">
         <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
           <circle class="mark-night" cx="12" cy="12" r="10"/>
           <path class="mark-day" d="M12 2a10 10 0 0 1 0 20 6 10 0 0 0 0-20z"/>
@@ -142,12 +145,13 @@
         <p>Warna setiap kad mengikut waktu di bandar itu. Klik kad untuk memusatkan glob padanya.</p>
       </div>
       <form id="add-form">
-        <input id="zone-input" list="zone-list" placeholder="Cari bandar, cth. Paris" autocomplete="off" required aria-label="Cari bandar">
+        <input id="zone-input" name="bandar" type="search" list="zone-list" placeholder="Cari bandar, cth. Paris…" autocomplete="off" spellcheck="false" enterkeyhint="search" required aria-label="Cari bandar">
         <datalist id="zone-list"></datalist>
         <button type="submit">Tambah</button>
       </form>
-      <p id="form-error" class="error" hidden></p>
+      <p id="form-error" class="error" aria-live="polite" hidden></p>
       <div id="clocks"></div>
+      <div id="undo-bar" class="undo-bar" role="status" hidden></div>
       <p id="reorder-status" class="visually-hidden" role="status"></p>
     </section>
 
@@ -395,7 +399,7 @@
 
   <footer class="site-footer">
     <div class="footer-inner">
-      <p class="brand-line">
+      <p class="brand-line" translate="no">
         <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
           <circle class="mark-night" cx="12" cy="12" r="10"/>
           <path class="mark-day" d="M12 2a10 10 0 0 1 0 20 6 10 0 0 0 0-20z"/>

@@ -308,17 +308,22 @@ function init() {
     errorEl.hidden = false;
   }
 
-  inputEl.addEventListener('focus', () => {
-    if (listEl.childElementCount) return;
-    loadCityList().then((rows) => {
-      if (listEl.childElementCount) return;
-      listEl.append(...rows.map(([name, country]) => {
-        const opt = document.createElement('option');
-        opt.value = `${name}, ${country}`;
-        return opt;
-      }));
-    }, showCityListError);
-  });
+  // The city list holds thousands of places: the suggestions are the first
+  // 50 that match what has been typed (names that start with it first), not
+  // all of them at once.
+  const suggest = (rows) => {
+    const query = normalizeName(inputEl.value);
+    const names = rows.map(([name]) => normalizeName(name));
+    const starts = rows.filter((_, i) => names[i].startsWith(query));
+    const contains = query ? rows.filter((_, i) => !names[i].startsWith(query) && names[i].includes(query)) : [];
+    listEl.replaceChildren(...[...starts, ...contains].slice(0, 50).map(([name, country]) => {
+      const opt = document.createElement('option');
+      opt.value = `${name}, ${country}`;
+      return opt;
+    }));
+  };
+  inputEl.addEventListener('focus', () => loadCityList().then(suggest, showCityListError));
+  inputEl.addEventListener('input', () => loadCityList().then(suggest, showCityListError));
 
   format24El.checked = state.hour24;
   format24El.addEventListener('change', () => {
@@ -344,7 +349,7 @@ function init() {
       if (zone) city = cityForZone(zone);
     }
     if (!city) {
-      errorEl.textContent = `Bandar atau zon waktu "${query}" tidak dijumpai.`;
+      errorEl.textContent = `Bandar atau zon waktu “${query}” tidak dijumpai. Cuba nama bandar dalam bahasa Inggeris (cth. Tokyo) atau zon waktu seperti Asia/Tokyo.`;
       errorEl.hidden = false;
       return;
     }

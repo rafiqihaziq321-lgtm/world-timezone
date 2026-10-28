@@ -104,15 +104,29 @@ test.describe('carian bandar', () => {
     await addCity(page, 'Tokyo');
     await expect(page.locator('#form-error')).toHaveText('Tokyo sudah ada dalam senarai.');
     await addCity(page, 'Atlantis');
-    await expect(page.locator('#form-error')).toHaveText('Bandar atau zon waktu "Atlantis" tidak dijumpai.');
+    await expect(page.locator('#form-error')).toHaveText('Bandar atau zon waktu “Atlantis” tidak dijumpai. Cuba nama bandar dalam bahasa Inggeris (cth. Tokyo) atau zon waktu seperti Asia/Tokyo.');
     expect(await cardZones(page)).toHaveLength(4);
   });
 
-  test('buang kad', async ({ page }) => {
+  test('buang kad, dan "Batal" mengembalikannya ke tempat asal', async ({ page }) => {
     await openApp(page);
+    await card(page, 'Europe/London').locator('.remove').click();
+    await expect(card(page, 'Europe/London')).toHaveCount(0);
+    expect(await cardZones(page)).toEqual(['Asia/Kuala_Lumpur', 'America/New_York', 'Asia/Tokyo']);
+    const undo = page.locator('#undo-bar');
+    await expect(undo).toHaveText('London dibuang.Batal');
+    await expect(undo.getByRole('button', { name: 'Batal' })).toBeFocused();
+    await undo.getByRole('button', { name: 'Batal' }).click();
+    expect(await cardZones(page)).toEqual(['Asia/Kuala_Lumpur', 'Europe/London', 'America/New_York', 'Asia/Tokyo']);
+    expect(await storedZones(page)).toEqual(['Asia/Kuala_Lumpur', 'Europe/London', 'America/New_York', 'Asia/Tokyo']);
+    await expect(undo).toBeHidden();
+
+    // Unanswered, the offer goes after a few seconds and the removal stands.
     await card(page, 'Asia/Tokyo').locator('.remove').click();
-    await expect(card(page, 'Asia/Tokyo')).toHaveCount(0);
-    expect(await cardZones(page)).toEqual(['Asia/Kuala_Lumpur', 'Europe/London', 'America/New_York']);
+    await expect(undo).toBeVisible();
+    await page.clock.runFor(9000);
+    await expect(undo).toBeHidden();
+    expect(await storedZones(page)).toEqual(['Asia/Kuala_Lumpur', 'Europe/London', 'America/New_York']);
   });
 });
 
@@ -683,6 +697,8 @@ test.describe('tema dan paparan', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await expect(page.locator('#theme-toggle svg')).toHaveAttribute('data-glyph', 'sun');
     expect(await bg()).toBe('#060b24');
+    // The browser's bar follows the theme chosen by hand, whatever the system says.
+    expect(await page.locator('meta[name="theme-color"]').evaluateAll((metas) => metas.map((m) => m.content))).toEqual(['#060b24', '#060b24']);
   });
 
   test('header telefon 360px kekal dua baris walaupun butang pasang muncul', async ({ page }) => {
@@ -926,6 +942,19 @@ test.describe('susun atur', () => {
     await expect.poll(columns).toBe(3);
   });
 
+  test.describe('telefon: pautan terus', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test('tajuk sasaran tidak tersorok di bawah header dua baris', async ({ page }) => {
+      for (const [hash, heading] of [['#malaysia', '#my-title'], ['#bandar-malaysia', '#map-title'], ['#perancang', '#planner-title']]) {
+        await openApp(page, undefined, hash);
+        const header = await page.locator('.site-nav').evaluate((el) => el.getBoundingClientRect().bottom);
+        const top = await page.locator(heading).evaluate((el) => el.getBoundingClientRect().top);
+        expect(top, hash).toBeGreaterThanOrEqual(header);
+      }
+    });
+  });
+
   test('tab Malaysia bermula dengan waktu solat zon anda', async ({ page }) => {
     await openApp(page, undefined, '#malaysia');
     const headings = page.locator('#malaysia h2:visible');
@@ -966,8 +995,12 @@ test.describe('pangkalan data bandar', () => {
     await openApp(page);
     expect(await page.evaluate(() => 'WORLD_CITIES' in window)).toBe(false);
     await page.focus('#zone-input');
-    await expect.poll(() => page.locator('#zone-list option').count()).toBeGreaterThan(7000);
+    // Thousands of cities, but only 50 suggestions at a time, matching what is typed.
+    await expect.poll(() => page.locator('#zone-list option').count()).toBe(50);
+    await page.fill('#zone-input', 'johor');
     await expect(page.locator('#zone-list option[value="Johor Bahru, Malaysia"]')).toHaveCount(1);
+    await page.fill('#zone-input', 'lumpur'); // inside a name too, after names that start with it
+    await expect(page.locator('#zone-list option[value="Kuala Lumpur, Malaysia"]')).toHaveCount(1);
   });
 
   test('bandar yang dicari mendapat titik sendiri pada glob', async ({ page }) => {
