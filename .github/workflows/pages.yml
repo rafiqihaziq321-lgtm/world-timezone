@@ -1,0 +1,56 @@
+name: Pages
+
+# Builds the site with each zone's prayer calendar (kalendar/<ZONE>.ics) and
+# deploys it to GitHub Pages. The calendars are not committed: they are
+# rebuilt here daily, so subscribers always have this month and the next.
+# Needs Settings → Pages → Source set to "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 18 * * *' # 02:23 in Malaysia
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: pages
+        uses: actions/configure-pages@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The site as the branch deploy served it: every tracked file.
+      - run: mkdir _site && git archive HEAD | tar -x -C _site
+
+      # A zone the API fails for keeps its calendar from the live site.
+      - run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-calendars.mjs _site/kalendar --previous "${{ steps.pages.outputs.base_url }}/"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

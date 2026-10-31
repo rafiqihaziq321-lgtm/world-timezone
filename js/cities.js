@@ -94,6 +94,7 @@ export function renderCities(state, now) {
     // drawn: most visits never open it, so the first load stays light.
     import('./map.js').then((lib) => lib.createMalaysiaMap(state).then((view) => ({ lib, view }))).then(({ lib, view }) => {
       Object.assign(state.mapView, { status: 'ready', lib }, view);
+      if (state.mapView.pendingFocus) view.focus(state.mapView.pendingFocus); // asked for while the map loaded
       state.refresh();
     }, (err) => {
       state.mapView.status = 'error';
