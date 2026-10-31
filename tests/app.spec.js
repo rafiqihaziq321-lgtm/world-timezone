@@ -403,7 +403,8 @@ test.describe('perancang mesyuarat', () => {
     });
     for (const scheme of ['light', 'dark']) {
       await page.emulateMedia({ colorScheme: scheme });
-      expect(await ratio(), scheme).toBeGreaterThanOrEqual(4.5); // small bold text
+      // Polled: the button's background eases to the new scheme's colour.
+      await expect.poll(ratio, { message: scheme }).toBeGreaterThanOrEqual(4.5); // small bold text
     }
   });
 
