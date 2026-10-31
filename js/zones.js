@@ -4,7 +4,8 @@
 import { downloadIcs, icsCalendar } from './calendar.js';
 import { icon } from './icons.js';
 import { JAKIM_ZONES, zoneByCode } from './jakim-zones.js';
-import { PRAYERS, PRAYER_TIMES, hijriParts, nextPrayer, retryButton } from './local-panel.js';
+import { PRAYER_TIMES, hijriParts, nextPrayer, retryButton } from './local-panel.js';
+import { calendarPath, prayerEvents } from './prayer-calendar.js';
 import { locate, locationErrorText } from './qibla.js';
 import { saveState } from './storage.js';
 import { cityDate, formatClock } from './time.js';
@@ -173,6 +174,10 @@ function renderMonth(state) {
   const today = cityDate('Asia/Kuala_Lumpur', new Date()).iso;
   document.getElementById('month-title').textContent = `Waktu solat ${new Date(year, month - 1, 1).toLocaleDateString('ms-MY', { month: 'long', year: 'numeric' })}`;
   document.getElementById('month-zone').textContent = `${zone.code} · ${zone.daerah}, ${zone.negeri}`;
+  // The zone's calendar on this site, rebuilt daily (.github/workflows/pages.yml).
+  const webcal = new URL(calendarPath(zone.code), document.baseURI).href.replace(/^https?:/, 'webcal:');
+  document.getElementById('month-webcal').href = webcal;
+  document.getElementById('month-google').href = `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(webcal)}`;
   monthIcsEl.disabled = entry.status !== 'ok';
   renderKeyed(monthTableEl, [key, entry.status, state.hour24, today].join('|'), () => {
     if (entry.status !== 'ok') {
@@ -209,18 +214,7 @@ function monthCalendar(state) {
   const zone = zoneByCode(state.prayerZone);
   const { year, month } = shownMonth();
   const { entry } = zoneMonth(state, zone.code, year, month);
-  const events = (entry.data.prayers ?? []).flatMap((p) => PRAYERS.filter((field) => p[field]).map((field) => {
-    const label = PRAYER_TIMES.find(([f]) => f === field)[1];
-    return {
-      uid: `${zone.code}-${year}-${month}-${p.day}-${field}@jam-dunia`,
-      start: p[field] * 1000,
-      end: p[field] * 1000 + 10 * 60000,
-      title: `${label} (${zone.code})`,
-      description: `Waktu solat JAKIM bagi zon ${zone.code}: ${zone.daerah}, ${zone.negeri}. Dari Jam Dunia.`,
-      alarm: true,
-    };
-  }));
-  return icsCalendar(events, Date.now());
+  return icsCalendar(prayerEvents(zone, year, month, entry.data.prayers ?? []), Date.now());
 }
 
 export function setupMonth(state) {

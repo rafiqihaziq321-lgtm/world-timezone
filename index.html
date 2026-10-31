@@ -44,6 +44,7 @@
   <link rel="modulepreload" href="js/local-panel.js">
   <link rel="modulepreload" href="js/malaysia.js">
   <link rel="modulepreload" href="js/places.js">
+  <link rel="modulepreload" href="js/prayer-calendar.js">
   <link rel="modulepreload" href="js/planner.js">
   <link rel="modulepreload" href="js/qibla.js">
   <link rel="modulepreload" href="js/reminders.js">
@@ -412,8 +413,13 @@
         <button id="month-print" type="button" class="secondary">Cetak</button>
         <button id="month-ics" type="button" class="btn" data-icon="calendar">Muat turun .ics (dengan penggera)</button>
       </div>
+      <div class="month-subscribe">
+        <p>Atau langgan kalendar zon ini: ia dikemas kini sendiri setiap hari, untuk bulan ini dan bulan depan.</p>
+        <a id="month-webcal" class="btn secondary" data-icon="calendar">Langgan (Apple, Outlook)</a>
+        <a id="month-google" class="btn secondary" target="_blank" rel="noopener">Langgan dalam Google Calendar</a>
+      </div>
       <div class="table-scroll" tabindex="0" role="region" aria-label="Jadual waktu solat sebulan"><table id="month-table" class="data-table"></table></div>
-      <p class="local-status month-note">Dalam fail .ics, setiap waktu solat ada penggera tepat pada waktunya, jadi telefon berbunyi walaupun Jam Dunia ditutup.</p>
+      <p class="local-status month-note">Dalam fail .ics, setiap waktu solat ada penggera tepat pada waktunya, jadi telefon berbunyi walaupun Jam Dunia ditutup. Bagi kalendar yang dilanggan, sesetengah aplikasi membuang penggera ini.</p>
     </div>
   </dialog>
 

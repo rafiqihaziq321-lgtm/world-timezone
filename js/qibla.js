@@ -93,6 +93,7 @@ export function setupMapTools(state) {
       const km = Math.round(distanceKm(here, place)).toLocaleString('ms-MY');
       status.textContent = `Bandar terdekat: ${placeName(place)}, ${place.state} (kira-kira ${km} km dari anda).`;
       if (state.mapView?.status === 'ready') state.mapView.focus(place);
+      else if (state.mapView?.status === 'loading') state.mapView.pendingFocus = place; // taken up once the map is ready
       openCityDialog(state, place);
     }, (err) => {
       console.info('Jam Dunia: lokasi tidak diperoleh.', err);

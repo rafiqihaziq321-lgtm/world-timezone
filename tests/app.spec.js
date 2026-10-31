@@ -403,7 +403,8 @@ test.describe('perancang mesyuarat', () => {
     });
     for (const scheme of ['light', 'dark']) {
       await page.emulateMedia({ colorScheme: scheme });
-      expect(await ratio(), scheme).toBeGreaterThanOrEqual(4.5); // small bold text
+      // Polled: the button's background eases to the new scheme's colour.
+      await expect.poll(ratio, { message: scheme }).toBeGreaterThanOrEqual(4.5); // small bold text
     }
   });
 
@@ -512,6 +513,14 @@ test.describe('perancang mesyuarat', () => {
   test('cuti umum Malaysia ikut negeri bandar, dimuat bila perancang hampir kelihatan', async ({ page }) => {
     const holidayRequests = [];
     page.on('request', (req) => { if (req.url().endsWith('/js/my-holidays.js')) holidayRequests.push(req.url()); });
+    // Rows of our own: the generated table moves on with the years (.github/workflows/holidays.yml).
+    await page.route('**/js/my-holidays.js', (route) => route.fulfill({
+      contentType: 'text/javascript',
+      body: `export const MY_HOLIDAYS = ${JSON.stringify([
+        ['2026-06-02', 'Cuti Hari Wesak', ['Selangor', 'W.P. Kuala Lumpur']],
+        ['2026-06-02', 'Perayaan Hari Gawai Dayak', ['Sarawak']],
+      ])};`,
+    }));
     await openApp(page, { zones: ['Asia/Kuala_Lumpur', 'Asia/Kuching', 'Asia/Tokyo'], hour24: true });
     expect(holidayRequests).toEqual([]); // not before the planner is near the screen
     await page.locator('#planner').scrollIntoViewIfNeeded();
@@ -525,6 +534,17 @@ test.describe('perancang mesyuarat', () => {
     await expect(rows.nth(0).locator('td').nth(23)).toHaveClass(/sleep/); // nights stay nights
     await expect(rows.nth(2).locator('td').nth(10)).toHaveClass(/work/);
     await expect(page.locator('#planner-summary')).toContainText('(ada bandar sedang cuti umum)');
+  });
+
+  test('kalendar yang dilanggan: nama dan selang muat semula; fail biasa tanpanya', async ({ page }) => {
+    await openApp(page);
+    const [subscribed, plain] = await page.evaluate(async () => {
+      const { icsCalendar } = await import('./js/calendar.js');
+      const event = { uid: 'a@jam-dunia', start: Date.UTC(2026, 9, 15, 7), end: Date.UTC(2026, 9, 15, 8), title: 'Zohor', description: '' };
+      return [icsCalendar([event], Date.UTC(2026, 9, 13), { name: 'Waktu solat WLY01 (Kuala Lumpur, Putrajaya)', refreshHours: 12 }), icsCalendar([event], Date.UTC(2026, 9, 13))];
+    });
+    expect(subscribed).toContain('\r\nMETHOD:PUBLISH\r\nX-WR-CALNAME:Waktu solat WLY01 (Kuala Lumpur\\, Putrajaya)\r\nREFRESH-INTERVAL;VALUE=DURATION:PT12H\r\nX-PUBLISHED-TTL:PT12H\r\nBEGIN:VEVENT\r\n');
+    expect(plain).not.toMatch(/X-WR-CALNAME|REFRESH-INTERVAL|X-PUBLISHED-TTL/);
   });
 
   test('fail .ics: teks dilepaskan dan baris panjang dilipat ikut bait (RFC 5545)', async ({ page }) => {
@@ -2027,6 +2047,10 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       await expect(today.locator('td').nth(1)).toHaveText('05:45'); // imsak
       await expect(today.locator('td').nth(2)).toHaveText('05:55'); // Subuh, after Hijri and Imsak
 
+      // Or subscribed: the zone's calendar that .github/workflows/pages.yml rebuilds daily.
+      await expect(dialog.getByRole('link', { name: 'Langgan (Apple, Outlook)' })).toHaveAttribute('href', 'webcal://localhost:4173/kalendar/WLY01.ics');
+      await expect(dialog.getByRole('link', { name: 'Langgan dalam Google Calendar' })).toHaveAttribute('href',
+        'https://calendar.google.com/calendar/render?cid=webcal%3A%2F%2Flocalhost%3A4173%2Fkalendar%2FWLY01.ics');
       await dialog.getByRole('button', { name: 'Cetak' }).click();
       expect(await page.evaluate(() => window.printed)).toBe(1);
 
@@ -2241,6 +2265,20 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       await expect(page.locator('.map-marker', { has: page.getByRole('button', { name: /^Butiran Klang,/, includeHidden: true }) })).not.toHaveClass(/is-covered/);
     });
 
+    test('bandar terdekat sebelum peta siap: peta tetap zum ke bandar itu bila ia siap', async ({ page }) => {
+      await mockAll(page);
+      // The map's code arrives late (it loads when the tab is first opened).
+      await page.route('**/js/map.js', async (route) => {
+        await new Promise((resolve) => { setTimeout(resolve, 1500); });
+        await route.continue();
+      });
+      await openApp(page, undefined, '#bandar-malaysia');
+      await page.getByRole('button', { name: 'Bandar terdekat' }).click();
+      await expect(page.locator('#city-dialog h2')).toHaveText('Klang');
+      await page.locator('#city-dialog').getByRole('button', { name: 'Tutup' }).click();
+      await expect(page.locator('#my-map')).toHaveClass(/map-labelled/, { timeout: 15000 });
+    });
+
     // Some browsers ask before sharing the compass (Safari, newer Chrome);
     // answer that prompt explicitly so the test does not depend on the browser.
     const answerSensorPrompt = (page, answer) => page.addInitScript((a) => {
@@ -2335,5 +2373,81 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       await expect(page.locator('#my-warnings')).toContainText('Had permintaan data.gov.my dicapai');
       await expect(page.locator('#my-warnings').getByRole('button', { name: 'Cuba lagi' })).toBeVisible();
     });
+  });
+});
+
+// scripts/build-calendars.mjs, as .github/workflows/pages.yml runs it, against
+// a stand-in for waktusolat.app and for the published site.
+test.describe('kalendar langganan: skrip binaan', () => {
+  const http = require('node:http');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { execFile } = require('node:child_process');
+
+  // Two days a month for every zone; `failing` zones answer 500, and
+  // `onceFailing` ones only to their first request.
+  async function standIn(failing, onceFailing = []) {
+    const seen = [];
+    const server = http.createServer((req, res) => {
+      const url = new URL(req.url, 'http://x');
+      const zone = url.pathname.match(/^\/v2\/solat\/(\w+)$/)?.[1];
+      const firstTry = zone && onceFailing.includes(zone) && !seen.includes(zone);
+      if (zone) seen.push(zone);
+      if (zone && !failing.includes(zone) && !firstTry) {
+        const at = (day, hh, mm) => Date.UTC(Number(url.searchParams.get('year')), Number(url.searchParams.get('month')) - 1, day, hh - 8, mm) / 1000;
+        const prayers = [1, 2].map((day) => ({ day, fajr: at(day, 5, 55), syuruk: at(day, 7, 5), dhuhr: at(day, 13, 10), asr: at(day, 16, 20), maghrib: at(day, 19, 12), isha: at(day, 20, 22) }));
+        res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ zone, prayers }));
+      } else if (url.pathname === '/laman/kalendar/JHR01.ics') {
+        res.writeHead(200, { 'Content-Type': 'text/calendar' }).end('SALINAN-LAMA-JHR01');
+      } else {
+        res.writeHead(zone ? 500 : 404).end();
+      }
+    });
+    await new Promise((resolve) => { server.listen(0, '127.0.0.1', resolve); });
+    return { server, base: `http://127.0.0.1:${server.address().port}` };
+  }
+
+  // Resolves with the exit code and output, whether or not the script fails.
+  const build = (base, args) => new Promise((resolve) => {
+    execFile(process.execPath, ['--disable-warning=MODULE_TYPELESS_PACKAGE_JSON', 'scripts/build-calendars.mjs', ...args],
+      { env: { ...process.env, ZONE_API: base, RETRY_MS: '1' } },
+      (err, stdout, stderr) => resolve({ code: err ? err.code : 0, stdout, stderr }));
+  });
+
+  test('setiap zon mendapat kalendarnya; zon yang gagal kekal dengan salinan yang sudah diterbitkan', async ({}, testInfo) => {
+    const { server, base } = await standIn(['JHR01'], ['KTN01']);
+    try {
+      const out = testInfo.outputPath('kalendar');
+      const run = await build(base, [out, '--previous', `${base}/laman/`]);
+      expect(run.code, run.stderr).toBe(0);
+      expect(run.stdout).toContain('60 calendars in');
+      expect(run.stdout).toContain('1 kept from the published site');
+      expect(fs.readdirSync(out)).toHaveLength(60);
+
+      const ics = fs.readFileSync(path.join(out, 'WLY01.ics'), 'utf8').replace(/\r\n /g, '');
+      expect(ics).toContain('\r\nX-WR-CALNAME:Waktu solat WLY01 (Kuala Lumpur\\, Putrajaya)\r\nREFRESH-INTERVAL;VALUE=DURATION:PT12H\r\n');
+      expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(2 * 2 * 5); // this month and the next, two days each, five prayers
+      expect(ics.match(/BEGIN:VALARM/g)).toHaveLength(20);
+      expect(ics).toMatch(/\r\nSUMMARY:Subuh \(WLY01\)\r\n/);
+      expect(fs.readFileSync(path.join(out, 'JHR01.ics'), 'utf8')).toBe('SALINAN-LAMA-JHR01');
+      // A request that fails once is tried again, not given up on.
+      expect(fs.readFileSync(path.join(out, 'KTN01.ics'), 'utf8').match(/BEGIN:VEVENT/g)).toHaveLength(20);
+    } finally {
+      server.close();
+    }
+  });
+
+  test('zon gagal tanpa salinan yang boleh dikekalkan: binaan gagal', async ({}, testInfo) => {
+    const { server, base } = await standIn(['JHR01', 'KDH02']);
+    try {
+      const alone = await build(base, [testInfo.outputPath('tanpa-salinan')]); // no --previous
+      expect(alone.code).not.toBe(0);
+      expect(alone.stderr).toContain('JHR01: HTTP 500');
+      const missing = await build(base, [testInfo.outputPath('salinan-tiada'), '--previous', `${base}/laman/`]);
+      expect(missing.code).not.toBe(0);
+      expect(missing.stderr).toContain('KDH02: HTTP 500, and no published copy to keep (HTTP 404)');
+    } finally {
+      server.close();
+    }
   });
 });

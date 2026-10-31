@@ -36,9 +36,12 @@ function fold(line) {
 }
 
 // One calendar of events, each { uid, start, end, title, description } and,
-// with `alarm`, a reminder that goes off at the start.
-export function icsCalendar(events, now) {
+// with `alarm`, a reminder that goes off at the start. A calendar people
+// subscribe to also has a `name` and how often apps should fetch it again.
+export function icsCalendar(events, now, { name, refreshHours } = {}) {
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Jam Dunia//MS', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+  if (name) lines.push(`X-WR-CALNAME:${icsText(name)}`);
+  if (refreshHours) lines.push(`REFRESH-INTERVAL;VALUE=DURATION:PT${refreshHours}H`, `X-PUBLISHED-TTL:PT${refreshHours}H`);
   for (const e of events) {
     lines.push(
       'BEGIN:VEVENT',
