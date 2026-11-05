@@ -15,7 +15,7 @@ import { activeWarnings, warningArea } from './warnings.js';
 export const ZONE_API = 'https://api.waktusolat.app';
 
 // A zone's month of JAKIM times.
-function zoneMonth(state, code, year, month) {
+export function zoneMonth(state, code, year, month) {
   const key = `solat-zon|${code}|${year}-${month}`;
   return { key, entry: state.localData.get(key, `${ZONE_API}/v2/solat/${code}?year=${year}&month=${month}`) };
 }
@@ -40,7 +40,7 @@ const monthDialogEl = document.getElementById('month-dialog');
 const monthTableEl = document.getElementById('month-table');
 const monthIcsEl = document.getElementById('month-ics');
 
-const HIJRI_MONTHS = ['Muharam', 'Safar', 'Rabiulawal', 'Rabiulakhir', 'Jamadilawal', 'Jamadilakhir',
+export const HIJRI_MONTHS = ['Muharam', 'Safar', 'Rabiulawal', 'Rabiulakhir', 'Jamadilawal', 'Jamadilakhir',
   'Rejab', 'Syaaban', 'Ramadan', 'Syawal', 'Zulkaedah', 'Zulhijah'];
 
 // The states MET names for a zone (the Federal Territories one by one).

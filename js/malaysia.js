@@ -183,6 +183,13 @@ export function renderMalaysia(state, now) {
 
   renderRamadan(state, prayers, now);
   renderZone(state, now);
+  // The Takwim Islam section's code is fetched the first time this tab is drawn.
+  const takwimKey = 'modul-takwim';
+  const takwim = state.localData.get(takwimKey, () => import('./takwim.js'));
+  if (takwim.status === 'ok') takwim.data.renderTakwim(state, now);
+  else renderKeyed(document.getElementById('takwim'), takwim.status, () => (takwim.status === 'error'
+    ? [el('p', 'local-status', 'Takwim gagal dimuat. '), retryButton(state, takwimKey)]
+    : [el('p', 'local-status', 'Memuatkan takwim…')]));
 }
 
 // Shown only while it is Ramadan by JAKIM's calendar (the same nationwide),

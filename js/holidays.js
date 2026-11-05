@@ -4,12 +4,17 @@ import { isMalaysian } from './local-panel.js';
 import { MAP_PLACES, placeName } from './places.js';
 
 // The table (js/my-holidays.js) is fetched only once the planner comes near
-// the screen (state.holidaysWanted, set by the planner): most visits never
-// scroll that far, so the first load stays light.
+// the screen or the Takwim Islam section is drawn (state.holidaysWanted):
+// most visits get to neither, so the first load stays light.
 function table(state) {
   if (!state.holidaysWanted) return null;
   const entry = state.localData.get('cuti-umum', () => import('./my-holidays.js').then((m) => m.MY_HOLIDAYS));
   return entry.status === 'ok' ? entry.data : null;
+}
+
+// The whole table (null until loaded): the Takwim Islam section's holy days.
+export function holidayRows(state) {
+  return table(state);
 }
 
 export function holidaysLoaded(state) {

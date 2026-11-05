@@ -52,6 +52,8 @@
   --all-work: #15803d;
   --all-work-fg: #fff; /* 5.0:1 on --all-work */
   --scroll-shade: rgba(18, 26, 61, 0.2);
+  --moon-dark: #cbd5e1;
+  --moon-lit: #f5c451;
   --panel-solid: #fcfdfe; /* --panel over the page, for things that must hide what scrolls under them */
 }
 
@@ -93,6 +95,8 @@
     --all-work: #22c55e;
     --all-work-fg: #052e16; /* 6.5:1 on --all-work */
     --scroll-shade: rgba(0, 0, 0, 0.55);
+    --moon-dark: #1e293b;
+    --moon-lit: #fde68a;
     --panel-solid: #0e1639;
   }
 }
@@ -134,6 +138,8 @@
   --all-work: #22c55e;
   --all-work-fg: #052e16; /* 6.5:1 on --all-work */
   --scroll-shade: rgba(0, 0, 0, 0.55);
+  --moon-dark: #1e293b;
+  --moon-lit: #fde68a;
   --panel-solid: #0e1639;
 }
 
@@ -941,6 +947,23 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 .reminder-note { flex-basis: 100%; color: var(--muted); font-size: 0.8rem; }
 .reminder-note summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .reminder-note p { margin-top: 6px; }
+
+/* Takwim Islam: today, holy days, sunat fasts and the Moon, side by side when they fit. */
+.takwim { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.takwim-block { padding: 14px 16px; border-radius: 16px; background: var(--panel); border: 1px solid var(--panel-border); }
+.takwim-block h3 { margin: 0 0 8px; font-size: 1rem; }
+.takwim-block p { margin: 4px 0; }
+.takwim-hijri { font-size: 1.5rem; font-weight: 700; }
+.takwim-next { font-size: 1.1rem; }
+.takwim-list { list-style: none; margin: 8px 0; padding: 0; }
+.takwim-list li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-top: 1px solid var(--panel-border); font-size: 0.9rem; }
+.takwim-list li span:last-child { color: var(--muted); text-align: right; }
+.takwim-block .btn { margin-top: 4px; padding: 8px 16px; font-size: 0.9rem; }
+.takwim-note { color: var(--muted); font-size: 0.8rem; }
+.takwim-phase { display: flex; align-items: center; gap: 8px; }
+.moon-picture { width: 40px; height: 40px; flex: none; }
+.moon-dark { fill: var(--moon-dark); }
+.moon-lit { fill: var(--moon-lit); }
 
 .zone-card {
   margin-bottom: 16px;
