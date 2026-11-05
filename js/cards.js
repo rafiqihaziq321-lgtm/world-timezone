@@ -2,7 +2,7 @@
 
 import { cityKey } from '../globe.js';
 import { icon } from './icons.js';
-import { isMalaysian } from './local-panel.js';
+import { isMalaysian, retryButton } from './local-panel.js';
 import { saveState } from './storage.js';
 import { LOCAL_ZONE, PHASES, cityDate, cityPhase, formatClock, formatUtcOffset, signedDuration, sunTimes, utcOffsetMinutes } from './time.js';
 import { el, renderKeyed } from './util.js';
@@ -79,14 +79,17 @@ export function createCard(state, city) {
   card.addEventListener('animationend', (e) => {
     if (e.animationName === 'card-in') card.classList.remove('enter');
   });
-  if (isMalaysian(city)) {
+  // Malaysian cities: JAKIM prayer times and MET weather. Elsewhere, prayer
+  // times worked out in the browser, for any city whose position is known.
+  const malaysian = isMalaysian(city);
+  if (malaysian || (city.lat !== null && city.lon !== null)) {
     const toggle = document.createElement('button');
     toggle.type = 'button';
     toggle.className = 'local-toggle';
-    toggle.textContent = 'Solat & cuaca';
+    toggle.textContent = malaysian ? 'Solat & cuaca' : 'Waktu solat';
     toggle.setAttribute('aria-expanded', 'false');
     const panel = document.createElement('div');
-    panel.className = 'local-panel';
+    panel.className = malaysian ? 'local-panel' : 'local-panel world-prayer';
     panel.hidden = true;
     toggle.addEventListener('click', () => {
       const opening = panel.hidden;
@@ -97,6 +100,16 @@ export function createCard(state, city) {
     card.append(toggle, panel);
   }
   return card;
+}
+
+// A city outside Malaysia: its panel's code is fetched the first time one opens.
+export function renderWorldPrayer(state, panel, city, now) {
+  const key = 'modul-solat-dunia';
+  const mod = state.localData.get(key, () => import('./world-prayer.js'));
+  if (mod.status === 'ok') mod.data.renderWorldPrayer(state, panel, city, now);
+  else renderKeyed(panel, mod.status, () => (mod.status === 'error'
+    ? [el('p', 'local-status', 'Waktu solat gagal dimuat. '), retryButton(state, key)]
+    : [el('p', 'local-status', 'Memuatkan waktu solat…')]));
 }
 
 // Cards are reordered by dragging their handle (mouse or touch) or with the

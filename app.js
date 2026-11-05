@@ -2,7 +2,7 @@
 // redraws every second (tick). Each part of the page lives in js/.
 
 import { cityKey, createGlobe } from './globe.js';
-import { addCity, balanceColumns, clocksEl, describeCity, flashCard, renderCards, renderSunLine } from './js/cards.js';
+import { addCity, balanceColumns, clocksEl, describeCity, flashCard, renderCards, renderSunLine, renderWorldPrayer } from './js/cards.js';
 import { renderCities } from './js/cities.js';
 import { icon, placeIcons } from './js/icons.js';
 import { renderLocalPanel } from './js/local-panel.js';
@@ -101,7 +101,10 @@ function tick(state) {
     card.querySelector('.hand.minute').setAttribute('transform', `rotate(${(minutes % 60) * 6 + seconds / 10} 50 50)`);
     card.querySelector('.hand.second').setAttribute('transform', `rotate(${seconds * 6} 50 50)`);
     const panel = card.querySelector('.local-panel');
-    if (panel && !panel.hidden && city) renderLocalPanel(state, panel, city, now);
+    if (panel && !panel.hidden && city) {
+      if (panel.classList.contains('world-prayer')) renderWorldPrayer(state, panel, city, now);
+      else renderLocalPanel(state, panel, city, now);
+    }
   }
   renderPlanner(state, now);
   checkReminders(state, Date.now()); // real time, not the time chosen on the slider

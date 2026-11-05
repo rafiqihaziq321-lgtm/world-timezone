@@ -1173,7 +1173,8 @@ test.describe('susun atur', () => {
     await openApp(page, undefined, '#malaysia');
     const headings = page.locator('#malaysia h2:visible');
     await expect(headings.first()).toHaveText('Waktu solat zon anda');
-    await expect(headings.nth(1)).toHaveText('Amaran');
+    await expect(headings.nth(1)).toHaveText('Takwim Islam'); // the Islamic calendar goes with the prayer times
+    await expect(headings.nth(2)).toHaveText('Amaran');
   });
 });
 
@@ -1421,11 +1422,11 @@ test.describe('bandar Malaysia: solat, cuaca dan IPU', () => {
 
   const kl = (page) => page.locator('.card[data-key="Asia/Kuala_Lumpur~Kuala Lumpur"]');
 
-  test('hanya kad bandar Malaysia ada panel, dan data hanya diambil bila dibuka', async ({ page }) => {
+  test('panel JAKIM dan cuaca untuk bandar Malaysia; data hanya diambil bila dibuka', async ({ page }) => {
     const calls = await mockApis(page);
     await openApp(page);
     await expect(kl(page).locator('.local-toggle')).toHaveText('Solat & cuaca');
-    await expect(card(page, 'Asia/Tokyo').locator('.local-toggle')).toHaveCount(0);
+    await expect(card(page, 'Asia/Tokyo').locator('.local-toggle')).toHaveText('Waktu solat'); // worked out, not fetched
     await page.clock.runFor(2000);
     expect(calls.prayer).toEqual([]);
     expect(calls.weather).toEqual([]);
@@ -1435,6 +1436,25 @@ test.describe('bandar Malaysia: solat, cuaca dan IPU', () => {
     await expect(kl(page).locator('.prayer-times li')).toHaveCount(6);
     expect(calls.prayer).toEqual(['https://api.waktusolat.app/v2/solat/gps/3.14/101.69?year=2026&month=10']);
     expect(calls.weather[0]).toContain('contains=Kuala%20Lumpur@location__location_name');
+  });
+
+  test('bandar luar Malaysia: waktu solat dikira dalam pelayar, kaedah ikut negara, tanpa rangkaian', async ({ page }) => {
+    const calls = await mockApis(page);
+    const modules = [];
+    page.on('request', (req) => { if (/\/js\/(world-prayer|prayer-calc)\.js$/.test(req.url())) modules.push(new URL(req.url()).pathname); });
+    await openApp(page); // 06:00 in Kuala Lumpur, 07:00 in Tokyo
+    expect(modules).toEqual([]); // fetched only when a panel opens
+    const tokyo = card(page, 'Asia/Tokyo');
+    await tokyo.locator('.local-toggle').click();
+    const panel = tokyo.locator('.local-panel');
+    await expect(panel.locator('.prayer-times li')).toHaveText(['Subuh04:21', 'Syuruk05:46', 'Zohor11:28', 'Asar14:40', 'Maghrib17:08', 'Isyak18:28']);
+    await expect(panel.locator('h3').first()).toHaveText('Waktu solat Liga Dunia Islam (MWL)');
+    await expect(panel.locator('.prayer-times li.next span')).toHaveText('Zohor');
+    await expect(panel.locator('.next-prayer')).toHaveText('Seterusnya: Zohor dalam 4j 28m');
+    await expect(panel.locator('.qibla')).toHaveCount(1);
+    await expect(panel.locator('.local-source')).toContainText('Dikira dalam pelayar ini');
+    expect(calls.prayer).toEqual([]); // no service asked
+    await expect(tokyo).toHaveAttribute('data-phase', /.+/); // the click did not send the globe away
   });
 
   test('papar waktu solat, solat seterusnya, cuaca dan pautan IPU', async ({ page }) => {
@@ -2070,6 +2090,102 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       expect(months).toContain('11');
     });
 
+    test('takwim Islam: tarikh Hijri JAKIM, hari kebesaran, puasa sunat dengan .ics, dan bulan', async ({ page }) => {
+      await mockAll(page);
+      // JAKIM's months: 14 October 2026 is 2 Jamadilawal 1448; imsak 05:45, berbuka 19:12.
+      await page.route('https://api.waktusolat.app/v2/solat/**', (route) => {
+        const url = new URL(route.request().url());
+        const month = Number(url.searchParams.get('month'));
+        const hijri = (day) => (month === 10
+          ? (day < 13 ? `1448-04-${day + 18}` : `1448-05-${String(day - 12).padStart(2, '0')}`)
+          : (day <= 10 ? `1448-05-${day + 19}` : `1448-06-${String(day - 10).padStart(2, '0')}`));
+        const at2 = (day, hh, mm) => Date.UTC(2026, month - 1, day, hh - 8, mm) / 1000;
+        return route.fulfill({
+          json: {
+            zone: url.pathname.split('/').pop(),
+            prayers: Array.from({ length: month === 10 ? 31 : 30 }, (_, i) => ({
+              day: i + 1, hijri: hijri(i + 1), imsak: at2(i + 1, 5, 45), fajr: at2(i + 1, 5, 55), syuruk: at2(i + 1, 7, 5),
+              dhuhr: at2(i + 1, 13, 10), asr: at2(i + 1, 16, 20), maghrib: at2(i + 1, 19, 12), isha: at2(i + 1, 20, 22),
+            })),
+          },
+          headers: { 'Access-Control-Allow-Origin': '*' },
+        });
+      });
+      // Holy days as the holiday table has them (rows of our own: the real table moves on with the years).
+      await page.route('**/js/my-holidays.js', (route) => route.fulfill({
+        contentType: 'text/javascript',
+        body: `export const MY_HOLIDAYS = ${JSON.stringify([
+          ['2026-08-25', 'Hari Keputeraan Nabi Muhammad S.A.W.', null], ['2027-01-06', 'Israk dan Mikraj', ['Kedah']],
+          ['2027-02-08', 'Awal Ramadan', ['Johor']], ['2027-03-10', 'Hari Raya Puasa', null], ['2027-03-11', 'Hari Raya Puasa (Hari Kedua)', null],
+          ['2027-05-17', 'Hari Raya Qurban', null], ['2027-08-15', 'Hari Keputeraan Nabi Muhammad S.A.W.', null],
+        ])};`,
+      }));
+      const modules = [];
+      page.on('request', (req) => { if (req.url().endsWith('/js/takwim.js')) modules.push(req.url()); });
+      await openApp(page, { zones: ['Asia/Kuala_Lumpur'], hour24: true, prayerZone: 'WLY01' });
+      expect(modules).toEqual([]); // not on the world tab
+      await page.click('.nav-links a[href="#malaysia"]');
+      const takwim = page.locator('#takwim');
+      await expect(takwim.locator('.takwim-hijri')).toHaveText('2 Jamadilawal 1448 H');
+      expect(modules).toHaveLength(1);
+
+      const holy = takwim.locator('.takwim-block').nth(1);
+      await expect(holy.locator('.takwim-next')).toHaveText('Israk dan Mikraj dalam 84 hari');
+      await expect(holy.locator('.takwim-list li')).toHaveText([
+        'Awal Ramadan8 Feb 2027 · 117 hari', 'Hari Raya Aidilfitri10 Mac 2027 · 147 hari',
+        'Hari Raya Aidiladha17 Mei 2027 · 215 hari', 'Maulidur Rasul15 Ogo 2027 · 305 hari',
+      ]);
+
+      const fasts = takwim.locator('.takwim-block').nth(2);
+      await expect(fasts.locator('.takwim-list li')).toHaveText([
+        'KhamisKha, 15 Okt · 3 Jamadilawal', 'IsninIsn, 19 Okt · 7 Jamadilawal', 'KhamisKha, 22 Okt · 10 Jamadilawal',
+        'Ayyamul BidhAhd, 25 Okt · 13 Jamadilawal', 'Ayyamul Bidh, IsninIsn, 26 Okt · 14 Jamadilawal', 'Ayyamul BidhSel, 27 Okt · 15 Jamadilawal',
+      ]);
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        fasts.getByRole('button', { name: 'Muat turun .ics (penggera pada imsak)' }).click(),
+      ]);
+      expect(download.suggestedFilename()).toBe('puasa-sunat-WLY01-2026-10-14.ics');
+      const ics = require('node:fs').readFileSync(await download.path(), 'utf8').replace(/\r\n /g, '');
+      // Mondays and Thursdays to the end of November (14), and Ayyamul Bidh days that are neither (4).
+      expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(18);
+      expect(ics.match(/BEGIN:VALARM/g)).toHaveLength(18);
+      // From imsak (05:45) to berbuka (19:12), the alarm at imsak.
+      expect(ics).toContain('\r\nUID:WLY01-2026-10-26-puasa@jam-dunia\r\nDTSTAMP:');
+      expect(ics).toContain('\r\nDTSTART:20261025T214500Z\r\nDTEND:20261026T111200Z\r\nSUMMARY:Puasa sunat: Ayyamul Bidh\\, Isnin\r\n');
+      expect(ics).toContain('\r\nTRIGGER:PT0S\r\n');
+      expect(ics).toContain('UID:WLY01-2026-11-24-puasa@jam-dunia'); // 14 Jamadilakhir, a Tuesday
+
+      const moon = takwim.locator('.takwim-moon');
+      await expect(moon.locator('.takwim-phase')).toHaveText('Sabit muda · 11% bercahaya');
+      await expect(moon.locator('p').nth(1)).toHaveText('Purnama: Isn, 26 Okt · Bulan baharu: Isn, 9 Nov');
+      await expect(moon.locator('p').nth(2)).toHaveText('Hari ini di Kuala Lumpur: terbit 09:39 · terbenam 21:50');
+
+      // Without a zone the list stays (JAKIM's date is the same nationwide), but not the .ics.
+      await page.getByLabel('Zon JAKIM').selectOption('');
+      await expect(fasts.getByRole('button', { name: 'Muat turun .ics (penggera pada imsak)' })).toBeDisabled();
+      await expect(fasts.locator('.takwim-note')).toHaveText('Pilih zon anda di atas untuk fail .ics dengan waktu imsak dan berbuka zon anda.');
+      await expect(takwim.locator('.takwim-hijri')).toHaveText('2 Jamadilawal 1448 H');
+    });
+
+    test('takwim: bulan di ibu negeri zon, dan Ramadan tiada puasa sunat', async ({ page }) => {
+      await mockAll(page);
+      await openApp(page, { zones: ['Asia/Kuala_Lumpur'], hour24: true, prayerZone: 'SBH07' }, '#malaysia');
+      const names = await page.evaluate(async () => {
+        const { sunatFasts } = await import('./js/islamic-days.js');
+        return [
+          sunatFasts({ month: 9, day: 14 }, 1), // a Monday in Ramadan
+          sunatFasts({ month: 10, day: 1 }, 4), // Aidilfitri on a Thursday
+          sunatFasts({ month: 12, day: 9 }, 2), // Arafah
+          sunatFasts({ month: 12, day: 13 }, 1), // a day of Tasyrik, a Monday
+          sunatFasts({ month: 1, day: 9 }, 3), sunatFasts({ month: 1, day: 10 }, 4),
+          sunatFasts({ month: 10, day: 2 }, 5),
+        ];
+      });
+      expect(names).toEqual([[], [], ['Hari Arafah'], [], ['Tasua'], ['Asyura', 'Khamis'], ['Enam Syawal']]);
+      await expect(page.locator('#takwim .takwim-moon p').nth(2)).toContainText('Hari ini di Kota Kinabalu:');
+    });
+
     test('amaran MET untuk negeri zon dipaparkan dalam kad zon', async ({ page }) => {
       const kl = { warning_issue: { issued: '2026-10-14T05:00:00', title_bm: 'Amaran Ribut Petir (Waspada)' }, valid_from: '2026-10-14T05:00:00', valid_to: '2026-10-15T00:00:00', text_bm: 'Ribut petir dijangka di Kuala Lumpur.' };
       await mockAll(page, { warningRows: [...warnings, kl] });
@@ -2202,10 +2318,13 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
             await expect(page.locator('#planner-pick')).toBeVisible();
             await expect(page.locator('.card .weather').first()).not.toBeEmpty();
             await page.locator('.card .weather-toggle').first().click(); // the hours strip, open
+            await page.locator('.card[data-zone="Asia/Tokyo"] .local-toggle').click(); // prayer times worked out in the browser
+            await expect(page.locator('.card[data-zone="Asia/Tokyo"] .prayer-times li')).toHaveCount(6);
             await expect(page.locator('.card .hourly:not([hidden])')).toHaveCount(1);
           }
           if (hash === '#malaysia') {
             await expect(page.locator('#zone-times li')).toHaveCount(6);
+            await expect(page.locator('#takwim .takwim-moon')).toBeVisible(); // the Islamic calendar, loaded with the tab
             // Tables that scroll sideways can be reached and scrolled from the keyboard.
             await expect(page.locator('.table-scroll:has(#my-prayers)')).toHaveAttribute('tabindex', '0');
           }
@@ -2372,6 +2491,81 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       await openApp(page, undefined, '#malaysia');
       await expect(page.locator('#my-warnings')).toContainText('Had permintaan data.gov.my dicapai');
       await expect(page.locator('#my-warnings').getByRole('button', { name: 'Cuba lagi' })).toBeVisible();
+    });
+  });
+});
+
+// js/prayer-calc.js and js/moon.js against values from the ephem astronomy
+// library (UTC, to the minute), within what rounding and the formulas allow.
+test.describe('pengiraan dalam pelayar: waktu solat dan bulan', () => {
+  test('waktu solat ikut kaedah setiap negara, dalam 2 minit daripada ephem', async ({ page }) => {
+    await openApp(page);
+    const cases = [
+      [{ zone: 'Europe/London', lat: 51.51, lon: -0.13 }, '2026-03-20', 'MWL',
+        { fajr: '2026-03-20T04:10', syuruk: '2026-03-20T06:03', dhuhr: '2026-03-20T12:08', asr: '2026-03-20T15:25', maghrib: '2026-03-20T18:13', isha: '2026-03-20T20:00' }],
+      [{ zone: 'America/New_York', lat: 40.71, lon: -74.01 }, '2026-12-21', 'ISNA',
+        { fajr: '2026-12-21T10:54', syuruk: '2026-12-21T12:16', dhuhr: '2026-12-21T16:55', asr: '2026-12-21T19:14', maghrib: '2026-12-21T21:31', isha: '2026-12-21T22:54' }],
+      [{ zone: 'Asia/Jakarta', lat: -6.2, lon: 106.85 }, '2026-10-14', 'KEMENAG',
+        { fajr: '2026-10-13T21:13', syuruk: '2026-10-13T22:31', dhuhr: '2026-10-14T04:39', asr: '2026-10-14T07:43', maghrib: '2026-10-14T10:45', isha: '2026-10-14T11:55' }],
+      // Umm al-Qura: Isyak 90 minutes after Maghrib.
+      [{ zone: 'Asia/Riyadh', lat: 21.42, lon: 39.83 }, '2026-06-21', 'UMM_AL_QURA',
+        { fajr: '2026-06-21T01:11', syuruk: '2026-06-21T02:39', dhuhr: '2026-06-21T09:23', asr: '2026-06-21T12:42', maghrib: '2026-06-21T16:05', isha: '2026-06-21T17:35' }],
+    ];
+    const results = await page.evaluate(async (list) => {
+      const { prayerTimes } = await import('./js/prayer-calc.js');
+      return list.map(([city, iso]) => prayerTimes(city, iso));
+    }, cases);
+    results.forEach((times, i) => {
+      const [city, , method, expected] = cases[i];
+      expect(times.method.key, city.zone).toBe(method);
+      for (const [field, at] of Object.entries(expected)) {
+        expect(Math.abs(times[field] - Date.parse(`${at}Z`)) / 60000, `${city.zone} ${field}`).toBeLessThanOrEqual(2);
+      }
+    });
+  });
+
+  test('waktu solat jauh di utara: tiada waktu yang mustahil, Subuh dan Isyak ikut sudut', async ({ page }) => {
+    await openApp(page);
+    const [summer, winter, london, saoPaulo] = await page.evaluate(async () => {
+      const { prayerTimes, methodFor } = await import('./js/prayer-calc.js');
+      const tromso = { zone: 'Europe/Oslo', lat: 69.65, lon: 18.96 };
+      return [prayerTimes(tromso, '2026-06-21'), prayerTimes(tromso, '2026-12-21'),
+        prayerTimes({ zone: 'Europe/London', lat: 51.51, lon: -0.13 }, '2026-06-21'), methodFor({ zone: 'America/Sao_Paulo', lat: -23.55 }).key];
+    });
+    // Midnight sun: no sunrise or sunset, so no Subuh, Maghrib or Isyak either.
+    expect([summer.fajr, summer.syuruk, summer.maghrib, summer.isha]).toEqual([null, null, null, null]);
+    expect(summer.dhuhr).not.toBeNull();
+    // Polar night: no sunrise, sunset or Asar shadow.
+    expect([winter.syuruk, winter.asr, winter.maghrib]).toEqual([null, null, null]);
+    // London never gets 18° dark at midsummer: Subuh is 18/60 of the night before sunrise.
+    const night = 24 * 60 - (london.maghrib - london.syuruk) / 60000;
+    expect(Math.abs((london.syuruk - london.fajr) / 60000 - (18 / 60) * night)).toBeLessThanOrEqual(1);
+    expect(saoPaulo).toBe('MWL'); // the Americas south of 15°N
+  });
+
+  test('fasa bulan, anak bulan dan purnama, serta bulan terbit dan terbenam di Kuala Lumpur', async ({ page }) => {
+    await openApp(page);
+    // [start of the Malaysian day, lit at noon, rise, set, next new moon, next full moon]
+    const refs = [
+      ['2026-10-13T16:00:00Z', 0.1236, '2026-10-14T01:36', '2026-10-14T13:49', '2026-11-09T07:02', '2026-10-26T04:11'],
+      ['2027-02-07T16:00:00Z', 0.0215, '2027-02-08T00:25', '2027-02-08T12:42', '2027-03-08T09:29', '2027-02-20T23:23'],
+      ['2027-06-19T16:00:00Z', 0.9877, '2027-06-20T12:33', '2027-06-19T23:55', '2027-07-04T03:01', '2027-07-18T15:44'],
+    ];
+    const got = await page.evaluate(async (list) => {
+      const { moonPhase, moonTimes, nextPhase } = await import('./js/moon.js');
+      return list.map(([start]) => {
+        const t = Date.parse(start);
+        return [moonPhase(t + 12 * 3600000).lit, moonTimes(t, 3.14, 101.69), nextPhase(t, 0), nextPhase(t, 0.5)];
+      });
+    }, refs);
+    const minutes = (ms, at) => Math.abs(ms - Date.parse(`${at}Z`)) / 60000;
+    got.forEach(([lit, times, newMoon, fullMoon], i) => {
+      const [start, refLit, rise, set, refNew, refFull] = refs[i];
+      expect(Math.abs(lit - refLit), start).toBeLessThan(0.01);
+      expect(minutes(times.rise, rise), `${start} terbit`).toBeLessThanOrEqual(6);
+      expect(minutes(times.set, set), `${start} terbenam`).toBeLessThanOrEqual(6);
+      expect(minutes(newMoon, refNew), `${start} bulan baharu`).toBeLessThanOrEqual(15);
+      expect(minutes(fullMoon, refFull), `${start} purnama`).toBeLessThanOrEqual(15);
     });
   });
 });
