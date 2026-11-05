@@ -36,7 +36,6 @@
   <link rel="modulepreload" href="js/air.js">
   <link rel="modulepreload" href="js/calendar.js">
   <link rel="modulepreload" href="js/cards.js">
-  <link rel="modulepreload" href="js/cities.js">
   <link rel="modulepreload" href="js/dialog.js">
   <link rel="modulepreload" href="js/holidays.js">
   <link rel="modulepreload" href="js/icons.js">
@@ -137,13 +136,21 @@
         </div>
         <input type="range" id="time-slider" min="-96" max="96" step="1" value="0" aria-describedby="time-label">
         <div class="time-scale" aria-hidden="true"><span>−24j</span><span>Sekarang</span><span>+24j</span></div>
+        <form id="time-type" class="time-type">
+          <label for="time-type-input">Taip masa</label>
+          <input id="time-type-input" name="masa" type="text" placeholder="cth. 3 petang Tokyo" autocomplete="off" spellcheck="false" enterkeyhint="go">
+          <button type="submit" class="secondary">Tukar</button>
+          <p id="time-type-status" role="status"></p>
+        </form>
       </div>
     </section>
 
     <section id="bandar" class="section" aria-labelledby="bandar-title">
       <div class="section-head">
         <h2 id="bandar-title">Bandar anda</h2>
+        <button id="share-image" type="button" class="icon-btn" aria-label="Kongsi imej jam" title="Kongsi imej jam" data-icon="image"></button>
         <p>Warna setiap kad mengikut waktu di bandar itu. Klik kad untuk memusatkan glob padanya.</p>
+        <p id="share-image-status" class="share-image-status" role="status"></p>
       </div>
       <form id="add-form">
         <input id="zone-input" name="bandar" type="search" list="zone-list" placeholder="Cari bandar, cth. Paris…" autocomplete="off" spellcheck="false" enterkeyhint="search" required aria-label="Cari bandar">
@@ -196,10 +203,19 @@
           <span class="swatch off"></span>Luar waktu kerja
           <span class="swatch weekend"></span><span id="weekend-legend">Hujung minggu (Sabtu, Ahad)</span>
           <span class="swatch holiday"></span>Cuti umum Malaysia
+          <span class="swatch prayer"></span>Waktu solat (Zohor, Asar, Maghrib)
           <span class="swatch sleep"></span>Waktu tidur (22:00–07:00).
           Klik satu jam untuk memilihnya.
         </p>
       </div>
+    </section>
+
+    <section class="section" aria-labelledby="countdown-title">
+      <div class="section-head">
+        <h2 id="countdown-title">Kiraan detik</h2>
+        <p>Hari penting, dikira dalam waktu bandarnya. Disimpan dalam pelayar ini.</p>
+      </div>
+      <div id="countdowns" class="countdowns"></div>
     </section>
 
     <section id="fakta" class="section" aria-labelledby="facts-title">

@@ -27,20 +27,41 @@ export function defaultState() {
   // theme null = follow the system
   // prayerZone: the viewer's JAKIM zone (null until chosen); reminder: prayer-time notifications for it
   // tempUnit: 'c' or 'f', for every temperature shown
-  return { cities: DEFAULT_ZONES.map(cityForZone), hour24: true, theme: null, work: { ...DEFAULT_WORK }, prayerZone: null, reminder: false, tempUnit: 'c' };
+  // countdowns: [{ title, at (ms), zone }], the events counted down to
+  return { cities: DEFAULT_ZONES.map(cityForZone), hour24: true, theme: null, work: { ...DEFAULT_WORK }, prayerZone: null, reminder: false, tempUnit: 'c', countdowns: [] };
 }
 
+// A city may also carry a person's name (`label`) and their own working
+// hours (`work`), set from its card; both are left off when absent.
 export function parseStoredCity(raw) {
   if (!raw || typeof raw.name !== 'string' || typeof raw.zone !== 'string' || !isValidZone(raw.zone)) return null;
   const coord = (n) => (Number.isFinite(n) ? n : null);
-  return makeCity(raw.name, raw.zone, coord(raw.lat), coord(raw.lon));
+  const city = makeCity(raw.name, raw.zone, coord(raw.lat), coord(raw.lon));
+  const label = typeof raw.label === 'string' ? raw.label.trim().slice(0, 40) : '';
+  if (label) city.label = label;
+  const work = validWork(raw.work);
+  if (work) city.work = work;
+  return city;
+}
+
+// Saved countdowns that still make sense: a title, an instant and a zone.
+export function parseStoredCountdowns(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((c) => c && typeof c.title === 'string' && c.title.trim() && Number.isFinite(c.at)
+    && typeof c.zone === 'string' && isValidZone(c.zone))
+    .slice(0, 20).map((c) => ({ title: c.title.trim().slice(0, 80), at: c.at, zone: c.zone }));
+}
+
+// Working hours if they make a sensible range, else null.
+function validWork(raw) {
+  const minute = (n) => Number.isInteger(n) && n >= 0 && n <= 24 * 60;
+  if (!raw || !minute(raw.start) || !minute(raw.end) || raw.start >= raw.end || !Array.isArray(raw.weekend)) return null;
+  return { start: raw.start, end: raw.end, weekend: [...new Set(raw.weekend.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))] };
 }
 
 // Saved working hours, or the defaults if missing or not a sensible range.
 export function parseStoredWork(raw) {
-  const minute = (n) => Number.isInteger(n) && n >= 0 && n <= 24 * 60;
-  if (!raw || !minute(raw.start) || !minute(raw.end) || raw.start >= raw.end || !Array.isArray(raw.weekend)) return { ...DEFAULT_WORK };
-  return { start: raw.start, end: raw.end, weekend: [...new Set(raw.weekend.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))] };
+  return validWork(raw) ?? { ...DEFAULT_WORK };
 }
 
 export function loadState() {
@@ -69,6 +90,7 @@ export function loadState() {
       cities,
       hour24: typeof parsed.hour24 === 'boolean' ? parsed.hour24 : defaults.hour24,
       tempUnit: parsed.tempUnit === 'f' ? 'f' : defaults.tempUnit,
+      countdowns: parseStoredCountdowns(parsed.countdowns),
       theme: ['light', 'dark'].includes(parsed.theme) ? parsed.theme : defaults.theme,
       work: parseStoredWork(parsed.work),
       prayerZone,
@@ -84,9 +106,9 @@ export function loadState() {
 // so the viewer's own list (state.savedCities) is what gets stored.
 export function saveState(state) {
   const cities = (state.shared ? state.savedCities : state.cities)
-    .map(({ name, zone, lat, lon }) => ({ name, zone, lat, lon }));
+    .map(({ name, zone, lat, lon, label, work }) => ({ name, zone, lat, lon, ...(label ? { label } : {}), ...(work ? { work } : {}) }));
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ cities, hour24: state.hour24, theme: state.theme, work: state.work, prayerZone: state.prayerZone, reminder: state.reminder, tempUnit: state.tempUnit }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ cities, hour24: state.hour24, theme: state.theme, work: state.work, prayerZone: state.prayerZone, reminder: state.reminder, tempUnit: state.tempUnit, countdowns: state.countdowns }));
   } catch (err) {
     console.warn('Gagal simpan tetapan; perubahan tidak akan kekal selepas reload.', err);
   }

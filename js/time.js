@@ -45,6 +45,29 @@ export function utcOffsetMinutes(zone, date) {
   return Math.round((wallAsUtc - Math.floor(date.getTime() / 1000) * 1000) / 60000);
 }
 
+// A wall-clock time in `zone` as an instant (worked out twice, so it holds
+// across a clock change); `day` may run past the month's end.
+export function zonedTime(zone, year, month, day, hour, minute) {
+  const wall = Date.UTC(year, month - 1, day, hour, minute);
+  const first = wall - utcOffsetMinutes(zone, new Date(wall)) * MINUTE_MS;
+  return wall - utcOffsetMinutes(zone, new Date(first)) * MINUTE_MS;
+}
+
+// The next change of a zone's offset from UTC (daylight saving) within
+// `days` days of `ms`: { at, from, to }, the instant and offsets in minutes.
+export function nextOffsetChange(zone, ms, days = 7) {
+  const offset = (t) => utcOffsetMinutes(zone, new Date(t));
+  const from = offset(ms);
+  let [lo, hi] = [ms, ms + days * 24 * HOUR_MS];
+  if (offset(hi) === from) return null;
+  while (hi - lo > 1000) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (offset(mid) === from) lo = mid; else hi = mid;
+  }
+  const at = Math.ceil(lo / MINUTE_MS) * MINUTE_MS; // changes fall on a whole minute
+  return { at, from, to: offset(at) };
+}
+
 // 195 -> "+3j 15m", -120 -> "−2j"
 export function signedDuration(minutes) {
   const sign = minutes > 0 ? '+' : '−';

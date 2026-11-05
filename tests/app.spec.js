@@ -155,6 +155,20 @@ test.describe('simpanan', () => {
 });
 
 test.describe('pengiraan masa', () => {
+  test('tukar jam (DST) dalam seminggu diberitahu pada kad bandar itu sahaja', async ({ page }) => {
+    await openApp(page, undefined, '', new Date('2026-10-20T00:00:00Z')); // London changes on 25 October
+    await expect(card(page, 'Europe/London').locator('.dst')).toHaveText('Ahad, 25 Okt: jam diundur dari 02:00 ke 01:00 (UTC+1 → UTC+0)');
+    await expect(card(page, 'Europe/London').locator('.dst svg')).toHaveAttribute('data-glyph', 'clock');
+    await expect(card(page, 'America/New_York').locator('.dst')).toBeHidden(); // 1 November: more than a week away
+    await expect(card(page, 'Asia/Kuala_Lumpur').locator('.dst')).toBeHidden(); // no daylight saving
+    const offsets = await page.evaluate(async () => {
+      const { nextOffsetChange } = await import('./js/time.js');
+      const c = nextOffsetChange('Australia/Sydney', Date.parse('2026-09-30T00:00:00Z'));
+      return [new Date(c.at).toISOString(), c.from, c.to];
+    });
+    expect(offsets).toEqual(['2026-10-03T16:00:00.000Z', 600, 660]); // 02:00 becomes 03:00 in Sydney
+  });
+
   test('offset UTC ikut DST', async ({ page }) => {
     await openApp(page);
     const offsets = await page.evaluate(async () => {
@@ -183,7 +197,94 @@ test.describe('pengiraan masa', () => {
   });
 });
 
+test.describe('kongsi imej', () => {
+  test('tanpa skrin kongsi: PNG semua jam dimuat turun', async ({ page }) => {
+    await page.addInitScript(() => { delete Navigator.prototype.canShare; delete Navigator.prototype.share; });
+    await openApp(page);
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Kongsi imej jam' }).click()]);
+    expect(download.suggestedFilename()).toBe('jam-dunia-202610132200.png');
+    const png = require('node:fs').readFileSync(await download.path());
+    expect(png.subarray(1, 4).toString()).toBe('PNG');
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1080, 120 + 4 * 132 + 72]); // a row per city
+    await expect(page.locator('#share-image-status')).toHaveText('Imej dimuat turun.');
+  });
+
+  test('dengan skrin kongsi (telefon): fail PNG dihantar kepadanya', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.sharedFiles = [];
+      Navigator.prototype.canShare = () => true;
+      Navigator.prototype.share = async ({ files }) => { window.sharedFiles.push(...files.map((f) => [f.name, f.type])); };
+    });
+    await openApp(page);
+    await page.getByRole('button', { name: 'Kongsi imej jam' }).click();
+    await expect(page.locator('#share-image-status')).toHaveText('Imej dikongsi.');
+    expect(await page.evaluate(() => window.sharedFiles)).toEqual([['jam-dunia-202610132200.png', 'image/png']]);
+  });
+});
+
+test.describe('kiraan detik', () => {
+  test('tambah kiraan dalam waktu bandar lain: berdetik, disimpan, dan boleh dibuang', async ({ page }) => {
+    await openApp(page); // 22:00:07 UTC, 13 October
+    await page.locator('#countdowns').scrollIntoViewIfNeeded();
+    const form = page.locator('.countdown-form');
+    await expect(page.locator('.countdown-list .empty')).toHaveText('Belum ada kiraan. Tambah satu di atas.');
+    await form.getByLabel('Nama acara').fill('Pelancaran');
+    await form.getByLabel('Tarikh acara').fill('2026-10-15');
+    await form.getByLabel('Masa acara').fill('09:00');
+    await form.getByLabel('Zon waktu').selectOption('Asia/Tokyo'); // 09:00 in Tokyo = 00:00 UTC on the 15th
+    await form.getByRole('button', { name: 'Tambah' }).click();
+    const item = page.locator('.countdown');
+    await expect(item.locator('h3')).toHaveText('Pelancaran');
+    await expect(item.locator('.countdown-left')).toHaveText(/^1h 1j 59m [45]\ds lagi$/); // a second or two of typing
+    await expect(item.locator('.local-status')).toHaveText('Khamis, 15 Oktober 2026 pada 09:00 di Tokyo · 08:00 waktu anda');
+    await page.clock.runFor(60000); // it ticks
+    await expect(item.locator('.countdown-left')).toHaveText(/^1h 1j 58m [45]\ds lagi$/);
+    expect((await storedState(page)).countdowns).toEqual([{ title: 'Pelancaran', at: Date.parse('2026-10-15T00:00:00Z'), zone: 'Asia/Tokyo' }]);
+
+    // Saved: there again in a new tab, and loaded before the section is scrolled to.
+    const again = await page.context().newPage();
+    await openApp(again);
+    await expect(again.locator('.countdown h3')).toHaveText('Pelancaran');
+    await again.close();
+
+    await form.getByLabel('Nama acara').fill('Sudah lepas');
+    await form.getByLabel('Tarikh acara').fill('2026-10-01');
+    await form.getByRole('button', { name: 'Tambah' }).click();
+    await expect(item.first().locator('.countdown-left')).toHaveText('Sudah berlalu'); // sorted first, being earliest
+    await page.getByRole('button', { name: 'Buang kiraan Sudah lepas' }).click();
+    await expect(item).toHaveCount(1);
+    expect((await storedState(page)).countdowns).toHaveLength(1);
+  });
+});
+
 test.describe('penukar masa', () => {
+  test('taip masa: "3 petang Tokyo" menggerakkan semua jam ke masa itu', async ({ page }) => {
+    await openApp(page); // 06:00 Wednesday in Kuala Lumpur
+    const field = page.getByLabel('Taip masa');
+    const status = page.locator('#time-type-status');
+    await field.fill('3 petang Tokyo');
+    await field.press('Enter');
+    await expect(status).toHaveText('15:00 Rab, 14 Okt di Tokyo = 14:00 waktu anda');
+    await expect(card(page, 'Asia/Tokyo').locator('.time')).toHaveText(/^15:00/);
+    await expect(page.locator('#time-label')).toHaveText('+8j dari sekarang · Rab, 14 Okt, 14:00 waktu anda');
+
+    await field.fill('9am New York esok'); // English, and tomorrow by New York's calendar (still Tuesday there)
+    await field.press('Enter');
+    await expect(status).toHaveText('09:00 Rab, 14 Okt di New York = 21:00 waktu anda');
+
+    await field.fill('Tokyo'); // no time: explained, clocks stay
+    await field.press('Enter');
+    await expect(status).toHaveText('Tiada jam dalam teks itu. Cuba "3 petang Tokyo" atau "15:00 London".');
+    await expect(page.locator('#time-label')).toContainText('21:00 waktu anda');
+
+    await field.fill('7 pagi Lisbon'); // not a card: found in the city list; today there is still Tuesday
+    await field.press('Enter');
+    await expect(status).toHaveText('07:00 Sel, 13 Okt di Lisbon = 14:00 waktu anda');
+    await field.fill('7 pagi Atlantis');
+    await field.press('Enter');
+    await expect(status).toHaveText('Bandar "atlantis" tidak dijumpai.');
+  });
+
   test('slider +9 jam mengubah semua kad, dan butang kembali ke sekarang', async ({ page }) => {
     await openApp(page);
     await page.locator('#time-slider').fill('36'); // 36 × 15 min
@@ -349,6 +450,72 @@ test.describe('perancang mesyuarat', () => {
     await expect(date).toHaveValue('2026-10-15');
     await page.getByRole('button', { name: 'Hari ini' }).click();
     await expect(date).toHaveValue('2026-10-14');
+  });
+
+  test('nama dan waktu kerja sendiri pada kad: disimpan, dan perancang mengikutnya', async ({ page }) => {
+    await openApp(page, { zones: ['Asia/Kuala_Lumpur', 'Europe/London'], hour24: true });
+    const london = card(page, 'Europe/London');
+    await expect(london.locator('.person')).toBeHidden();
+    await london.getByRole('button', { name: 'Nama dan waktu kerja untuk London' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Orang di London' });
+    await dialog.getByLabel('Nama').fill('Aina');
+    await expect(dialog.getByLabel('Mula')).toBeDisabled(); // the shared day until "own" is ticked
+    await dialog.getByLabel('Waktu kerja sendiri').check();
+    await dialog.getByLabel('Mula').selectOption('600'); // 10:00
+    await dialog.getByLabel('Tamat').selectOption('1140'); // 19:00
+    await dialog.getByRole('button', { name: 'Simpan' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(london.locator('.person')).toHaveText('Aina · kerja 10:00–19:00');
+    expect((await storedState(page)).cities[1]).toMatchObject({ name: 'London', label: 'Aina', work: { start: 600, end: 1140, weekend: [6, 0] } });
+
+    const row = page.locator('#planner-table tbody tr').nth(1);
+    await expect(row.locator('th')).toContainText('Aina (London)');
+    await expect(row.locator('th small').last()).toHaveText('Kerja 10:00–19:00');
+    // 16:00 in Kuala Lumpur is 09:00 in London: before Aina's day; 17:00 (10:00) starts it.
+    await expect(row.locator('td').nth(16)).toHaveClass(/\boff\b/);
+    await expect(row.locator('td').nth(17)).toHaveClass(/\bwork\b/);
+
+    const again = await page.context().newPage();
+    await openApp(again); // the saved list
+    await expect(card(again, 'Europe/London').locator('.person')).toHaveText('Aina · kerja 10:00–19:00');
+    await again.close();
+
+    await london.getByRole('button', { name: 'Nama dan waktu kerja untuk London' }).click();
+    await expect(dialog.getByLabel('Nama')).toHaveValue('Aina');
+    await dialog.getByRole('button', { name: 'Padam' }).click();
+    await expect(london.locator('.person')).toBeHidden();
+    expect((await storedState(page)).cities[1]).toEqual({ name: 'London', zone: 'Europe/London', lat: 51.51, lon: -0.13 });
+  });
+
+  test('waktu solat dalam perancang: jam yang ditanda, dan jam terbaik mengelaknya bila boleh', async ({ page }) => {
+    // JAKIM for Kuala Lumpur (Zohor set at 09:10 here, to meet a working hour); Tokyo is worked out.
+    await page.route('https://api.waktusolat.app/v2/solat/gps/**', (route) => {
+      const at = (day, hh, mm) => Date.UTC(2026, 9, day, hh - 8, mm) / 1000;
+      return route.fulfill({
+        json: { zone: 'WLY01', prayers: Array.from({ length: 31 }, (_, i) => ({ day: i + 1, fajr: at(i + 1, 5, 55), dhuhr: at(i + 1, 9, 10), asr: at(i + 1, 16, 20), maghrib: at(i + 1, 19, 12), isha: at(i + 1, 20, 22) })) },
+        headers: { 'Access-Control-Allow-Origin': '*' },
+      });
+    });
+    const modules = [];
+    page.on('request', (req) => { if (req.url().endsWith('/js/planner-prayer.js')) modules.push(req.url()); });
+    await openApp(page, { zones: ['Asia/Kuala_Lumpur', 'America/New_York'], hour24: true });
+    expect(modules).toEqual([]); // not before the planner nears the screen
+    await page.locator('#planner').scrollIntoViewIfNeeded();
+    const rows = page.locator('#planner-table tbody tr');
+    await expect(rows.nth(0).locator('td.prayer')).toHaveCount(3);
+    await expect(rows.nth(0).locator('td').nth(9)).toHaveAttribute('title', 'Zohor 09:10');
+    await expect(rows.nth(0).locator('td').nth(19)).toHaveAttribute('title', 'Maghrib 19:12');
+    await expect(rows.nth(0).locator('td').nth(9)).toContainText(', Zohor 09:10'); // for screen readers
+    // 09:00 and 21:00 each have one city at work and nobody asleep: 09:00 has Zohor, so 21:00.
+    await expect(page.locator('#planner-summary .planner-best')).toHaveText(
+      'Paling sesuai: 21:00–22:00 waktu anda, 1 daripada 2 bandar dalam waktu kerja; Kuala Lumpur 21:00 (luar waktu kerja).',
+    );
+    await expect(page.locator('.legend')).toContainText('Waktu solat (Zohor, Asar, Maghrib)');
+
+    // Tokyo by the browser's own reckoning (its position from the city list).
+    await addCity(page, 'Tokyo');
+    await expect(rows.nth(2).locator('td.prayer')).toHaveCount(3);
+    await expect(rows.nth(2).locator('td').nth(13)).toHaveAttribute('title', 'Asar 14:39');
   });
 
   test('pilih jam dengan papan kekunci: fokus kekal pada jam itu selepas jadual dilukis semula', async ({ page }) => {
@@ -615,8 +782,8 @@ test.describe('waktu kerja dan hujung minggu', () => {
     await openApp(page, { zones: ['Asia/Kuala_Lumpur', 'America/New_York'], hour24: true });
     await page.locator('.planner-settings summary').click();
     await page.getByRole('checkbox', { name: 'Selasa' }).check();
-    // Midnight Wednesday in Kuala Lumpur is noon Tuesday in New York.
-    await expect(row(page, 1).locator('td').first()).toHaveText('12');
+    // Midnight Wednesday in Kuala Lumpur is noon Tuesday in New York (and its Zohor, for screen readers).
+    await expect(row(page, 1).locator('td').first()).toHaveText(/^12(, |$)/);
     await expect(row(page, 1).locator('td').first()).toHaveClass(/weekend/);
     await expect(row(page, 0).locator('td').nth(10)).toHaveClass(/work/); // Wednesday in Kuala Lumpur
   });
@@ -1453,7 +1620,7 @@ test.describe('bandar Malaysia: solat, cuaca dan IPU', () => {
     await expect(panel.locator('.next-prayer')).toHaveText('Seterusnya: Zohor dalam 4j 28m');
     await expect(panel.locator('.qibla')).toHaveCount(1);
     await expect(panel.locator('.local-source')).toContainText('Dikira dalam pelayar ini');
-    expect(calls.prayer).toEqual([]); // no service asked
+    expect(calls.prayer.filter((url) => !url.includes('/3.14/101.69'))).toEqual([]); // no service asked for Tokyo (Kuala Lumpur's are the planner's)
     await expect(tokyo).toHaveAttribute('data-phase', /.+/); // the click did not send the globe away
   });
 
@@ -2158,6 +2325,8 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
 
       const moon = takwim.locator('.takwim-moon');
       await expect(moon.locator('.takwim-phase')).toHaveText('Sabit muda · 11% bercahaya');
+      // A waxing crescent: lit from the right edge, the shadow line bowing right too.
+      expect(await moon.locator('.moon-lit').getAttribute('d')).toMatch(/^M22 2A20 20 0 0 1 22 42A[\d.]+ 20 0 0 0 22 2Z$/);
       await expect(moon.locator('p').nth(1)).toHaveText('Purnama: Isn, 26 Okt · Bulan baharu: Isn, 9 Nov');
       await expect(moon.locator('p').nth(2)).toHaveText('Hari ini di Kuala Lumpur: terbit 09:39 · terbenam 21:50');
 
@@ -2303,6 +2472,7 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
 
     for (const scheme of ['light', 'dark']) {
       test(`tiada pelanggaran axe pada setiap tab dan dialog (${scheme})`, async ({ page }) => {
+        test.setTimeout(60000); // several full audits, each a few seconds
         await page.emulateMedia({ colorScheme: scheme });
         await mockAll(page);
         await page.route('https://api.open-meteo.com/v1/forecast?**', (route) => route.fulfill({
@@ -2320,6 +2490,8 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
             await page.locator('.card .weather-toggle').first().click(); // the hours strip, open
             await page.locator('.card[data-zone="Asia/Tokyo"] .local-toggle').click(); // prayer times worked out in the browser
             await expect(page.locator('.card[data-zone="Asia/Tokyo"] .prayer-times li')).toHaveCount(6);
+            await page.locator('#countdowns').scrollIntoViewIfNeeded(); // the countdown form, loaded near the screen
+            await expect(page.locator('.countdown-form')).toBeVisible();
             await expect(page.locator('.card .hourly:not([hidden])')).toHaveCount(1);
           }
           if (hash === '#malaysia') {
@@ -2329,6 +2501,12 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
             await expect(page.locator('.table-scroll:has(#my-prayers)')).toHaveAttribute('tabindex', '0');
           }
           expect(await audit(page), hash).toEqual([]);
+          if (hash === '#dunia') {
+            await page.locator('.card[data-zone="Europe/London"] .person-edit').click();
+            await expect(page.locator('#person-dialog')).toBeVisible();
+            expect(await audit(page), 'dialog nama').toEqual([]);
+            await page.keyboard.press('Escape');
+          }
           if (hash === '#malaysia') {
             await page.getByRole('button', { name: 'Jadual sebulan' }).click();
             await expect(page.locator('#month-table tbody tr')).toHaveCount(31);
@@ -2564,8 +2742,8 @@ test.describe('pengiraan dalam pelayar: waktu solat dan bulan', () => {
       expect(Math.abs(lit - refLit), start).toBeLessThan(0.01);
       expect(minutes(times.rise, rise), `${start} terbit`).toBeLessThanOrEqual(6);
       expect(minutes(times.set, set), `${start} terbenam`).toBeLessThanOrEqual(6);
-      expect(minutes(newMoon, refNew), `${start} bulan baharu`).toBeLessThanOrEqual(15);
-      expect(minutes(fullMoon, refFull), `${start} purnama`).toBeLessThanOrEqual(15);
+      expect(minutes(newMoon, refNew), `${start} bulan baharu`).toBeLessThanOrEqual(8);
+      expect(minutes(fullMoon, refFull), `${start} purnama`).toBeLessThanOrEqual(8);
     });
   });
 });
