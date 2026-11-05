@@ -2,10 +2,9 @@
 // redraws every second (tick). Each part of the page lives in js/.
 
 import { cityKey, createGlobe } from './globe.js';
-import { addCity, balanceColumns, clocksEl, describeCity, flashCard, renderCards, renderSunLine, renderWorldPrayer } from './js/cards.js';
-import { renderCities } from './js/cities.js';
+import { addCity, balanceColumns, clocksEl, describeCity, flashCard, renderCards, renderDstLine, renderSunLine, renderWorldPrayer } from './js/cards.js';
 import { icon, placeIcons } from './js/icons.js';
-import { renderLocalPanel } from './js/local-panel.js';
+import { renderLocalPanel, retryButton } from './js/local-panel.js';
 import { renderFacts, renderMalaysia } from './js/malaysia.js';
 import { plannerTableEl, renderPlanner, setupPlannerDay, setupWorkSettings, showMeeting } from './js/planner.js';
 import { setupMapTools } from './js/qibla.js';
@@ -95,6 +94,7 @@ function tick(state) {
     });
     card.querySelector('.diff').textContent = formatDiff(offset - localOffset);
     if (city) renderSunLine(state, card.querySelector('.sun'), city, now);
+    if (city) renderDstLine(state, card.querySelector('.dst'), city, now);
     renderWeatherLine(state, card.querySelector('.weather'), city && weatherFor(city));
     if (city) renderHourly(state, card, city);
     card.querySelector('.hand.hour').setAttribute('transform', `rotate(${(minutes % 720) / 2} 50 50)`);
@@ -108,8 +108,20 @@ function tick(state) {
   }
   renderPlanner(state, now);
   checkReminders(state, Date.now()); // real time, not the time chosen on the slider
+  if (state.tab === 'dunia' && state.countdownWanted) {
+    const key = 'modul-kiraan';
+    const countdowns = state.localData.get(key, () => import('./js/countdown.js'));
+    if (countdowns.status === 'ok') countdowns.data.renderCountdowns(state);
+    else if (countdowns.status === 'error') renderKeyed(document.getElementById('countdowns'), 'error', () => [retryButton(state, key)]);
+  }
   if (state.tab === 'malaysia') renderMalaysia(state, now);
-  if (state.tab === 'bandar-malaysia') renderCities(state, now);
+  if (state.tab === 'bandar-malaysia') {
+    // The tab's code, like its map, is fetched the first time the tab is drawn.
+    const key = 'modul-bandar';
+    const cities = state.localData.get(key, () => import('./js/cities.js'));
+    if (cities.status === 'ok') cities.data.renderCities(state, now);
+    else if (cities.status === 'error') renderKeyed(document.getElementById('my-cities'), 'error', () => [retryButton(state, key)]);
+  }
 }
 
 // Switches every clock to `ms` (epoch ms), or back to live time when null.
@@ -168,10 +180,18 @@ function init() {
   state.plannerDuration = 60; // minutes
   state.plannerTitle = 'Mesyuarat';
   state.holidaysWanted = false; // set when the planner nears the screen
+  state.countdownWanted = state.countdowns.length > 0; // or once its section nears the screen
   if (shared.meeting) showMeeting(state, shared.meeting);
   state.mapView = null; // created the first time the Bandar tab opens
   state.ramadanState = 'W.P. Kuala Lumpur'; // whose imsak and berbuka the Ramadan countdown shows
   state.tab = showTab(window.location.hash);
+  const countdownSeen = new IntersectionObserver((entries) => {
+    if (!entries.some((e) => e.isIntersecting)) return;
+    countdownSeen.disconnect();
+    state.countdownWanted = true;
+    state.refresh();
+  }, { rootMargin: '300px' });
+  countdownSeen.observe(document.getElementById('countdowns'));
   // The skip link goes to the title of the tab on screen, without switching tabs.
   document.querySelector('.skip-link').addEventListener('click', (e) => {
     e.preventDefault();
@@ -293,6 +313,36 @@ function init() {
     stopPlay();
     setViewTime(state, null);
   });
+  // The clocks as a picture to send; drawn by a module loaded on first use.
+  document.getElementById('share-image').addEventListener('click', async () => {
+    const status = document.getElementById('share-image-status');
+    try {
+      const { shareClocks } = await import('./js/share-image.js');
+      status.textContent = await shareClocks(state, state.viewTime ?? Date.now());
+    } catch (err) {
+      console.warn('Jam Dunia: imej tidak dapat dibuat.', err);
+      status.textContent = 'Imej tidak dapat dibuat sekarang; cuba lagi.';
+    }
+  });
+  // "3 petang Tokyo": every clock moves to that moment. The reader is loaded on first use.
+  document.getElementById('time-type').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = document.getElementById('time-type-status');
+    try {
+      const { resolveTimeQuery } = await import('./js/time-query.js');
+      const result = await resolveTimeQuery(e.target.elements.masa.value, { state, loadCityList, now: Date.now(), localZone: LOCAL_ZONE });
+      if (result.error) {
+        status.textContent = result.error;
+        return;
+      }
+      stopPlay();
+      setViewTime(state, result.ms);
+      status.textContent = result.message;
+    } catch (err) {
+      console.warn('Jam Dunia: masa yang ditaip tidak dapat dibaca.', err);
+      status.textContent = 'Tidak dapat dibaca sekarang; cuba lagi.';
+    }
+  });
 
   plannerTableEl.addEventListener('click', (e) => {
     const cell = e.target.closest('[data-slot]');
@@ -313,7 +363,7 @@ function init() {
 
   clocksEl.addEventListener('click', (e) => {
     const card = e.target.closest('.card');
-    if (!card || e.target.closest('.remove, .drag-handle, .local-toggle, .local-panel, .weather-toggle, .hourly')) return;
+    if (!card || e.target.closest('.remove, .drag-handle, .person-edit, .local-toggle, .local-panel, .weather-toggle, .hourly')) return;
     const city = state.cities.find((c) => cityKey(c) === card.dataset.key);
     if (city) globe.focusCity(city);
   });

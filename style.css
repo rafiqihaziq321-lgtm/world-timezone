@@ -609,6 +609,26 @@ body.time-shifted #time-label { color: var(--accent-ink); font-weight: 700; }
 
 #time-slider { width: 100%; margin: 12px 0 2px; accent-color: var(--accent); }
 #time-slider.beyond { opacity: 0.5; } /* the time shown lies past its ends */
+.time-type { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 10px; }
+.time-type label { font-weight: 700; font-size: 0.9rem; }
+.time-type input { flex: 1 1 6em; min-width: 0; padding: 8px 14px; font: inherit; color: var(--text); background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 999px; }
+.time-type button { padding: 8px 16px; }
+/* "Bandar anda" with the share-image button at its end. */
+#bandar .section-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+#bandar .section-head p { flex-basis: 100%; }
+#bandar .section-head #share-image { margin-left: auto; }
+#bandar .section-head .share-image-status { display: block; font-size: 0.85rem; }
+#bandar .section-head .share-image-status:empty { display: none; }
+@media (max-width: 600px) {
+  /* Room for the typed time while the first card still shows on the first screen;
+     the label above the slider already says how far it has moved. */
+  #time-control .time-scale { display: none; }
+  #time-control .time-type { margin-top: 6px; }
+  #time-control .time-type :is(input, button) { padding-top: 6px; padding-bottom: 6px; }
+  #time-control #time-slider { margin-top: 8px; }
+}
+.time-type p { flex-basis: 100%; margin: 0; color: var(--muted); font-size: 0.85rem; }
+.time-type p:empty { display: none; }
 
 .time-scale {
   display: flex;
@@ -770,6 +790,9 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 }
 
 .card .remove:hover { opacity: 1; }
+.card .person-edit { margin-left: auto; padding: 2px 6px; background: transparent; color: inherit; opacity: 0.8; }
+.card .person-edit:hover { opacity: 1; }
+.card .person { font-weight: 700; }
 
 .drag-handle {
   flex: none;
@@ -947,6 +970,18 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 .reminder-note { flex-basis: 100%; color: var(--muted); font-size: 0.8rem; }
 .reminder-note summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .reminder-note p { margin-top: 6px; }
+
+/* Kiraan detik: the form, then a card per event. */
+.countdown-form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 12px; margin-bottom: 12px; padding: 14px 16px; border-radius: 16px; background: var(--panel); border: 1px solid var(--panel-border); }
+.countdown-form label { display: grid; gap: 4px; font-weight: 700; font-size: 0.9rem; }
+.countdown-form p { flex-basis: 100%; margin: 0; color: var(--muted); font-size: 0.85rem; }
+.countdown-form p:empty { display: none; }
+.countdown-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.countdown { position: relative; padding: 14px 16px; border-radius: 16px; background: var(--panel); border: 1px solid var(--panel-border); }
+.countdown h3 { margin: 0 28px 4px 0; font-size: 1rem; }
+.countdown-left { margin: 0; font-size: 1.4rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.countdown-remove { position: absolute; top: 8px; right: 8px; padding: 2px 8px; background: transparent; color: inherit; font-size: 1.2rem; opacity: 0.8; }
+.countdown-list .empty { color: var(--muted); }
 
 /* Takwim Islam: today, holy days, sunat fasts and the Moon, side by side when they fit. */
 .takwim { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
@@ -1406,7 +1441,8 @@ dialog { overscroll-behavior: contain; }
 .photo-credit { margin: 6px 0 0; color: var(--muted); font-size: 0.7rem; }
 
 #city-dialog,
-#month-dialog {
+#month-dialog,
+#person-dialog {
   width: min(680px, calc(100vw - 24px));
   max-height: calc(100vh - 24px);
   padding: 0;
@@ -1419,7 +1455,17 @@ dialog { overscroll-behavior: contain; }
 }
 
 #city-dialog::backdrop,
-#month-dialog::backdrop { background: rgba(2, 6, 23, 0.6); }
+#month-dialog::backdrop,
+#person-dialog::backdrop { background: rgba(2, 6, 23, 0.6); }
+#person-dialog { width: min(440px, calc(100vw - 24px)); }
+.person-form { display: grid; gap: 12px; padding: 0 20px 20px; }
+.person-form h2 { margin: 16px 48px 0 0; }
+.person-form label { display: grid; gap: 4px; font-weight: 700; }
+.person-form .person-own { display: flex; align-items: center; gap: 8px; }
+.person-form fieldset { display: flex; flex-wrap: wrap; gap: 8px 12px; margin: 0; padding: 10px 12px; border: 1px solid var(--panel-border); border-radius: 12px; }
+.person-form fieldset:disabled { opacity: 0.55; }
+.person-days { display: flex; flex-wrap: wrap; gap: 6px; flex-basis: 100%; }
+.person-actions { display: flex; gap: 8px; }
 #city-dialog-body { padding: 0 20px 20px; }
 #city-dialog h2 { margin: 16px 0 2px; }
 #city-dialog .local-panel { border-top-color: var(--panel-border); }
@@ -1536,7 +1582,9 @@ dialog { overscroll-behavior: contain; }
 .planner-scroll-wrap.more-right::after { opacity: 1; }
 
 .planner-day { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
-.planner-day input {
+.planner-day input,
+.countdown-form :is(input, select),
+.person-form :is(input:not([type="checkbox"]), select) {
   padding: 8px 10px;
   border: 1px solid var(--input-border);
   border-radius: 10px;
@@ -1654,6 +1702,9 @@ dialog { overscroll-behavior: contain; }
 .swatch.sleep { background: var(--sleep-bg); }
 .swatch.weekend { background: var(--weekend-bg); }
 .swatch.holiday { background: var(--holiday-bg); }
+/* An hour a prayer falls in: a dot in the corner, the names in its title. */
+#planner-table td.prayer, .swatch.prayer { position: relative; }
+#planner-table td.prayer::after, .swatch.prayer::after { content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-ink); }
 
 .work-settings {
   display: flex;

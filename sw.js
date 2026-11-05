@@ -2,7 +2,7 @@
 // Strategy is stale-while-revalidate: answer from the cache at once, then
 // refresh that cache from the network so the next visit gets updates.
 // Bump CACHE when the precache list changes so old caches are cleared.
-const CACHE = 'jam-dunia-v12';
+const CACHE = 'jam-dunia-v13';
 
 // The app shell. vendor/cities.js (~400 KB) is not precached: it is cached the
 // first time someone searches, keeping the first visit light.
@@ -32,6 +32,11 @@ const PRECACHE = [
   'js/takwim.js',
   'js/islamic-days.js',
   'js/moon.js',
+  'js/time-query.js',
+  'js/planner-prayer.js',
+  'js/person-dialog.js',
+  'js/countdown.js',
+  'js/share-image.js',
   'js/planner.js',
   'js/qibla.js',
   'js/reminders.js',

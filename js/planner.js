@@ -53,7 +53,10 @@ export function renderPlanner(state, now) {
   const currentSlot = day === isoDay(now.getTime()) ? Math.min(23, Math.floor((now.getTime() - dayStart) / HOUR_MS)) : -1;
   if (document.activeElement !== plannerDateEl) plannerDateEl.value = day;
   renderPick(state);
-  const key = JSON.stringify([state.cities.map(cityKey), dayStart, currentSlot, state.hour24, state.work, state.plannerPick, state.plannerDuration, holidaysLoaded(state)]);
+  // Prayer times, once the planner nears the screen (as for the holidays).
+  const prayerModule = state.holidaysWanted ? state.localData.get('modul-solat-perancang', () => import('./planner-prayer.js')) : null;
+  const prayers = prayerModule?.status === 'ok' ? prayerModule.data.prayerMarks(state, dayStart).rows : state.cities.map(() => ({}));
+  const key = JSON.stringify([state.cities.map((c) => [cityKey(c), c.label, c.work]), dayStart, currentSlot, state.hour24, state.work, state.plannerPick, state.plannerDuration, holidaysLoaded(state), prayers]);
   if (plannerTableEl.dataset.key === key) {
     revealHours(state, day, dayStart, currentSlot);
     return;
@@ -74,11 +77,13 @@ export function renderPlanner(state, now) {
   // hour, and one from a link made in a half-hour zone (India) its two.
   const picked = (ms) => state.plannerPick !== null && ms + HOUR_MS > state.plannerPick && ms < state.plannerPick + state.plannerDuration * MINUTE_MS;
   // A Malaysian public holiday reads like a weekend, in a colour of its own
-  // (a holiday on a weekend stays a weekend).
+  // (a holiday on a weekend stays a weekend). A person's own working hours,
+  // where set on their card, stand in for the shared ones.
   const categories = state.cities.map((city) => slots.map((ms) => {
-    const weekend = state.work.weekend.includes(weekdayOf(city.zone, ms));
+    const work = city.work ?? state.work;
+    const weekend = work.weekend.includes(weekdayOf(city.zone, ms));
     const holiday = holidaysFor(state, city, cityDate(city.zone, new Date(ms)).iso).length > 0;
-    const category = slotCategory(minuteOfDay(city.zone, ms), state.work, weekend || holiday);
+    const category = slotCategory(minuteOfDay(city.zone, ms), work, weekend || holiday);
     return category === 'weekend' && holiday && !weekend ? 'holiday' : category;
   }));
   const allWork = slots.map((_, i) => categories.every((row) => row[i] === 'work'));
@@ -109,18 +114,25 @@ export function renderPlanner(state, now) {
     const row = body.insertRow();
     const th = document.createElement('th');
     th.scope = 'row';
-    th.textContent = name;
+    th.textContent = city.label ? `${city.label} (${name})` : name;
     const utc = document.createElement('small');
     utc.textContent = formatUtcOffset(utcOffsetMinutes(zone, new Date(dayStart + 12 * HOUR_MS))); // that day's offset (DST)
     th.append(utc);
     const holidays = holidaysFor(state, city, cityDate(zone, new Date(dayStart + 12 * HOUR_MS)).iso);
     if (holidays.length) th.append(el('small', 'holiday-name', `Cuti: ${holidays.join(', ')}`));
+    if (city.work) th.append(el('small', '', `Kerja ${minuteText(city.work.start)}–${minuteText(city.work.end)}`));
     row.append(th);
     slots.forEach((ms, i) => {
       const td = row.insertCell();
       td.className = [categories[r][i], i === currentSlot && 'current', picked(ms) && 'picked'].filter(Boolean).join(' ');
       td.dataset.slot = ms;
       td.textContent = hourLabel(minuteOfDay(zone, ms), state.hour24);
+      const prayer = prayers[r][i];
+      if (prayer) {
+        td.classList.add('prayer');
+        td.title = prayer.join(', ');
+        td.append(el('span', 'visually-hidden', `, ${prayer.join(', ')}`));
+      }
     });
   });
 
@@ -138,7 +150,7 @@ export function renderPlanner(state, now) {
     plannerSummaryEl.textContent = `Waktu sesuai untuk semua (waktu anda): ${ranges.map((g) => `${fmt(slots[g.start])}–${fmt(dayStart + g.end * HOUR_MS)}`).join(', ')}`;
   } else {
     plannerSummaryEl.replaceChildren(`Tiada jam yang berada dalam waktu kerja untuk semua bandar pada ${day === isoDay(Date.now()) ? 'hari ini' : dayName(dayStart)}${
-      offReason(categories)}.`, ...bestHour(state, slots, categories, fmt));
+      offReason(categories)}.`, ...bestHour(state, slots, categories, prayers, fmt));
   }
   if (focusedSlot !== undefined) focusSlot(focusedSlot);
   revealHours(state, day, dayStart, currentSlot);
@@ -157,21 +169,26 @@ function offReason(categories) {
 }
 
 // With no hour that suits everyone, the closest: most cities at work, then
-// fewest asleep, earliest first. Nothing is offered when nobody is at work.
-function bestHour(state, slots, categories, fmt) {
+// fewest asleep, then fewest at prayer (a prayer takes minutes, sleep the
+// hour), earliest first. Nothing is offered when nobody is at work.
+function bestHour(state, slots, categories, prayers, fmt) {
   const score = (i) => {
     const column = categories.map((row) => row[i]);
-    return { work: column.filter((c) => c === 'work').length, sleep: column.filter((c) => c === 'sleep').length };
+    return {
+      work: column.filter((c) => c === 'work').length,
+      prayer: prayers.filter((row) => row[i]).length,
+      sleep: column.filter((c) => c === 'sleep').length,
+    };
   };
-  const better = (a, b) => a.work > b.work || (a.work === b.work && a.sleep < b.sleep);
+  const better = (a, b) => a.work > b.work || (a.work === b.work && (a.sleep < b.sleep || (a.sleep === b.sleep && a.prayer < b.prayer)));
   let best = 0;
   for (let i = 1; i < slots.length; i += 1) if (better(score(i), score(best))) best = i;
   const top = score(best);
   if (top.work === 0) return [];
   let end = best + 1;
   while (end < slots.length && !better(score(best), score(end)) && !better(score(end), score(best))) end += 1;
-  const others = state.cities.flatMap(({ name, zone }, r) => (categories[r][best] === 'work' ? []
-    : [`${name} ${formatClock(state, zone, slots[best])} (${NOT_WORK[categories[r][best]]})`]));
+  const others = state.cities.flatMap(({ name, zone, label }, r) => (categories[r][best] === 'work' ? []
+    : [`${label ?? name} ${formatClock(state, zone, slots[best])} (${NOT_WORK[categories[r][best]]})`]));
   const pick = el('button', 'btn secondary', `Pilih ${fmt(slots[best])}`);
   pick.type = 'button';
   pick.addEventListener('click', () => {

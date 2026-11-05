@@ -4,7 +4,7 @@ import { cityKey } from '../globe.js';
 import { icon } from './icons.js';
 import { isMalaysian, retryButton } from './local-panel.js';
 import { saveState } from './storage.js';
-import { LOCAL_ZONE, PHASES, cityDate, cityPhase, formatClock, formatUtcOffset, signedDuration, sunTimes, utcOffsetMinutes } from './time.js';
+import { HOUR_MS, LOCAL_ZONE, MINUTE_MS, PHASES, cityDate, cityPhase, formatClock, formatUtcOffset, minuteText, nextOffsetChange, signedDuration, sunTimes, utcOffsetMinutes } from './time.js';
 import { el, renderKeyed } from './util.js';
 
 export const clocksEl = document.getElementById('clocks');
@@ -24,6 +24,21 @@ export function renderSunLine(state, node, city, now) {
   });
 }
 
+// A clock change (daylight saving) within the week, in that city's words:
+// worked out once an hour, not every second.
+export function renderDstLine(state, node, city, now) {
+  renderKeyed(node, `${Math.floor(now.getTime() / HOUR_MS)}|${state.hour24}`, () => {
+    const change = nextOffsetChange(city.zone, now.getTime());
+    node.hidden = change === null;
+    if (!change) return [];
+    const wall = (offset) => new Date(change.at + offset * MINUTE_MS).toLocaleTimeString('ms-MY', {
+      timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hourCycle: state.hour24 ? 'h23' : 'h12',
+    });
+    const day = new Date(change.at + change.to * MINUTE_MS).toLocaleDateString('ms-MY', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'short' });
+    return [icon('clock'), ` ${day}: jam ${change.to > change.from ? 'dimajukan' : 'diundur'} dari ${wall(change.from)} ke ${wall(change.to)} (${formatUtcOffset(change.from)} → ${formatUtcOffset(change.to)})`];
+  });
+}
+
 export const ANALOG_TICKS = Array.from({ length: 12 }, (_, i) => {
   const major = i % 3 === 0;
   return `<line class="tick" x1="50" y1="${major ? 8 : 10}" x2="50" y2="${major ? 16 : 14}" transform="rotate(${i * 30} 50 50)"/>`;
@@ -40,13 +55,16 @@ export function createCard(state, city) {
       <span class="phase" aria-hidden="true"></span>
       <span class="city"></span>
       <span class="utc"></span>
+      <button class="person-edit" type="button"></button>
     </div>
     <div class="card-body">
       <div>
+        <div class="meta person" hidden></div>
         <div class="time"></div>
         <div class="meta date"></div>
         <div class="meta diff"></div>
         <div class="meta sun"></div>
+        <div class="meta dst" hidden></div>
         <div class="meta weather"></div>
       </div>
       <svg class="analog" viewBox="0 0 100 100" aria-hidden="true">
@@ -61,6 +79,15 @@ export function createCard(state, city) {
     <div class="hourly" hidden></div>
     <button class="remove" type="button"></button>`;
   card.querySelector('.city').textContent = city.name;
+  // Whose city this is and their working day, set in a dialog loaded on first
+  // use. The card is kept when the list changes, so the city is looked up anew.
+  const edit = card.querySelector('.person-edit');
+  edit.append(icon('person'));
+  edit.setAttribute('aria-label', `Nama dan waktu kerja untuk ${city.name}`);
+  edit.hidden = state.shared; // a shared list is the sender's: nothing here would be saved
+  edit.addEventListener('click', () => import('./person-dialog.js').then((m) => {
+    m.openPersonDialog(state, state.cities.find((c) => cityKey(c) === card.dataset.key));
+  }, (err) => console.warn('Jam Dunia: dialog nama gagal dimuat.', err)));
   setupReorder(state, card, city);
   const remove = card.querySelector('.remove');
   remove.textContent = '×';
@@ -221,9 +248,17 @@ export function renderCards(state) {
       card.classList.add('enter');
       card.style.setProperty('--i', entering++);
     }
+    showPerson(card, city);
     clocksEl.append(card);
   }
   balanceColumns();
+}
+
+// The person's name and own working day on a card, when set.
+function showPerson(card, city) {
+  const person = card.querySelector('.person');
+  person.hidden = !city.label && !city.work;
+  person.textContent = [city.label, city.work && `kerja ${minuteText(city.work.start)}–${minuteText(city.work.end)}`].filter(Boolean).join(' · ');
 }
 
 // A removed card can be put back, where it was, for a few seconds. The
