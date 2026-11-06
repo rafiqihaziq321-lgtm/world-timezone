@@ -54,7 +54,7 @@ export function prayerSection(state, city, entry, key, now, day) {
   const list = el('ul', 'prayer-times');
   for (const [field, label] of PRAYER_TIMES) {
     const item = el('li', field === next ? 'next' : '');
-    item.append(el('span', '', label), el('strong', '', today[field] ? fmt(today[field]) : '—'));
+    item.append(el('span', '', label), el('strong', '', today[field] ? fmt(today[field]) : 'tiada'));
     list.append(item);
   }
   section.append(list);
@@ -103,7 +103,7 @@ export function weatherSection(state, city, entry, key, iso) {
   heading.append(' ', el('small', '', formatTempRange(state, record.min_temp, record.max_temp)));
   const list = el('dl', 'forecast');
   for (const [label, text] of [['Pagi', record.morning_forecast], ['Petang', record.afternoon_forecast], ['Malam', record.night_forecast]]) {
-    list.append(el('dt', '', label), el('dd', '', text ?? '—'));
+    list.append(el('dt', '', label), el('dd', '', text ?? 'tiada'));
   }
   section.append(list);
   // The next two days, one line each.

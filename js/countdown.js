@@ -20,15 +20,10 @@ function left(ms) {
 const nameOf = (state, zone) => state.cities.find((c) => c.zone === zone)?.name ?? cityName(zone);
 const placeOf = (state, zone) => (zone === LOCAL_ZONE ? 'waktu anda' : `di ${nameOf(state, zone)}`);
 
-function buildForm(state, box) {
-  const form = el('form', 'countdown-form');
-  form.innerHTML = `
-    <label>Nama acara <input name="title" maxlength="80" required autocomplete="off" placeholder="cth. Mesyuarat agung"></label>
-    <label>Tarikh acara <input type="date" name="date" required></label>
-    <label>Masa acara <input type="time" name="time" value="09:00" required></label>
-    <label>Waktu <select name="zone" aria-label="Zon waktu"></select></label>
-    <button type="submit" class="btn">Tambah</button>
-    <p class="countdown-status" role="status"></p>`;
+// The form itself is in index.html (so its space is held while this loads):
+// here it gets its submit handler, and its button is switched on.
+function startForm(state, form) {
+  form.dataset.ready = 'true';
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const status = form.querySelector('.countdown-status');
@@ -46,13 +41,13 @@ function buildForm(state, box) {
     form.elements.title.value = '';
     state.refresh();
   });
-  box.append(form, el('ol', 'countdown-list'));
-  return form;
+  form.querySelector('button[type="submit"]').disabled = false;
 }
 
 export function renderCountdowns(state) {
   const box = document.getElementById('countdowns');
-  const form = box.querySelector('.countdown-form') ?? buildForm(state, box);
+  const form = box.querySelector('.countdown-form');
+  if (!form.dataset.ready) startForm(state, form);
   const now = Date.now();
   // The time zones offered: the reader's own, then each card's (once each).
   const zones = [LOCAL_ZONE, ...state.cities.map((c) => c.zone)].filter((z, i, all) => all.indexOf(z) === i);

@@ -174,7 +174,7 @@ export function renderMalaysia(state, now) {
       const next = nextPrayer(p.today, now);
       for (const [field] of PRAYER_TIMES) {
         const cell = row.insertCell();
-        cell.textContent = p.today[field] ? formatClock(state, p.s.zone, p.today[field] * 1000) : '—';
+        cell.textContent = p.today[field] ? formatClock(state, p.s.zone, p.today[field] * 1000) : 'tiada';
         if (field === next) cell.className = 'next';
       }
     }
@@ -248,7 +248,7 @@ export function renderRamadan(state, prayers, now) {
       name.scope = 'row';
       row.append(name);
       for (const field of ['imsak', 'maghrib']) {
-        row.insertCell().textContent = p.today?.[field] ? formatClock(state, p.s.zone, p.today[field] * 1000) : '—';
+        row.insertCell().textContent = p.today?.[field] ? formatClock(state, p.s.zone, p.today[field] * 1000) : 'tiada';
       }
     }
     const scroll = el('div', 'table-scroll');

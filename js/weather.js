@@ -44,14 +44,21 @@ export function currentWeather(state) {
     : null;
   // A single place comes back as an object, several as a list in request order.
   const rows = entry?.status === 'ok' ? [entry.data].flat() : [];
-  return (city) => (city.lat === null || city.lon === null ? null : rows[places.indexOf(place(city))]?.current ?? null);
+  const lookup = (city) => (city.lat === null || city.lon === null ? null : rows[places.indexOf(place(city))]?.current ?? null);
+  lookup.status = entry?.status ?? 'none'; // 'loading', 'ok' or 'error': what the card line says while there is no reading
+  return lookup;
 }
 
-// The line on a card, a button that opens the next 12 hours below it.
-export function renderWeatherLine(state, node, current) {
+// The line on a card, a button that opens the next 12 hours below it. While
+// the reading is on its way, or failed, the line says so (antislop R-27);
+// `status` is 'none' for a city with no position, which has no weather line.
+export function renderWeatherLine(state, node, current, status = 'none') {
   const weather = current && Number.isFinite(current.temperature_2m) ? describeWeather(current.weather_code, current.is_day === 1) : null;
   const open = node.closest('.card').dataset.hourly === 'open';
-  renderKeyed(node, weather ? `${current.temperature_2m}|${current.weather_code}|${current.is_day}|${state.tempUnit}|${open}` : '', () => {
+  const waiting = !weather && (status === 'loading' || status === 'error') ? status : '';
+  renderKeyed(node, weather ? `${current.temperature_2m}|${current.weather_code}|${current.is_day}|${state.tempUnit}|${open}` : waiting, () => {
+    if (waiting === 'loading') return [el('span', 'local-status', 'Memuatkan cuaca…')];
+    if (waiting === 'error') return [el('span', 'local-status', 'Cuaca tidak dapat dimuat; dicuba lagi setiap 15 minit.')];
     if (!weather) return [];
     const toggle = el('button', 'weather-toggle');
     toggle.type = 'button';
@@ -82,7 +89,7 @@ export function renderHourly(state, card, city) {
       item.append(el('span', 'hourly-time', formatClock(state, city.zone, t * 1000)));
       if (weather) item.append(icon(weather.icon), el('span', 'visually-hidden', weather.label));
       const temp = hourly.temperature_2m?.[i];
-      item.append(el('strong', '', Number.isFinite(temp) ? formatTemp(state, temp) : '—')); // null is a gap, not 0°
+      item.append(el('strong', '', Number.isFinite(temp) ? formatTemp(state, temp) : 'tiada')); // null is a gap, not 0°
       const rain = hourly.precipitation_probability?.[i];
       if (Number.isFinite(rain)) item.append(el('span', 'hourly-rain', `${rain}%`), el('span', 'visually-hidden', ' peluang hujan'));
       list.append(item);

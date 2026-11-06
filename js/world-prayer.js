@@ -24,12 +24,12 @@ export function renderWorldPrayer(state, panel, city, now) {
   const list = el('ul', 'prayer-times');
   for (const [field, label] of PRAYER_TIMES) {
     const item = el('li', field === next ? 'next' : '');
-    item.append(el('span', '', label), el('strong', '', times[field] === null ? '—' : fmt(times[field])));
+    item.append(el('span', '', label), el('strong', '', times[field] === null ? 'tiada' : fmt(times[field])));
     list.append(item);
   }
   section.append(heading, list);
   if (times.syuruk === null || times.maghrib === null) {
-    section.append(el('p', 'local-status', 'Matahari tidak terbit atau tidak terbenam di sini hari ini, jadi sebahagian waktu tiada (—).'));
+    section.append(el('p', 'local-status', 'Matahari tidak terbit atau tidak terbenam di sini hari ini, jadi sebahagian waktu ditulis "tiada".'));
   }
   if (next) {
     const label = PRAYER_TIMES.find(([field]) => field === next)[1];

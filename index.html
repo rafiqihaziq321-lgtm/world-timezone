@@ -6,8 +6,8 @@
   <title>Jam Dunia</title>
   <meta name="description" content="Lihat masa di seluruh dunia pada glob interaktif dan cari masa mesyuarat yang sesuai untuk semua. Untuk Malaysia: amaran dan ramalan cuaca MET, waktu solat setiap negeri, serta peta 3D dengan anggaran kualiti udara.">
   <!-- The browser's own bar matches the page; theme.js follows a theme chosen by hand. -->
-  <meta name="theme-color" content="#eef3fb" media="(prefers-color-scheme: light)" data-default="#eef3fb">
-  <meta name="theme-color" content="#060b24" media="(prefers-color-scheme: dark)" data-default="#060b24">
+  <meta name="theme-color" content="#f6faf9" media="(prefers-color-scheme: light)" data-default="#f6faf9">
+  <meta name="theme-color" content="#0f1b1a" media="(prefers-color-scheme: dark)" data-default="#0f1b1a">
   <link rel="canonical" href="https://rafiqihaziq321-lgtm.github.io/world-timezone/">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -28,8 +28,8 @@
 
   <!-- Fonts and modules fetched in parallel instead of once CSS and each import are read. -->
   <link rel="preconnect" href="https://api.open-meteo.com" crossorigin><!-- the cards' weather, fetched on first load -->
-  <link rel="preload" href="vendor/fonts/unbounded-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="vendor/fonts/manrope-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="vendor/fonts/plus-jakarta-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="vendor/fonts/plus-jakarta-sans-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
   <link rel="modulepreload" href="globe.js">
   <link rel="modulepreload" href="malaysia-data.js">
@@ -60,15 +60,17 @@
 </head>
 <body>
   <a class="skip-link" href="#kandungan">Langkau ke kandungan</a>
+  <a class="skip-link" href="#bandar">Langkau ke senarai bandar</a>
+  <a class="skip-link" href="#planner-table">Langkau ke jadual perancang</a>
 
   <header class="site-nav">
     <div class="nav-inner">
-      <a class="brand" href="#glob" translate="no">
+      <a class="brand" href="#dunia" translate="no">
         <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
           <circle class="mark-night" cx="12" cy="12" r="10"/>
           <path class="mark-day" d="M12 2a10 10 0 0 1 0 20 6 10 0 0 0 0-20z"/>
         </svg>
-        Jam Dunia
+        <span class="brand-text">Jam Dunia</span>
       </a>
       <nav class="nav-links" aria-label="Panel">
         <a href="#dunia">Jam dunia</a>
@@ -100,45 +102,29 @@
 
   <main id="kandungan">
     <div id="dunia" class="tab-panel">
-    <section id="glob" class="hero" aria-labelledby="hero-title">
-      <div class="hero-copy">
-        <h1 id="hero-title">Siang dan malam di seluruh dunia, pada satu glob.</h1>
-        <p class="hero-lede">
-          Putar glob untuk melihat di mana matahari sedang terbit dan di mana orang sedang tidur.
-          Tambah bandar keluarga, rakan dan rakan sekerja anda, kemudian cari masa yang sesuai untuk semua.
-        </p>
+    <!-- The viewer's own time and the controls that move every clock: the list comes straight after. -->
+    <section id="sekarang" class="now" aria-labelledby="hero-title">
+      <div class="now-clock">
+        <h1 id="hero-title">Waktu anda</h1>
         <div class="hero-clock">
           <p id="hero-place">Di bandar anda, sekarang pukul</p>
           <p id="hero-time" class="hero-time"></p>
           <p id="hero-date"></p>
         </div>
-        <div class="hero-actions">
-          <a class="btn" href="#bandar">Tambah bandar</a>
-          <a class="btn secondary" href="#perancang">Rancang mesyuarat</a>
-        </div>
-      </div>
-
-      <div id="globe-wrap">
-        <canvas id="globe" role="img" aria-label="Glob interaktif menunjukkan waktu semasa bandar utama serta kawasan siang dan malam"></canvas>
-        <div class="globe-zoom">
-          <button id="zoom-in" type="button" aria-label="Zum masuk">+</button>
-          <button id="zoom-out" type="button" aria-label="Zum keluar">−</button>
-        </div>
-        <p class="hint">Seret untuk putar, scroll atau cubit untuk zum, klik bandar untuk tambah.</p>
       </div>
 
       <div id="time-control">
         <div class="time-row">
-          <button id="time-play" type="button" class="play-btn" aria-label="Main 24 jam">▶</button>
+          <button id="time-play" type="button" class="play-btn" aria-label="Main 24 jam" aria-pressed="false">▶</button>
           <label for="time-slider">Penukar masa</label>
           <span id="time-label" aria-live="polite">Sekarang</span>
           <button id="time-reset" type="button" class="secondary" hidden>Kembali ke sekarang</button>
         </div>
-        <input type="range" id="time-slider" min="-96" max="96" step="1" value="0" aria-describedby="time-label">
+        <input type="range" id="time-slider" min="-96" max="96" step="1" value="0" aria-describedby="time-label" aria-valuetext="Sekarang">
         <div class="time-scale" aria-hidden="true"><span>−24j</span><span>Sekarang</span><span>+24j</span></div>
         <form id="time-type" class="time-type">
           <label for="time-type-input">Taip masa</label>
-          <input id="time-type-input" name="masa" type="text" placeholder="cth. 3 petang Tokyo" autocomplete="off" spellcheck="false" enterkeyhint="go">
+          <input id="time-type-input" name="masa" type="text" placeholder="cth. 15:00 Tokyo" autocomplete="off" spellcheck="false" enterkeyhint="go">
           <button type="submit" class="secondary">Tukar</button>
           <p id="time-type-status" role="status"></p>
         </form>
@@ -149,11 +135,12 @@
       <div class="section-head">
         <h2 id="bandar-title">Bandar anda</h2>
         <button id="share-image" type="button" class="icon-btn" aria-label="Kongsi imej jam" title="Kongsi imej jam" data-icon="image"></button>
-        <p>Warna setiap kad mengikut waktu di bandar itu. Klik kad untuk memusatkan glob padanya.</p>
+        <p>Jalur pada setiap kad ialah hari di bandar itu, dari tengah malam ke tengah malam; garis amber ialah masa yang dipaparkan. Klik kad untuk memusatkan glob padanya.</p>
         <p id="share-image-status" class="share-image-status" role="status"></p>
       </div>
+      <label class="field-label" for="zone-input">Cari bandar</label>
       <form id="add-form">
-        <input id="zone-input" name="bandar" type="search" list="zone-list" placeholder="Cari bandar, cth. Paris…" autocomplete="off" spellcheck="false" enterkeyhint="search" required aria-label="Cari bandar">
+        <input id="zone-input" name="bandar" type="search" list="zone-list" placeholder="cth. Paris" autocomplete="off" spellcheck="false" enterkeyhint="search" required>
         <datalist id="zone-list"></datalist>
         <button type="submit">Tambah</button>
         <div class="unit-toggle" role="group" aria-label="Unit suhu">
@@ -205,6 +192,7 @@
           <span class="swatch holiday"></span>Cuti umum Malaysia
           <span class="swatch prayer"></span>Waktu solat (Zohor, Asar, Maghrib)
           <span class="swatch sleep"></span>Waktu tidur (22:00–07:00).
+          Garis di bawah setiap jam: kuning siang, gelap malam di bandar itu. Nama hari (cth. "Sab") menandakan tarikh bandar itu bertukar.
           Klik satu jam untuk memilihnya.
         </p>
       </div>
@@ -215,13 +203,41 @@
         <h2 id="countdown-title">Kiraan detik</h2>
         <p>Hari penting, dikira dalam waktu bandarnya. Disimpan dalam pelayar ini.</p>
       </div>
-      <div id="countdowns" class="countdowns"></div>
+      <!-- The form is here, not built by js/countdown.js, so the section keeps its
+           size at every width while that module loads; it switches the button on. -->
+      <div id="countdowns" class="countdowns">
+        <form class="countdown-form">
+          <label>Nama acara <input name="title" maxlength="80" required autocomplete="off" placeholder="cth. Mesyuarat agung"></label>
+          <label>Tarikh acara <input type="date" name="date" required></label>
+          <label>Masa acara <input type="time" name="time" value="09:00" required></label>
+          <label>Waktu <select name="zone" aria-label="Zon waktu"></select></label>
+          <button type="submit" class="btn" disabled>Tambah</button>
+          <p class="countdown-status" role="status"></p>
+        </form>
+        <ol class="countdown-list"><li class="empty">Memuatkan kiraan detik…</li></ol>
+      </div>
+    </section>
+
+    <section id="glob" class="section globe-section" aria-labelledby="globe-title">
+      <div class="section-head">
+        <h2 id="globe-title">Siang dan malam</h2>
+        <p>Bahagian gelap glob ialah kawasan yang sedang malam pada masa yang dipaparkan.</p>
+      </div>
+      <div id="globe-wrap">
+        <canvas id="globe" role="img" aria-label="Glob interaktif menunjukkan waktu semasa bandar utama serta kawasan siang dan malam"></canvas>
+        <div class="globe-zoom">
+          <button id="zoom-in" type="button" aria-label="Zum masuk">+</button>
+          <button id="zoom-out" type="button" aria-label="Zum keluar">−</button>
+        </div>
+        <p class="hint">Seret untuk putar, tatal atau cubit untuk zum, klik bandar untuk tambah.</p>
+        <p id="globe-status" class="globe-status" role="status">Memuatkan glob…</p>
+      </div>
     </section>
 
     <section id="fakta" class="section" aria-labelledby="facts-title">
       <div class="section-head">
         <h2 id="facts-title">Fakta zon waktu</h2>
-        <p>Zon waktu ialah keputusan manusia, bukan hukum alam. Inilah beberapa yang paling pelik.</p>
+        <p>Garis zon waktu dilukis oleh kerajaan, dan sebahagiannya dilukis dengan cara yang pelik.</p>
       </div>
       <ul id="facts-list" class="facts">
         <li>
@@ -272,24 +288,17 @@
 
     <section id="tentang" class="section" aria-labelledby="about-title">
       <div class="section-head">
-        <h2 id="about-title">Cara ia berfungsi</h2>
-      </div>
-      <div class="about">
-        <div>
-          <h3>Masa dari pelayar anda</h3>
-          <p>Masa setiap bandar dikira oleh pelayar anda menggunakan pangkalan data zon waktu IANA, sama seperti telefon dan komputer anda. Tiada akaun; senarai anda disimpan dalam pelayar ini sahaja.</p>
-        </div>
-        <div>
-          <h3>Waktu jimat siang</h3>
-          <p>Sesetengah negara mengubah jam sejam pada musim panas. London ialah UTC+0 pada musim sejuk dan UTC+1 pada musim panas. Jam Dunia mengambil kira perubahan ini secara automatik, termasuk dalam penukar masa.</p>
-        </div>
-        <div>
-          <h3>Bayang malam</h3>
-          <p>Bayang pada glob dikira daripada titik di Bumi yang matahari berada tepat di atasnya pada saat itu. Kawasan lebih 90° dari titik itu ialah malam, dan jalur di tepinya ialah senja.</p>
-        </div>
+        <h2 id="about-title">Tentang data</h2>
       </div>
       <details class="privacy">
-        <summary>Privasi &amp; sumber data</summary>
+        <summary>Cara masa dikira, privasi dan sumber data</summary>
+        <h3>Masa dari pelayar anda</h3>
+        <p>Masa setiap bandar dikira oleh pelayar anda menggunakan pangkalan data zon waktu IANA, sama seperti telefon dan komputer anda. Tiada akaun; senarai anda disimpan dalam pelayar ini sahaja.</p>
+        <h3>Waktu jimat siang</h3>
+        <p>Sesetengah negara mengubah jam sejam pada musim panas. London ialah UTC+0 pada musim sejuk dan UTC+1 pada musim panas. Jam Dunia mengambil kira perubahan ini secara automatik, termasuk dalam penukar masa.</p>
+        <h3>Bayang malam</h3>
+        <p>Bayang pada glob dikira daripada titik di Bumi yang matahari berada tepat di atasnya pada saat itu. Kawasan lebih 90° dari titik itu ialah malam, dan jalur di tepinya ialah senja.</p>
+        <h3>Privasi &amp; sumber data</h3>
         <p>Cuaca semasa pada kad datang daripada Open-Meteo, yang menerima kedudukan bandar dalam senarai anda (bukan lokasi anda), dan dikemas kini setiap 15 minit.</p>
         <p>Panel Malaysia mengambil data hanya apabila dibuka: waktu solat JAKIM daripada waktusolat.app (kedudukan bandar dihantar untuk mencari zon), ramalan, amaran cuaca dan gempa bumi MET Malaysia daripada data.gov.my, foto landmark daripada Wikipedia serta Wikimedia Commons, anggaran kualiti udara daripada Open-Meteo, serta jubin peta daripada OpenFreeMap dan Amazon Web Services (rupa bumi).</p>
         <p>Butang Bandar terdekat dan Kompas kiblat meminta lokasi anda hanya apabila ditekan, dan lokasi itu tidak dihantar ke mana-mana. Butang Guna lokasi saya (zon solat) pula menghantar lokasi anda, dibundarkan kepada kira-kira 1 km, ke waktusolat.app untuk mencari zon JAKIM anda.</p>
@@ -461,15 +470,12 @@
         </svg>
         Jam Dunia
       </p>
-      <p>Peta daripada Natural Earth (domain awam). Glob dilukis dengan D3. Peta Malaysia dilukis dengan MapLibre (data © OpenStreetMap melalui OpenFreeMap); sempadan negeri daripada DOSM (Lesen Data Terbuka). Fon Unbounded dan Manrope (SIL Open Font License). Data cuaca dan kualiti udara oleh <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0).</p>
+      <p>Peta daripada Natural Earth (domain awam). Glob dilukis dengan D3. Peta Malaysia dilukis dengan MapLibre (data © OpenStreetMap melalui OpenFreeMap); sempadan negeri daripada DOSM (Lesen Data Terbuka). Fon Plus Jakarta Sans (SIL Open Font License). Data cuaca dan kualiti udara oleh <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0).</p>
       <p><a href="https://github.com/rafiqihaziq321-lgtm/world-timezone">Kod sumber di GitHub</a></p>
     </div>
   </footer>
 
-  <script src="vendor/d3-array.min.js"></script>
-  <script src="vendor/d3-geo.min.js"></script>
-  <script src="vendor/topojson-client.min.js"></script>
-  <script src="vendor/land-110m.js"></script>
+  <!-- The globe's map libraries (d3, topojson, land-110m) are fetched by app.js once its section nears the screen. -->
   <script type="module" src="app.js"></script>
 </body>
 </html>

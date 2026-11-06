@@ -52,6 +52,15 @@ const storedCities = async (page) => JSON.parse(await page.evaluate((key) => loc
 const storedZones = async (page) => (await storedCities(page)).map((c) => c.zone);
 
 const card = (page, zone) => page.locator(`.card[data-zone="${zone}"]`);
+
+// The globe's libraries load once its section nears the screen (or a card
+// asks it to turn): scroll to it and wait until the globe has been made.
+async function showGlobe(page) {
+  await page.locator('#globe').scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => typeof window.d3 !== 'undefined' && typeof window.WORLD_LAND_110M !== 'undefined');
+  await page.waitForFunction(() => document.getElementById('globe').width !== 300); // sized by createGlobe
+  await page.clock.runFor(300);
+}
 const cardZones = (page) => page.locator('.card').evaluateAll((cards) => cards.map((c) => c.dataset.zone));
 
 async function addCity(page, query) {
@@ -223,6 +232,40 @@ test.describe('kongsi imej', () => {
 });
 
 test.describe('kiraan detik', () => {
+  test('modul yang lambat: borang sudah ada tetapi Tambah dimatikan; saiz bahagian tidak berubah', async ({ page }) => {
+    let release;
+    const held = new Promise((resolve) => { release = resolve; });
+    await page.route('**/js/countdown.js', async (route) => { await held; await route.continue(); });
+    await openApp(page);
+    await page.locator('#countdowns').scrollIntoViewIfNeeded();
+    const list = page.locator('.countdown-list');
+    await expect(list).toHaveText('Memuatkan kiraan detik…');
+    const add = page.locator('.countdown-form').getByRole('button', { name: 'Tambah' });
+    await expect(add).toBeDisabled(); // no plain form submit (a page reload) before the module is here
+    const height = () => page.locator('#countdowns').evaluate((e) => e.getBoundingClientRect().height);
+    const before = await height();
+    release();
+    await expect(list).toHaveText('Belum ada kiraan. Tambah satu di atas.');
+    await expect(add).toBeEnabled();
+    expect(await height()).toBe(before);
+  });
+
+  test.describe('modul yang gagal', () => {
+    test.use({ expectedConsole: [/Failed to load resource|countdown\.js/] }); // the browser reports the failed module
+
+    // Retrying is not tested: Chromium does not fetch a failed module again (plan-001, D4).
+    test('baris senarai berkata ia gagal; borang kekal di tempatnya', async ({ page }) => {
+      await page.route('**/js/countdown.js', (route) => route.abort());
+      await openApp(page);
+      await page.locator('#countdowns').scrollIntoViewIfNeeded();
+      const list = page.locator('.countdown-list');
+      await expect(list).toContainText('Kiraan detik gagal dimuat.');
+      await expect(list.getByRole('button', { name: 'Cuba lagi' })).toBeVisible();
+      await expect(page.locator('.countdown-form')).toBeVisible();
+      await expect(page.locator('.countdown-form').getByRole('button', { name: 'Tambah' })).toBeDisabled();
+    });
+  });
+
   test('tambah kiraan dalam waktu bandar lain: berdetik, disimpan, dan boleh dibuang', async ({ page }) => {
     await openApp(page); // 22:00:07 UTC, 13 October
     await page.locator('#countdowns').scrollIntoViewIfNeeded();
@@ -305,12 +348,19 @@ test.describe('penukar masa', () => {
     await page.click('#time-play');
     await page.clock.runFor(1000); // 72 min per second; each frame re-renders every card, so keep it short
     await expect(page.locator('#time-play')).toHaveText('⏸');
+    // One name, a pressed state screen readers announce, and no animation on the button.
+    const play = page.getByRole('button', { name: 'Main 24 jam', pressed: true });
+    await expect(play).toBeVisible();
+    expect(await play.evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
+    await expect(page.locator('#time-label')).toHaveAttribute('aria-live', 'off'); // not read out every frame
     const steps = Number(await page.locator('#time-slider').inputValue());
     expect(steps).toBeGreaterThanOrEqual(4); // 72 min = 4.8 quarter-hour steps
     expect(steps).toBeLessThanOrEqual(6);
 
     await page.click('#time-play');
     await expect(page.locator('#time-play')).toHaveText('▶');
+    await expect(page.getByRole('button', { name: 'Main 24 jam', pressed: false })).toBeVisible();
+    await expect(page.locator('#time-label')).toHaveAttribute('aria-live', 'polite');
     const paused = await page.locator('#time-slider').inputValue();
     await page.clock.runFor(2000);
     await expect(page.locator('#time-slider')).toHaveValue(paused);
@@ -822,6 +872,8 @@ test.describe('matahari terbit dan terbenam', () => {
     await expect(byName(page, 'Tromsø').locator('.sun')).toHaveText('Matahari tidak terbenam hari ini');
     await expect(byName(page, 'Tromsø').locator('.sun').locator('svg')).toHaveAttribute('data-glyph', 'sun');
     await expect(byName(page, 'Tromsø')).toHaveAttribute('data-phase', 'day');
+    await expect(byName(page, 'Tromsø').locator('.sun-runs span')).toHaveClass(['day']); // the strip: one day-long run
+    await expect(byName(page, 'Tromsø').locator('.phase-name')).toHaveText('Siang');
     // Without a position: no times, and the fixed hours decide (08:30 is "day").
     await expect(byName(page, 'Kiritimati').locator('.sun')).toHaveText('');
     await expect(byName(page, 'Kiritimati')).toHaveAttribute('data-phase', 'day');
@@ -833,6 +885,7 @@ test.describe('matahari terbit dan terbenam', () => {
     await expect(byName(page, 'Tromsø').locator('.sun')).toHaveText('Matahari tidak terbit hari ini');
     await expect(byName(page, 'Tromsø').locator('.sun').locator('svg')).toHaveAttribute('data-glyph', 'moon');
     await expect(byName(page, 'Tromsø')).toHaveAttribute('data-phase', 'night');
+    await expect(byName(page, 'Tromsø').locator('.sun-runs span')).toHaveClass(['night']); // polar night: one run
     await expect(byName(page, 'London')).toHaveAttribute('data-phase', 'dusk');
     await expect(byName(page, 'London').locator('.sun')).toHaveText(/^Terbit 08:0\d PG · terbenam 03:5\d PTG$/);
   });
@@ -911,7 +964,7 @@ test.describe('cuaca semasa pada kad', () => {
     await expect(hours).toHaveCount(12);
     await expect(hours.first()).toHaveText('23:00Cerah10°C0% peluang hujan'); // London's own clock
     await expect(hours.nth(7).locator('svg')).toHaveAttribute('data-glyph', 'rain');
-    await expect(hours.nth(11).locator('strong')).toHaveText('—'); // a missing hour, not 0°C
+    await expect(hours.nth(11).locator('strong')).toHaveText('tiada'); // a missing hour, not 0°C
     await expect(london.locator('.hourly-list')).toHaveAttribute('tabindex', '0'); // it scrolls: keyboard users reach it
     expect(hourlyCalls[0].searchParams.get('latitude')).toBe('51.51');
     await expect(london).toHaveAttribute('data-phase', /.+/); // the click did not spin the globe away
@@ -938,6 +991,25 @@ test.describe('cuaca semasa pada kad', () => {
     await openApp(page, { cities: [cities[1]], hour24: true });
     await expect(byName(page, 'London').locator('.weather')).toHaveText('30°C Separa berawan, ramalan 12 jam');
     await expect(byName(page, 'London').locator('.weather').locator('svg')).toHaveAttribute('data-glyph', 'sun-cloud');
+  });
+
+  test.describe('bila API cuaca lambat kemudian gagal', () => {
+    test.use({ expectedConsole: [/status of 500/] }); // the browser itself reports the failed request
+
+    test('baris cuaca berkata "memuatkan", kemudian berkata ia gagal', async ({ page }) => {
+      let answer;
+      const held = new Promise((resolve) => { answer = resolve; });
+      await page.route('https://api.open-meteo.com/v1/forecast?**', async (route) => {
+        await held;
+        await route.fulfill({ status: 500, body: '', headers: { 'Access-Control-Allow-Origin': '*' } });
+      });
+      await openApp(page, { cities, hour24: true });
+      await expect(byName(page, 'London').locator('.weather')).toHaveText('Memuatkan cuaca…');
+      await expect(byName(page, 'Kiritimati').locator('.weather')).toHaveText(''); // no position, no line
+      answer();
+      await expect(byName(page, 'London').locator('.weather')).toHaveText('Cuaca tidak dapat dimuat; dicuba lagi setiap 15 minit.');
+      await expect(byName(page, 'Kiritimati').locator('.weather')).toHaveText('');
+    });
   });
 });
 
@@ -1017,6 +1089,7 @@ test.describe('glob', () => {
   // back on screen before pointing at it.
   async function centreOnTokyo(page) {
     await card(page, 'Asia/Tokyo').locator('.city').click();
+    await showGlobe(page); // the click loads the globe, then turns it
     await page.clock.runFor(1000);
     await page.locator('#globe').evaluate((el) => el.scrollIntoView({ block: 'center' }));
     // The globe stops drawing while off screen; wait until it is visible and
@@ -1041,6 +1114,23 @@ test.describe('glob', () => {
     await expect(card(page, 'Asia/Seoul')).toHaveCount(1);
   });
 
+  for (const motion of ['reduce', 'no-preference']) {
+    test(`klik kad dengan gerakan "${motion}": glob ${motion === 'reduce' ? 'terus berada' : 'masih berpusing'} di Tokyo selepas 50 ms`, async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: motion });
+      await openApp(page);
+      await showGlobe(page);
+      await page.locator('#globe').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      await expect(page.locator('#globe')).toBeInViewport();
+      await page.locator('#glob').evaluate(() => document.querySelector('.card[data-zone="Asia/Tokyo"] .city').click()); // no scroll away
+      await page.clock.runFor(50); // the turn takes 800 ms when motion is allowed
+      const box = await page.locator('#globe').boundingBox();
+      const [x, y] = await projectedFromTokyo(page, [126.98, 37.57]); // Seoul, if Tokyo is centred
+      await page.mouse.click(box.x + x, box.y + y);
+      await page.clock.runFor(50);
+      await expect(card(page, 'Asia/Seoul')).toHaveCount(motion === 'reduce' ? 1 : 0);
+    });
+  }
+
   test('hover bandar menunjukkan tooltip', async ({ page }) => {
     await openApp(page);
     const box = await centreOnTokyo(page);
@@ -1055,6 +1145,7 @@ test.describe('glob', () => {
 
   test('butang zum mengubah glob', async ({ page }) => {
     await openApp(page);
+    await showGlobe(page);
     const snapshot = () => page.evaluate(() => document.getElementById('globe').toDataURL());
     const before = await snapshot();
     await page.click('#zoom-in');
@@ -1073,13 +1164,13 @@ test.describe('tema dan paparan', () => {
     await expect(page.locator('#share svg')).toHaveAttribute('data-glyph', 'link');
     await expect(page.locator('#map-nearest svg')).toHaveAttribute('data-glyph', 'pin');
     await expect(page.locator('#qibla-open svg')).toHaveAttribute('data-glyph', 'compass');
-    expect(await bg()).toBe('#eef3fb');
+    expect(await bg()).toBe('#f6faf9');
     await page.click('#theme-toggle');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await expect(page.locator('#theme-toggle svg')).toHaveAttribute('data-glyph', 'sun');
-    expect(await bg()).toBe('#060b24');
+    expect(await bg()).toBe('#0f1b1a');
     // The browser's bar follows the theme chosen by hand, whatever the system says.
-    expect(await page.locator('meta[name="theme-color"]').evaluateAll((metas) => metas.map((m) => m.content))).toEqual(['#060b24', '#060b24']);
+    expect(await page.locator('meta[name="theme-color"]').evaluateAll((metas) => metas.map((m) => m.content))).toEqual(['#0f1b1a', '#0f1b1a']);
   });
 
   test('header telefon 360px kekal dua baris walaupun butang pasang muncul', async ({ page }) => {
@@ -1201,6 +1292,8 @@ test.describe('jimat bateri', () => {
       return page.evaluate(() => window.globeDraws);
     };
 
+    // The globe sits below the planner and loads when it nears the screen.
+    await showGlobe(page);
     expect(await drawsDuring(1000)).toBeGreaterThan(30);
 
     await page.locator('#planner').scrollIntoViewIfNeeded();
@@ -1266,18 +1359,20 @@ test.describe('susun atur', () => {
       await openApp(page);
       const top = await card(page, 'Asia/Kuala_Lumpur').evaluate((el) => el.getBoundingClientRect().top);
       expect(top).toBeLessThan(844 - 60); // at least the city name and its time
-      await expect(page.locator('.hero-lede')).toBeHidden();
-      await expect(page.locator('.hero-actions')).toBeHidden();
-      expect(await page.locator('#globe').evaluate((el) => el.getBoundingClientRect().width)).toBeLessThanOrEqual(220);
+      await expect(card(page, 'Asia/Kuala_Lumpur').locator('.time')).toBeInViewport();
       await expect(page.locator('#hero-time')).toBeInViewport();
-      await expect(page.getByRole('button', { name: 'Zum masuk' })).toBeInViewport();
     });
   });
 
-  test('desktop kekal dengan pengenalan dan butang lompat', async ({ page }) => {
+  // The city list comes straight after your own time (DESIGN.md): no
+  // introduction or globe above it, on a 720 px laptop screen too.
+  test('desktop: masa bandar pertama pada skrin pertama, glob di bawah perancang', async ({ page }) => {
     await openApp(page);
-    await expect(page.locator('.hero-lede')).toBeVisible();
-    await expect(page.locator('.hero-actions')).toBeVisible();
+    await expect(card(page, 'Asia/Kuala_Lumpur').locator('.time')).toBeInViewport();
+    await expect(page.locator('#time-control')).toBeInViewport();
+    const order = await page.locator('#dunia > section').evaluateAll((s) => s.map((x) => x.id).filter(Boolean));
+    expect(order.indexOf('sekarang')).toBe(0);
+    expect(order.indexOf('glob')).toBeGreaterThan(order.indexOf('perancang'));
   });
 
   test('hero: jam dan tarikh pada satu baris', async ({ page }) => {
@@ -1389,6 +1484,7 @@ test.describe('pangkalan data bandar', () => {
     await openApp(page);
     await addCity(page, 'Johor Bahru');
     await byKey(page, 'Asia/Kuala_Lumpur~Johor Bahru').locator('.city').click();
+    await showGlobe(page);
     await page.clock.runFor(1000);
     await page.locator('#globe').evaluate((el) => el.scrollIntoView({ block: 'center' }));
     await expect(page.locator('#globe')).toBeInViewport();
@@ -1429,13 +1525,19 @@ test.describe('pangkalan data bandar', () => {
 
 test.describe('prestasi', () => {
   test('paparan pertama: bajet saiz, dan peta serta pangkalan bandar tidak dimuat', async ({ page }) => {
-    const loaded = [];
-    page.on('response', async (res) => {
+    // Every response up to the load event; modules fetched later (the planner's,
+    // once it nears the screen) are not counted, and their bodies are not read
+    // after the test has ended.
+    const bodies = [];
+    const onResponse = (res) => {
       const url = new URL(res.url());
-      if (url.hostname === 'localhost') loaded.push({ path: url.pathname, bytes: (await res.body()).length });
-    });
+      if (url.hostname === 'localhost') bodies.push(res.body().then((body) => ({ path: url.pathname, bytes: body.length })));
+    };
+    page.on('response', onResponse);
     await openApp(page);
     await page.waitForLoadState('load');
+    page.off('response', onResponse);
+    const loaded = await Promise.all(bodies);
     const total = loaded.reduce((n, r) => n + r.bytes, 0);
     expect(total, loaded.map((r) => `${r.path} ${r.bytes}`).join('\n')).toBeLessThan(450 * 1024); // uncompressed
     expect(loaded.map((r) => r.path).filter((p) => /maplibre|vendor\/cities\.js|malaysia-states/.test(p))).toEqual([]);
@@ -1526,7 +1628,7 @@ test.describe('PWA dan pratonton pautan', () => {
       await page.reload();
       await expect(page.locator('#hero-title')).toBeVisible();
       await expect(page.locator('.card')).toHaveCount(4);
-      expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toContain('Manrope');
+      expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toContain('Plus Jakarta Sans');
       await context.setOffline(false);
     });
   });
@@ -2821,5 +2923,94 @@ test.describe('kalendar langganan: skrip binaan', () => {
     } finally {
       server.close();
     }
+  });
+});
+
+// Direction B (DESIGN.md), plan items P1-P4 and P10.
+test.describe('reka bentuk: jalur matahari, perancang, sasaran sentuh, glob kemudian', () => {
+  test('jalur matahari: hari bandar dari tengah malam, fasa dalam perkataan', async ({ page }) => {
+    await openApp(page); // 06:00:07 Wednesday in Kuala Lumpur
+    const kl = card(page, 'Asia/Kuala_Lumpur');
+    await expect(kl.getByRole('heading', { name: 'Kuala Lumpur' })).toBeVisible();
+    await expect(kl).toHaveAttribute('aria-label', 'Kuala Lumpur');
+    await expect(kl.locator('.phase-name')).toHaveText('Fajar'); // not colour alone
+    await expect(kl.locator('.sun-strip')).toHaveAttribute('aria-hidden', 'true');
+    const strip = await kl.locator('.sun-strip').evaluate((s) => ({
+      runs: [...s.querySelectorAll('.sun-runs span')].map((r) => [r.className, parseFloat(r.style.width)]),
+      mark: parseFloat(s.querySelector('.sun-now').style.left),
+    }));
+    expect(strip.runs.map(([phase]) => phase)).toEqual(['night', 'dawn', 'day', 'dusk', 'night']);
+    expect(strip.runs.reduce((n, [, w]) => n + w, 0)).toBeCloseTo(100, 3); // widths come back from CSS rounded
+    // Day runs from an hour after sunrise to an hour before sunset, as the sun line says.
+    const [rise, set] = (await kl.locator('.sun').textContent()).match(/\d\d:\d\d/g).map((t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3)));
+    const dayFrom = strip.runs[0][1] + strip.runs[1][1];
+    expect(dayFrom).toBeCloseTo(((rise + 60) / 1440) * 100, 0);
+    expect(dayFrom + strip.runs[2][1]).toBeCloseTo(((set - 60) / 1440) * 100, 0);
+    expect(strip.mark).toBeCloseTo((360 / 1440) * 100, 0); // 06:00
+  });
+
+  test('perancang: kategori dibaca, hari bandar yang bertukar ditanda', async ({ page }) => {
+    await openApp(page);
+    const rows = page.locator('#planner-table tbody tr');
+    await expect(rows.nth(0).locator('td').nth(9)).toContainText(', waktu kerja');
+    await expect(rows.nth(0).locator('td').nth(23)).toContainText(', waktu tidur');
+    // Midnight Wednesday in Kuala Lumpur is 17:00 Tuesday in London; London turns to Wednesday at 07:00 here.
+    const london = rows.nth(1).locator('td');
+    await expect(london.nth(0)).toHaveAttribute('data-day', 'Sel');
+    await expect(london.nth(0)).toContainText(', Selasa');
+    await expect(london.nth(7)).toHaveClass(/day-start/);
+    await expect(london.nth(7)).toHaveAttribute('data-day', 'Rab');
+    await expect(london.nth(6)).not.toHaveClass(/day-start/);
+    await expect(london.nth(8)).toHaveClass(/sun-night/); // 01:00 in London
+    await expect(rows.nth(0).locator('td').nth(0)).not.toHaveAttribute('data-day'); // your own row starts on the planned day
+  });
+
+  test('sasaran sentuh sekurang-kurangnya 44 x 44 px pada telefon', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await openApp(page);
+    await page.locator('.planner-settings summary').click();
+    const small = await page.evaluate(() => [...document.querySelectorAll('#dunia button, #dunia a[href], #dunia input, #dunia select, #dunia summary, header button, header a, header label, .skip-link')]
+      .filter((n) => n.offsetParent !== null && !(n.matches('input[type="checkbox"]') && n.closest('label')) && !n.matches('.weather-toggle'))
+      .map((n) => { const r = n.getBoundingClientRect(); return { name: n.getAttribute('aria-label') || n.id || n.textContent.trim(), w: r.width, h: r.height }; })
+      .filter((t) => t.w < 44 || t.h < 44));
+    expect(small).toEqual([]);
+  });
+
+  test('label kelihatan, nilai penggelangsar dibaca, pautan langkau ke senarai dan jadual', async ({ page }) => {
+    await openApp(page);
+    await expect(page.locator('label[for="zone-input"]')).toBeVisible();
+    await expect(page.getByLabel('Cari bandar')).toHaveAttribute('id', 'zone-input');
+    const slider = page.locator('#time-slider');
+    await expect(slider).toHaveAttribute('aria-valuetext', 'Sekarang');
+    await slider.focus();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await expect(slider).toHaveAttribute('aria-valuetext', /^\+0j 30m dari sekarang · .+ waktu anda$/); // the sentence, not "2"
+    expect(await slider.getAttribute('aria-valuetext')).toBe(await page.locator('#time-label').textContent());
+  });
+
+  test('pautan langkau: ke senarai bandar dan ke jadual perancang', async ({ page }) => {
+    await openApp(page);
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await expect(page.locator(':focus')).toHaveText('Langkau ke senarai bandar');
+    await page.keyboard.press('Tab');
+    await expect(page.locator(':focus')).toHaveText('Langkau ke jadual perancang');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
+    await expect(page.locator(':focus')).toHaveAttribute('aria-label', /^Pilih 00:00 waktu anda$/);
+  });
+
+  test('glob: pustaka peta dimuat hanya bila glob hampir kelihatan', async ({ page }) => {
+    const fetched = [];
+    page.on('request', (r) => fetched.push(new URL(r.url()).pathname));
+    const globeLibraries = () => fetched.filter((p) => /d3-|topojson|land-110m/.test(p));
+    await openApp(page);
+    expect(globeLibraries()).toEqual([]);
+    const before = await page.locator('#globe').evaluate((el) => el.getBoundingClientRect().height);
+    await showGlobe(page);
+    expect(globeLibraries()).toEqual(['/vendor/d3-array.min.js', '/vendor/d3-geo.min.js', '/vendor/topojson-client.min.js', '/vendor/land-110m.js']);
+    expect(await page.locator('#globe').evaluate((el) => el.getBoundingClientRect().height)).toBe(before); // space was kept for it
+    await expect(page.locator('#globe-status')).toHaveText('');
   });
 });

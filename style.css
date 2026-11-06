@@ -1,146 +1,149 @@
-/* ---------- Fonts (vendored, SIL OFL) ---------- */
+/* ---------- Fonts (vendored, SIL OFL) ----------
+   Plus Jakarta Sans, Latin subset, two weights (DESIGN.md). With only 400 and
+   700, the browser draws 300 as 400 and 600/800 as 700; 500 would fall to
+   400, so the few 500s below are written as 700. */
 
 @font-face {
-  font-family: "Unbounded";
-  src: url("vendor/fonts/unbounded-latin-wght-normal.woff2") format("woff2");
-  font-weight: 200 900;
+  font-family: "Plus Jakarta Sans";
+  src: url("vendor/fonts/plus-jakarta-sans-latin-400-normal.woff2") format("woff2");
+  font-weight: 400;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "Manrope";
-  src: url("vendor/fonts/manrope-latin-wght-normal.woff2") format("woff2");
-  font-weight: 200 800;
+  font-family: "Plus Jakarta Sans";
+  src: url("vendor/fonts/plus-jakarta-sans-latin-700-normal.woff2") format("woff2");
+  font-weight: 700;
   font-display: swap;
 }
 
-/* ---------- Theme tokens ----------
-   Gold always means sunlight (day, the live time, the terminator's lit side);
-   pale blue always means night. Everything else stays quiet. */
+/* ---------- Theme tokens (DESIGN.md, direction B "Meja Kerja") ----------
+   Teal ink for text and actions, slate for what is secondary, amber only for
+   "now" and the sun. The logo keeps its own colours (--sun, --mark-night).
+   Every pair here was checked with antislop's contrast-check.py. */
 
 :root {
   color-scheme: light;
-  --bg: #eef3fb;
-  --bg-gradient: linear-gradient(180deg, #d9e6fa 0%, #f2f6fc 38%, #eef3fb 100%);
-  --stars: none;
-  --nav-bg: rgba(238, 243, 251, 0.82);
-  --panel: rgba(255, 255, 255, 0.82);
-  --panel-border: rgba(18, 26, 61, 0.1);
-  --shadow: 0 10px 30px rgba(18, 26, 61, 0.08);
-  --text: #121a3d;
-  --muted: #56618a;
+  --bg: #f6faf9;
+  --nav-bg: #f6faf9;
+  --panel: #ffffff;
+  --panel-border: #d5e0de;
+  --shadow: 0 8px 24px rgba(19, 78, 74, 0.14); /* only what floats: dialogs, the undo bar, tooltips */
+  --text: #134e4a;
+  --muted: #475569;
   --sun: #f5c451;
-  --sun-ink: #8a5a00;
-  --moon: #3b4ea8;
+  --sun-ink: #92400e;
+  --moon: #1e3a5f;
   --mark-night: #c9d3f5;
-  --accent: #f5c451;
-  --accent-contrast: #1a1433;
-  --accent-ink: #8a5a00;
+  --accent: #0f766e;
+  --accent-contrast: #ffffff;
+  --accent-ink: #0f766e;
   --error: #b42318;
   --input-bg: #ffffff;
-  --input-border: rgba(18, 26, 61, 0.2);
-  --work-bg: #bbf7d0;
-  --work-fg: #14532d;
-  --off-bg: #fef3c7;
-  --off-fg: #78350f;
+  --input-border: #7b8b89; /* 3.56:1 on white: the field's edge can be seen */
+  --work-bg: #ccfbf1;
+  --work-fg: #134e4a;
+  --off-bg: #ffffff;
+  --off-fg: #134e4a;
   --sleep-bg: #e2e8f0;
-  --sleep-fg: #475569;
-  --weekend-bg: #ede9fe;
-  --weekend-fg: #5b21b6;
-  --holiday-bg: #fce7f3;
-  --holiday-fg: #9d174d;
-  --all-work: #15803d;
-  --all-work-fg: #fff; /* 5.0:1 on --all-work */
-  --scroll-shade: rgba(18, 26, 61, 0.2);
+  --sleep-fg: #334155;
+  --weekend-bg: #fef3c7; /* weekends and public holidays share a colour; the hatch and the words tell them */
+  --weekend-fg: #78350f;
+  --holiday-bg: #fef3c7;
+  --holiday-fg: #78350f;
+  --all-work: #0f766e;
+  --all-work-fg: #ffffff;
+  --scroll-shade: rgba(19, 78, 74, 0.2);
   --moon-dark: #cbd5e1;
   --moon-lit: #f5c451;
-  --panel-solid: #fcfdfe; /* --panel over the page, for things that must hide what scrolls under them */
+  --panel-solid: #ffffff; /* for things that must hide what scrolls under them */
+  /* Sun strip (DESIGN.md): night and day ends, its edge, and the "now" mark. */
+  --strip-night: #1e3a5f;
+  --strip-day: #fde68a;
+  --strip-line: #7b8b89;
+  --now-line: #b45309;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #060b24;
-    --bg-gradient: radial-gradient(ellipse 90% 70% at 75% -10%, #1a2a66 0%, #0b1438 42%, #060b24 100%);
-    --stars:
-      radial-gradient(1px 1px at 25px 35px, rgba(255, 255, 255, 0.9), transparent),
-      radial-gradient(1px 1px at 120px 80px, rgba(255, 255, 255, 0.6), transparent),
-      radial-gradient(1.5px 1.5px at 200px 150px, #ffffff, transparent),
-      radial-gradient(1px 1px at 60px 190px, rgba(191, 219, 254, 0.7), transparent),
-      radial-gradient(1px 1px at 170px 220px, rgba(255, 255, 255, 0.8), transparent),
-      radial-gradient(1px 1px at 95px 125px, rgba(255, 255, 255, 0.5), transparent);
-    --nav-bg: rgba(6, 11, 36, 0.72);
-    --panel: rgba(14, 22, 58, 0.62);
-    --panel-border: rgba(157, 180, 255, 0.16);
-    --shadow: 0 10px 40px rgba(2, 4, 20, 0.45);
-    --text: #eef1ff;
-    --muted: #8e9ac0;
-    --sun-ink: #f5c451;
+    --bg: #0f1b1a;
+    --nav-bg: #0f1b1a;
+    --panel: #152523;
+    --panel-border: #2a403d;
+    --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    --text: #e6f2f0;
+    --muted: #9fb3af;
+    --sun-ink: #fbbf24;
     --moon: #9db4ff;
     --mark-night: #24306e;
-    --accent-ink: #f5c451;
+    --accent: #2dd4bf;
+    --accent-contrast: #0f1b1a;
+    --accent-ink: #5eead4;
     --error: #ff8a80;
-    --input-bg: rgba(10, 16, 46, 0.8);
-    --input-border: rgba(157, 180, 255, 0.28);
-    --work-bg: rgba(34, 197, 94, 0.25);
-    --work-fg: #bbf7d0;
-    --off-bg: rgba(245, 158, 11, 0.18);
-    --off-fg: #fde68a;
-    --sleep-bg: rgba(148, 163, 184, 0.12);
-    --sleep-fg: #94a3b8;
-    --weekend-bg: rgba(167, 139, 250, 0.32);
-    --weekend-fg: #ddd6fe;
-    --holiday-bg: rgba(244, 114, 182, 0.28);
-    --holiday-fg: #fbcfe8;
-    --all-work: #22c55e;
-    --all-work-fg: #052e16; /* 6.5:1 on --all-work */
+    --input-bg: #152523;
+    --input-border: #5f7572;
+    --work-bg: #134e4a;
+    --work-fg: #ccfbf1;
+    --off-bg: #152523;
+    --off-fg: #e6f2f0;
+    --sleep-bg: #1f2a37;
+    --sleep-fg: #cbd5e1;
+    --weekend-bg: #4a3410;
+    --weekend-fg: #fde68a;
+    --holiday-bg: #4a3410;
+    --holiday-fg: #fde68a;
+    --all-work: #2dd4bf;
+    --all-work-fg: #0f1b1a;
     --scroll-shade: rgba(0, 0, 0, 0.55);
     --moon-dark: #1e293b;
     --moon-lit: #fde68a;
-    --panel-solid: #0e1639;
+    --panel-solid: #152523;
+    --strip-night: #0b2540;
+    --strip-day: #e8c766;
+    --strip-line: #5f7572;
+    --now-line: #fbbf24;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #060b24;
-  --bg-gradient: radial-gradient(ellipse 90% 70% at 75% -10%, #1a2a66 0%, #0b1438 42%, #060b24 100%);
-  --stars:
-    radial-gradient(1px 1px at 25px 35px, rgba(255, 255, 255, 0.9), transparent),
-    radial-gradient(1px 1px at 120px 80px, rgba(255, 255, 255, 0.6), transparent),
-    radial-gradient(1.5px 1.5px at 200px 150px, #ffffff, transparent),
-    radial-gradient(1px 1px at 60px 190px, rgba(191, 219, 254, 0.7), transparent),
-    radial-gradient(1px 1px at 170px 220px, rgba(255, 255, 255, 0.8), transparent),
-    radial-gradient(1px 1px at 95px 125px, rgba(255, 255, 255, 0.5), transparent);
-  --nav-bg: rgba(6, 11, 36, 0.72);
-  --panel: rgba(14, 22, 58, 0.62);
-  --panel-border: rgba(157, 180, 255, 0.16);
-  --shadow: 0 10px 40px rgba(2, 4, 20, 0.45);
-  --text: #eef1ff;
-  --muted: #8e9ac0;
-  --sun-ink: #f5c451;
+  --bg: #0f1b1a;
+  --nav-bg: #0f1b1a;
+  --panel: #152523;
+  --panel-border: #2a403d;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --text: #e6f2f0;
+  --muted: #9fb3af;
+  --sun-ink: #fbbf24;
   --moon: #9db4ff;
   --mark-night: #24306e;
-  --accent-ink: #f5c451;
+  --accent: #2dd4bf;
+  --accent-contrast: #0f1b1a;
+  --accent-ink: #5eead4;
   --error: #ff8a80;
-  --input-bg: rgba(10, 16, 46, 0.8);
-  --input-border: rgba(157, 180, 255, 0.28);
-  --work-bg: rgba(34, 197, 94, 0.25);
-  --work-fg: #bbf7d0;
-  --off-bg: rgba(245, 158, 11, 0.18);
-  --off-fg: #fde68a;
-  --sleep-bg: rgba(148, 163, 184, 0.12);
-  --sleep-fg: #94a3b8;
-  --weekend-bg: rgba(167, 139, 250, 0.32);
-  --weekend-fg: #ddd6fe;
-  --holiday-bg: rgba(244, 114, 182, 0.28);
-  --holiday-fg: #fbcfe8;
-  --all-work: #22c55e;
-  --all-work-fg: #052e16; /* 6.5:1 on --all-work */
+  --input-bg: #152523;
+  --input-border: #5f7572;
+  --work-bg: #134e4a;
+  --work-fg: #ccfbf1;
+  --off-bg: #152523;
+  --off-fg: #e6f2f0;
+  --sleep-bg: #1f2a37;
+  --sleep-fg: #cbd5e1;
+  --weekend-bg: #4a3410;
+  --weekend-fg: #fde68a;
+  --holiday-bg: #4a3410;
+  --holiday-fg: #fde68a;
+  --all-work: #2dd4bf;
+  --all-work-fg: #0f1b1a;
   --scroll-shade: rgba(0, 0, 0, 0.55);
   --moon-dark: #1e293b;
   --moon-lit: #fde68a;
-  --panel-solid: #0e1639;
+  --panel-solid: #152523;
+  --strip-night: #0b2540;
+  --strip-day: #e8c766;
+  --strip-line: #5f7572;
+  --now-line: #fbbf24;
 }
 
 /* ---------- Base ---------- */
@@ -156,7 +159,7 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: calc(var(--nav-h) + 8px);
-  -webkit-tap-highlight-color: rgba(245, 196, 81, 0.3); /* a gold flash, not the platform's grey box */
+  -webkit-tap-highlight-color: rgba(15, 118, 110, 0.2); /* a teal flash, not the platform's grey box */
 }
 
 /* No double-tap zoom delay on anything tapped. */
@@ -169,46 +172,32 @@ p { text-wrap: pretty; }
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 1.0625rem;
-  line-height: 1.6;
-  background: var(--bg-gradient) fixed, var(--bg);
+  font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  line-height: 1.55;
+  background: var(--bg);
   color: var(--text);
 }
 
-/* Starfield sits behind everything; `--stars` is `none` in the light theme. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background-image: var(--stars);
-  background-size: 240px 240px;
-  pointer-events: none;
-}
-
-h1, h2, .hero-time, .fact-offset, .brand {
-  font-family: "Unbounded", "Manrope", system-ui, sans-serif;
-}
-
+/* Type scale (DESIGN.md): weight and size carry the hierarchy, one family. */
 h1 {
   margin: 0;
   max-width: 16ch;
-  font-size: clamp(2rem, 1.2rem + 3vw, 3.4rem);
-  font-weight: 500;
-  line-height: 1.08;
-  letter-spacing: -0.025em;
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
 }
 
 /* Each tab's own title: an h1 while that tab shows, sized like a section title. */
-h1.tab-title { max-width: none; margin: 0 0 12px; font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.4rem); line-height: 1.15; letter-spacing: -0.02em; }
+h1.tab-title { max-width: none; margin: 0 0 12px; }
 
 h2 {
   margin: 0 0 12px;
-  font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.4rem);
-  font-weight: 500;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
 }
 
 h3 { margin: 0 0 6px; font-size: 1.1rem; font-weight: 700; line-height: 1.3; }
@@ -222,8 +211,11 @@ a { color: inherit; }
   left: 16px;
   top: -60px;
   z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   padding: 8px 14px;
-  border-radius: 999px;
+  border-radius: 6px;
   background: var(--accent);
   color: var(--accent-contrast);
   font-weight: 700;
@@ -243,7 +235,7 @@ button,
   font-weight: 700;
   line-height: 1.2;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: 6px; /* DESIGN.md: 6 px for controls, 10 px for panels, pills only for chips */
   background: var(--accent);
   color: var(--accent-contrast);
   text-decoration: none;
@@ -276,13 +268,24 @@ button, .btn { gap: 6px; }
   button.secondary:hover,
   .icon-btn:hover { background: var(--panel); border-color: var(--input-border); }
 }
+
+/* Off until it can work (the countdown's Tambah while its module loads): flat, no press, no pointer. */
+button:disabled,
+button:disabled:is(:hover, :active) {
+  cursor: not-allowed;
+  transform: none;
+  background: var(--panel);
+  color: var(--muted);
+  border-color: var(--input-border);
+}
+select { cursor: pointer; }
 .icon-btn .icon { width: 20px; height: 20px; }
 
 button.secondary,
 .btn.secondary {
   background: transparent;
   color: var(--text);
-  border-color: var(--panel-border);
+  border-color: var(--input-border); /* a control's edge, like a field's: 3:1 (audit #5) */
 }
 
 .icon-btn {
@@ -292,7 +295,7 @@ button.secondary,
   font-size: 1.05rem;
   color: var(--text); /* the glyph itself where no colour emoji font exists */
   background: var(--panel);
-  border-color: var(--panel-border);
+  border-color: var(--input-border);
 }
 
 .error { color: var(--error); margin: 4px 0; }
@@ -325,8 +328,6 @@ button.secondary,
   z-index: 10;
   background: var(--nav-bg);
   border-bottom: 1px solid var(--panel-border);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
 }
 
 .nav-inner {
@@ -341,7 +342,7 @@ button.secondary,
   align-items: center;
   gap: 10px;
   font-size: 1.05rem;
-  font-weight: 600;
+  font-weight: 700;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -354,9 +355,9 @@ button.secondary,
 
 .nav-links a {
   padding: 6px 12px;
-  border-radius: 999px;
+  border-radius: 6px;
   color: var(--muted);
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.95rem;
   text-decoration: none;
 }
@@ -418,7 +419,7 @@ button.secondary,
   gap: 8px 12px;
   margin-top: 12px;
   padding: 10px 14px;
-  border-radius: 14px;
+  border-radius: 10px;
   background: var(--panel);
   border: 1px solid var(--accent-ink);
 }
@@ -426,46 +427,42 @@ button.secondary,
 .share-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 #share-banner button { padding: 6px 14px; font-size: 0.9rem; }
 
-/* ---------- Hero ---------- */
+/* ---------- Your time ---------- */
 
-.hero {
+/* The viewer's own clock beside the controls that move every clock, in one
+   band, so the city list starts on the first screen at every width. */
+.now {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  grid-template-areas:
-    "copy globe"
-    "time time";
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
   align-items: center;
-  column-gap: 48px;
-  row-gap: 24px;
-  min-height: calc(100svh - 64px);
-  padding-block: 32px 56px;
+  gap: 16px 40px;
+  padding-block: 24px 0;
 }
 
-.hero-copy { grid-area: copy; }
-#globe-wrap { grid-area: globe; }
-#time-control { grid-area: time; }
-
-/* The one orchestrated entrance: copy rises in step with the globe's intro. */
-.hero-copy > * { animation: rise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-.hero-copy > :nth-child(2) { animation-delay: 0.08s; }
-.hero-copy > :nth-child(3) { animation-delay: 0.16s; }
-.hero-copy > :nth-child(4) { animation-delay: 0.24s; }
-
-@keyframes rise {
-  from { opacity: 0; transform: translateY(16px); }
+/* A small label over the clock: the clock, not the heading, is what is read. */
+.now h1 {
+  max-width: none;
+  margin: 0;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0;
 }
-
-.hero-lede { max-width: 46ch; margin: 20px 0 0; color: var(--muted); font-size: 1.125rem; }
 
 /* One line: the time and the date beside it (the city cards carry the detail). */
-.hero-clock { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 14px; margin: 28px 0; }
+.hero-clock { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 14px; margin: 4px 0 0; }
 #hero-place { flex-basis: 100%; }
 #hero-place, #hero-date { margin: 0; color: var(--muted); }
+#hero-date { line-height: 1.2; } /* sits on the clock's line without its box hanging below it */
+/* Both are empty until app.js runs: hold their one line so nothing below jumps. */
+#hero-date { min-height: 1.2em; }
+.hero-time { min-height: 1em; }
 
 .hero-time {
   margin: 4px 0;
-  font-size: clamp(2.4rem, 1.8rem + 2.4vw, 3.6rem);
-  font-weight: 300;
+  font-size: clamp(1.9rem, 1.5rem + 1.4vw, 2.6rem);
+  font-weight: 400;
   line-height: 1;
   letter-spacing: -0.03em;
   white-space: nowrap;
@@ -474,20 +471,18 @@ button.secondary,
 }
 
 .hero-time[data-phase="night"] { color: var(--moon); }
-.hero-seconds { font-size: 0.42em; opacity: 0.75; letter-spacing: 0; }
-.hero-period { font-size: 0.3em; font-weight: 500; letter-spacing: 0; }
-
-.hero-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+/* Full colour: faded seconds fell below 4.5:1 at phone sizes. */
+.hero-seconds { font-size: 0.5em; letter-spacing: 0; }
+.hero-period { font-size: 0.4em; font-weight: 700; letter-spacing: 0; }
 
 @media (max-width: 860px) {
-  .hero {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "globe" "copy" "time";
-    min-height: 0;
-    padding-top: 8px;
-  }
-  .hero-clock { margin: 24px 0; }
+  .now { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* The list follows your time closely, so its first card reaches a 720 px
+   laptop screen (the spacing of the other sections comes with plan item P9). */
+#bandar { padding-top: 40px; }
+#bandar .section-head { max-width: 860px; } /* its note on two lines, not three */
 
 /* ---------- Globe ---------- */
 
@@ -499,7 +494,7 @@ button.secondary,
 #globe {
   display: block;
   width: 100%;
-  max-width: 680px;
+  max-width: 560px;
   aspect-ratio: 1;
   margin: 0 auto;
   cursor: grab;
@@ -507,6 +502,8 @@ button.secondary,
 }
 
 #globe-wrap .hint { margin: 4px 0 0; color: var(--muted); font-size: 0.85rem; }
+.globe-status { margin: 4px 0 0; color: var(--muted); }
+.globe-status:empty { display: none; }
 
 .globe-zoom {
   position: absolute;
@@ -528,16 +525,14 @@ button.secondary,
   border-color: rgba(157, 180, 255, 0.3);
 }
 
-/* On a phone the city cards are the point: a smaller globe (its zoom buttons
-   fit beside it without covering labels) and the clock without the
-   introduction or the jump links, so the first card shows on the first screen. */
+/* On a phone the city cards are the point: the clock and controls stay
+   compact so the first card shows on the first screen. */
 @media (max-width: 600px) {
-  .hero { row-gap: 12px; padding-bottom: 0; }
-  #globe { max-width: 220px; }
+  .now { gap: 12px; padding-top: 12px; }
+  /* "Di Kuala Lumpur, sekarang pukul" already says it; the heading stays for screen readers. */
+  .now h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  #globe { max-width: 320px; }
   #globe-wrap .hint { display: none; } /* drag and pinch need no telling on a touch screen */
-  .hero-lede, .hero-actions { display: none; }
-  .hero-clock { margin: 8px 0 0; }
-  .hero h1 { font-size: 1.2rem; max-width: none; }
   #time-control { padding: 12px 14px; }
   #time-control #time-label { flex-basis: 100px; } /* beside its label, not below it */
   #bandar { padding-top: 24px; }
@@ -574,11 +569,9 @@ button.secondary,
 
 #time-control {
   padding: 14px 18px;
-  border-radius: 20px;
+  border-radius: 10px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
 }
 
 .time-row {
@@ -600,18 +593,14 @@ body.time-shifted #time-label { color: var(--accent-ink); font-weight: 700; }
   font-size: 0.95rem;
 }
 
-.play-btn.playing { animation: pulse 1.6s ease-in-out infinite; }
-
-@keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 196, 81, 0.6); }
-  50% { box-shadow: 0 0 0 8px rgba(245, 196, 81, 0); }
-}
+/* Playing: the pause glyph plus a still ring, so the state reads without motion. */
+.play-btn[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent-ink); }
 
 #time-slider { width: 100%; margin: 12px 0 2px; accent-color: var(--accent); }
 #time-slider.beyond { opacity: 0.5; } /* the time shown lies past its ends */
 .time-type { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 10px; }
 .time-type label { font-weight: 700; font-size: 0.9rem; }
-.time-type input { flex: 1 1 6em; min-width: 0; padding: 8px 14px; font: inherit; color: var(--text); background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 999px; }
+.time-type input { flex: 1 1 6em; min-width: 0; padding: 8px 14px; font: inherit; color: var(--text); background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 6px; }
 .time-type button { padding: 8px 16px; }
 /* "Bandar anda" with the share-image button at its end. */
 #bandar .section-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
@@ -624,6 +613,7 @@ body.time-shifted #time-label { color: var(--accent-ink); font-weight: 700; }
      the label above the slider already says how far it has moved. */
   #time-control .time-scale { display: none; }
   #time-control .time-type { margin-top: 6px; }
+  #time-control .time-type label { flex-basis: 100%; } /* its own line, so the field is wide enough for its example */
   #time-control .time-type :is(input, button) { padding-top: 6px; padding-bottom: 6px; }
   #time-control #time-slider { margin-top: 8px; }
 }
@@ -632,6 +622,8 @@ body.time-shifted #time-label { color: var(--accent-ink); font-weight: 700; }
 
 .time-scale {
   display: flex;
+  flex-wrap: wrap; /* its three labels wrap at 200% text instead of running off the page */
+  column-gap: 8px;
   justify-content: space-between;
   color: var(--muted);
   font-size: 0.75rem;
@@ -639,14 +631,25 @@ body.time-shifted #time-label { color: var(--accent-ink); font-weight: 700; }
 
 /* ---------- Sections ---------- */
 
+/* Spacing scale (DESIGN.md): 4 / 8 / 12 / 16 / 24 / 40 / 64 px. Sections sit
+   64 px apart on wide screens and 40 px on phones, not up to 112 px. */
 .section {
-  padding-block: clamp(64px, 8vw, 112px) 0;
+  padding-block: 64px 0;
+}
+@media (max-width: 600px) {
+  .section { padding-top: 40px; }
 }
 
-.section-head { max-width: 640px; margin-bottom: 32px; }
+.section-head { max-width: 640px; margin-bottom: 24px; }
 .section-head p { margin: 0; color: var(--muted); }
 
 /* ---------- Add form ---------- */
+
+/* The browser's own placeholder grey is 3.45:1 on the dark fields; --muted passes in both themes. */
+::placeholder { color: var(--muted); opacity: 1; }
+
+/* A visible name over the field: the placeholder only gives an example (audit #8). */
+.field-label { display: block; margin: 0 0 6px; font-weight: 700; font-size: 0.9rem; }
 
 #add-form {
   display: flex;
@@ -663,7 +666,7 @@ body.time-shifted #time-label { color: var(--accent-ink); font-weight: 700; }
   color: var(--text);
   background: var(--input-bg);
   border: 1px solid var(--input-border);
-  border-radius: 999px;
+  border-radius: 6px;
 }
 
 /* ---------- City cards ---------- */
@@ -678,15 +681,19 @@ body.time-shifted #time-label { color: var(--accent-ink); font-weight: 700; }
   margin-top: 20px;
 }
 
+/* A flat surface: the time of day is told by the sun strip and its words,
+   not by the card's colour (DESIGN.md). */
 .card {
   position: relative;
   padding: 14px 16px 16px;
-  border-radius: 20px;
-  box-shadow: var(--shadow);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  background: var(--panel-solid);
+  color: var(--text);
 }
 
 .card.on-globe { cursor: pointer; }
-body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink), var(--shadow); }
+body.time-shifted .card { box-shadow: 0 0 0 2px var(--accent-ink); }
 body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the weather now, not at the time shown */
 
 /* The weather line is a button: it opens the next 12 hours under the card. */
@@ -718,20 +725,27 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
   font-variant-numeric: tabular-nums;
 }
 .hourly-list li { display: flex; flex: 0 0 auto; flex-direction: column; align-items: center; gap: 2px; min-width: 48px; }
-.hourly-list .hourly-time { opacity: 0.8; }
-.hourly-list .hourly-rain { font-size: 0.75rem; opacity: 0.8; }
-.hourly-source { margin: 6px 0 0; font-size: 0.72rem; opacity: 0.75; }
+/* Secondary words in --muted, not faded: faded text fell below 4.5:1 (audit #2, #3). */
+.hourly-list .hourly-time { color: var(--muted); }
+.hourly-list .hourly-rain { font-size: 0.75rem; color: var(--muted); }
+.hourly-source { margin: 6px 0 0; font-size: 0.75rem; color: var(--muted); }
 
 /* °C | °F beside the city search; it applies to every temperature shown. */
-.unit-toggle { display: inline-flex; margin-left: auto; border: 1px solid var(--input-border); border-radius: 999px; overflow: hidden; }
+.unit-toggle { display: inline-flex; margin-left: auto; border: 1px solid var(--input-border); border-radius: 6px; overflow: hidden; }
 .unit-toggle button { padding: 6px 12px; border: 0; border-radius: 0; background: transparent; color: var(--muted); font-size: 0.9rem; }
 .unit-toggle button[aria-pressed="true"] { background: var(--accent); color: var(--accent-contrast); }
 
-/* Background follows the time of day in that city. */
-.card[data-phase="dawn"] { background: linear-gradient(160deg, #fda4af, #fdba74 55%, #fde68a); color: #7c2d12; }
-.card[data-phase="day"] { background: linear-gradient(160deg, #7dd3fc, #bae6fd 60%, #e0f2fe); color: #0c4a6e; }
-.card[data-phase="dusk"] { background: linear-gradient(160deg, #5b21b6, #be185d 60%, #c2410c); color: #fff7ed; }
-.card[data-phase="night"] { background: linear-gradient(160deg, #0b1026, #1e1b4b 60%, #312e81); color: #e0e7ff; }
+/* The sun strip: the city's day from midnight to midnight, with a mark at the
+   time shown (DESIGN.md motif). The mark's halo keeps it visible on both ends. */
+.day-line { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.phase-name { flex: none; min-width: 3.5em; font-size: 0.875rem; font-weight: 700; }
+.sun-strip { position: relative; flex: 1; height: 10px; border: 1px solid var(--strip-line); border-radius: 3px; }
+.sun-runs { display: flex; height: 100%; overflow: hidden; border-radius: 2px; }
+.sun-runs .night { background: var(--strip-night); }
+.sun-runs .day { background: var(--strip-day); }
+.sun-runs .dawn { background: linear-gradient(to right, var(--strip-night), var(--strip-day)); }
+.sun-runs .dusk { background: linear-gradient(to right, var(--strip-day), var(--strip-night)); }
+.sun-now { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--now-line); box-shadow: 0 0 0 1px var(--panel-solid); }
 
 .card-head {
   display: flex;
@@ -740,7 +754,7 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
   padding-right: 28px;
 }
 
-.card .city { font-weight: 800; font-size: 1.1rem; }
+.card .city { margin: 0; font-weight: 700; font-size: 1.0625rem; }
 
 .card .utc {
   padding: 2px 8px;
@@ -753,6 +767,7 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 
 .card-body {
   display: flex;
+  flex-wrap: wrap; /* the analog clock drops below the text at 200% text */
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -760,11 +775,14 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 
 .card .time {
   margin: 6px 0 4px;
-  font-size: 1.55rem;
+  font-size: 1.75rem;
   font-weight: 700;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+
+/* The first card's clock is the screen's one large figure (ENERGY 2). */
+.card:first-child .time { font-size: clamp(2.25rem, 1.6rem + 2.6vw, 3.25rem); }
 
 .card .meta { font-size: 0.85rem; }
 
@@ -774,7 +792,7 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 .analog .hand { stroke: currentColor; stroke-linecap: round; }
 .analog .hand.hour { stroke-width: 5; }
 .analog .hand.minute { stroke-width: 3.5; }
-.analog .hand.second { stroke: #ef4444; stroke-width: 1.5; }
+.analog .hand.second { stroke: var(--now-line); stroke-width: 1.5; } /* amber means "now" (DESIGN.md) */
 .analog .pin { fill: currentColor; }
 
 .card .remove {
@@ -814,20 +832,15 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 .card.dragging { z-index: 5; box-shadow: 0 18px 40px rgba(2, 6, 23, 0.45); cursor: grabbing; opacity: 0.95; }
 .card.dragging .drag-handle { cursor: grabbing; }
 
-.card.enter { animation: card-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(var(--i, 0) * 70ms); }
 .card.leaving { animation: card-out 0.25s ease-in forwards; pointer-events: none; }
 .card.flash { animation: flash 1s ease-out; }
-
-@keyframes card-in {
-  from { opacity: 0; transform: translateY(14px) scale(0.96); }
-}
 
 @keyframes card-out {
   to { opacity: 0; transform: scale(0.9); }
 }
 
 @keyframes flash {
-  from { box-shadow: 0 0 0 4px var(--accent-ink), var(--shadow); }
+  from { box-shadow: 0 0 0 4px var(--accent-ink); }
 }
 
 /* ---------- Malaysian city panel ---------- */
@@ -841,8 +854,6 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
   border-color: currentColor;
 }
 
-/* On the dark cards a light wash would lower the contrast of light text. */
-.card:is([data-phase="dusk"], [data-phase="night"]) :is(.local-toggle, .utc) { background: rgba(0, 0, 0, 0.2); }
 
 .local-panel {
   margin-top: 12px;
@@ -854,9 +865,9 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 
 .local-block + .local-block { margin-top: 14px; }
 .local-block h3 { margin: 0 0 6px; font-size: 0.95rem; }
-.local-block h3 small { font-weight: 600; opacity: 0.75; }
+.local-block h3 small { font-weight: 700; color: var(--muted); }
 .local-block p { margin: 4px 0 0; }
-.local-status { opacity: 0.8; }
+.local-status { color: var(--muted); }
 
 /* "Nothing to report": a small chip, not a paragraph that fills a section. */
 .empty-chip {
@@ -887,10 +898,10 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
   flex-direction: column;
   padding: 6px 8px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.16);
+  background: color-mix(in srgb, currentColor 8%, transparent);
 }
 
-.prayer-times li span { font-size: 0.75rem; opacity: 0.85; }
+.prayer-times li span { font-size: 0.75rem; color: var(--muted); }
 .prayer-times li strong { font-variant-numeric: tabular-nums; }
 .prayer-times li.next { outline: 2px solid currentColor; }
 .next-prayer { font-weight: 700; }
@@ -910,7 +921,7 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 .forecast-temp { font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .aqi-chart { margin: 12px 0 0; }
-.aqi-chart figcaption { font-size: 0.8rem; font-weight: 700; opacity: 0.85; }
+.aqi-chart figcaption { font-size: 0.8rem; font-weight: 700; color: var(--muted); }
 .aqi-chart svg { display: block; width: 100%; height: auto; max-height: 180px; margin-top: 4px; }
 .aqi-grid { stroke: currentColor; stroke-opacity: 0.15; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .aqi-axis { stroke: currentColor; stroke-opacity: 0.4; stroke-width: 1; vector-effect: non-scaling-stroke; }
@@ -918,11 +929,11 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 .aqi-tick.start { text-anchor: start; }
 .aqi-hit { fill: transparent; }
 .aqi-chart svg:hover .aqi-bar:not(.active) { opacity: 0.45; }
-.aqi-readout { margin: 2px 0 0 !important; font-size: 0.8rem; opacity: 0.85; }
+.aqi-readout { margin: 2px 0 0 !important; font-size: 0.8rem; color: var(--muted); }
 
 .local-link { font-weight: 700; }
 .local-retry { margin-top: 6px; padding: 4px 12px; font-size: 0.8rem; }
-.local-source { margin-top: 14px !important; font-size: 0.75rem; opacity: 0.7; }
+.local-source { margin-top: 14px !important; font-size: 0.75rem; color: var(--muted); }
 
 /* ---------- Malaysia tab ---------- */
 
@@ -940,7 +951,7 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 .alert {
   margin-bottom: 10px;
   padding: 12px 14px;
-  border-radius: 14px;
+  border-radius: 10px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-left: 4px solid var(--sun-ink);
@@ -959,7 +970,7 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
   gap: 10px 14px;
   margin-bottom: 16px;
   padding: 14px 16px;
-  border-radius: 16px;
+  border-radius: 10px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
 }
@@ -972,20 +983,22 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 .reminder-note p { margin-top: 6px; }
 
 /* Kiraan detik: the form, then a card per event. */
-.countdown-form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 12px; margin-bottom: 12px; padding: 14px 16px; border-radius: 16px; background: var(--panel); border: 1px solid var(--panel-border); }
+.countdown-form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 12px; margin-bottom: 12px; padding: 14px 16px; border-radius: 10px; background: var(--panel); border: 1px solid var(--panel-border); }
 .countdown-form label { display: grid; gap: 4px; font-weight: 700; font-size: 0.9rem; }
+/* A set width: its options arrive with the module, and a select grows to its widest one. */
+.countdown-form select { width: 12rem; max-width: 100%; }
 .countdown-form p { flex-basis: 100%; margin: 0; color: var(--muted); font-size: 0.85rem; }
 .countdown-form p:empty { display: none; }
 .countdown-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
-.countdown { position: relative; padding: 14px 16px; border-radius: 16px; background: var(--panel); border: 1px solid var(--panel-border); }
+.countdown { position: relative; padding: 14px 16px; border-radius: 10px; background: var(--panel); border: 1px solid var(--panel-border); }
 .countdown h3 { margin: 0 28px 4px 0; font-size: 1rem; }
-.countdown-left { margin: 0; font-size: 1.4rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.countdown-left { margin: 0; font-size: 1.4rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .countdown-remove { position: absolute; top: 8px; right: 8px; padding: 2px 8px; background: transparent; color: inherit; font-size: 1.2rem; opacity: 0.8; }
-.countdown-list .empty { color: var(--muted); }
+.countdown-list .empty { grid-column: 1 / -1; color: var(--muted); } /* one line, not squeezed into a card's column */
 
 /* Takwim Islam: today, holy days, sunat fasts and the Moon, side by side when they fit. */
 .takwim { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-.takwim-block { padding: 14px 16px; border-radius: 16px; background: var(--panel); border: 1px solid var(--panel-border); }
+.takwim-block { padding: 14px 16px; border-radius: 10px; background: var(--panel); border: 1px solid var(--panel-border); }
 .takwim-block h3 { margin: 0 0 8px; font-size: 1rem; }
 .takwim-block p { margin: 4px 0; }
 .takwim-hijri { font-size: 1.5rem; font-weight: 700; }
@@ -1003,7 +1016,7 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 .zone-card {
   margin-bottom: 16px;
   padding: 14px 16px;
-  border-radius: 16px;
+  border-radius: 10px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
 }
@@ -1046,7 +1059,7 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 .zone-times li.next strong { color: var(--sun-ink); }
 
 .ramadan-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
-.ramadan-day { margin: 0; font-size: 1.1rem; font-weight: 800; }
+.ramadan-day { margin: 0; font-size: 1.1rem; font-weight: 700; }
 .ramadan-pick select {
   margin-left: 6px;
   padding: 6px 8px;
@@ -1059,14 +1072,14 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 .ramadan-count {
   margin-bottom: 18px;
   padding: 18px 20px;
-  border-radius: 20px;
+  border-radius: 10px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
   text-align: center;
 }
 .ramadan-count p { margin: 0; }
 .ramadan-label { font-weight: 700; }
-.ramadan-timer { margin: 4px 0 !important; font-family: "Unbounded", "Manrope", system-ui, sans-serif; font-size: clamp(2.2rem, 7vw, 3.4rem); font-weight: 800; font-variant-numeric: tabular-nums; color: var(--sun-ink); }
+.ramadan-timer { margin: 4px 0 !important; font-family: "Plus Jakarta Sans", system-ui, sans-serif; font-size: clamp(2.2rem, 7vw, 3.4rem); font-weight: 700; font-variant-numeric: tabular-nums; color: var(--sun-ink); }
 .ramadan-line { margin-top: 8px !important; font-weight: 700; }
 
 .load-error { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -1079,7 +1092,7 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 
 .weather-tile {
   padding: 14px;
-  border-radius: 16px;
+  border-radius: 10px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
 }
@@ -1091,7 +1104,7 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 
 .table-scroll {
   overflow-x: auto;
-  border-radius: 16px;
+  border-radius: 10px;
   border: 1px solid var(--panel-border);
   /* A shadow on the right while columns lie beyond it: the first layer scrolls
      with the table and covers the shadow once its end is reached. */
@@ -1115,8 +1128,8 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 .data-table thead th { color: var(--muted); font-weight: 700; border-bottom: 1px solid var(--panel-border); }
 .data-table tbody tr + tr { border-top: 1px solid var(--panel-border); }
 .data-table tbody th small { display: block; color: var(--muted); font-weight: 400; font-size: 0.75rem; }
-.data-table td.next { color: var(--sun-ink); font-weight: 800; }
-.data-table tfoot { border-top: 2px solid var(--panel-border); font-weight: 800; }
+.data-table td.next { color: var(--sun-ink); font-weight: 700; }
+.data-table tfoot { border-top: 2px solid var(--panel-border); font-weight: 700; }
 
 .bar {
   display: inline-block;
@@ -1225,14 +1238,14 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 }
 
 .map-warnings ul { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
-.map-warnings-title { margin: 0; font-weight: 800; }
+.map-warnings-title { margin: 0; font-weight: 700; }
 .warning-dot { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 3px; vertical-align: baseline; }
 
 /* Qibla: a small dial in the city dialog, a large one in the compass. */
 .qibla-row { display: flex; align-items: center; gap: 12px; }
 .qibla-row p { margin: 0; }
 .qibla-svg .dial-face { fill: rgba(255, 255, 255, 0.08); stroke: currentColor; stroke-opacity: 0.4; stroke-width: 2; }
-.qibla-svg .dial-north { fill: var(--error); font-size: 11px; font-weight: 800; text-anchor: middle; }
+.qibla-svg .dial-north { fill: var(--error); font-size: 11px; font-weight: 700; text-anchor: middle; }
 .qibla-svg .dial-needle { fill: var(--accent); stroke: #1a1433; stroke-width: 1; }
 .qibla-svg .dial-kaaba { fill: var(--panel); stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
 
@@ -1247,7 +1260,7 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
   gap: 14px;
   padding: 10px 12px 10px 18px;
   border: 1px solid var(--panel-border);
-  border-radius: 999px;
+  border-radius: 10px;
   background: var(--panel-solid);
   box-shadow: var(--shadow);
   transform: translateX(-50%);
@@ -1262,7 +1275,7 @@ dialog { overscroll-behavior: contain; }
   width: min(420px, calc(100vw - 24px));
   padding: 0;
   border: 1px solid var(--panel-border);
-  border-radius: 20px;
+  border-radius: 10px;
   background: var(--bg);
   color: var(--text);
   box-shadow: var(--shadow);
@@ -1274,7 +1287,7 @@ dialog { overscroll-behavior: contain; }
 .qibla-body { padding: 4px 24px 24px; text-align: center; }
 .qibla-body h2 { margin: 16px 0 12px; }
 .qibla-dial { display: grid; place-items: center; min-height: 220px; }
-.qibla-reading { margin: 12px 0 4px; font-weight: 800; }
+.qibla-reading { margin: 12px 0 4px; font-weight: 700; }
 .map-note { margin-top: 12px; color: var(--muted); font-size: 0.85rem; }
 
 .map-marker { --aqi: #94a3b8; position: relative; width: 48px; height: 48px; }
@@ -1317,7 +1330,7 @@ dialog { overscroll-behavior: contain; }
 }
 
 .marker-photo img { width: 100%; height: 100%; object-fit: cover; }
-.marker-initial { color: #fff; font-weight: 800; }
+.marker-initial { color: #fff; font-weight: 700; }
 .marker-open:hover .marker-photo,
 .marker-open:focus-visible .marker-photo { transform: scale(1.12); }
 .marker-open:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
@@ -1332,7 +1345,7 @@ dialog { overscroll-behavior: contain; }
   border-radius: 999px;
   box-shadow: 0 2px 6px rgba(2, 6, 23, 0.35);
   font-size: 0.7rem;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
 }
 
@@ -1376,7 +1389,7 @@ dialog { overscroll-behavior: contain; }
   background: #0f172a;
   color: #fff;
   font-size: 0.7rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .city-aqi { display: inline-flex; align-items: center; }
@@ -1391,7 +1404,7 @@ dialog { overscroll-behavior: contain; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 20px;
+  border-radius: 10px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
   box-shadow: var(--shadow);
@@ -1448,7 +1461,7 @@ dialog { overscroll-behavior: contain; }
   padding: 0;
   overflow: auto;
   border: 1px solid var(--panel-border);
-  border-radius: 20px;
+  border-radius: 10px;
   background: var(--bg);
   color: var(--text);
   box-shadow: var(--shadow);
@@ -1528,11 +1541,9 @@ dialog { overscroll-behavior: contain; }
 
 #planner {
   padding: 20px;
-  border-radius: 20px;
+  border-radius: 10px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
 }
 
 #planner-summary { margin: 0 0 12px; font-weight: 700; }
@@ -1546,7 +1557,7 @@ dialog { overscroll-behavior: contain; }
   gap: 6px;
   padding: 6px 12px;
   border: 1px solid var(--input-border);
-  border-radius: 999px;
+  border-radius: 6px;
   cursor: pointer;
   list-style: none;
 }
@@ -1603,7 +1614,7 @@ dialog { overscroll-behavior: contain; }
   margin: 12px 0 0;
   padding: 12px 16px;
   border: 1px solid var(--panel-border);
-  border-radius: 14px;
+  border-radius: 10px;
   background: var(--panel);
 }
 .planner-pick[hidden] { display: none; }
@@ -1656,13 +1667,14 @@ dialog { overscroll-behavior: contain; }
   min-width: 36px;
   padding: 4px 2px;
   font-size: 0.8rem;
-  font-weight: 600;
+  font-weight: 700;
   background: transparent;
   color: var(--muted);
   border-radius: 6px;
 }
 
 #planner-table td {
+  position: relative; /* keeps each cell's hidden words inside the scrolling table */
   min-width: 36px;
   padding: 6px 2px;
   text-align: center;
@@ -1678,6 +1690,28 @@ dialog { overscroll-behavior: contain; }
 #planner-table .sleep { background: var(--sleep-bg); color: var(--sleep-fg); }
 #planner-table .weekend { background: var(--weekend-bg); color: var(--weekend-fg); }
 #planner-table .holiday { background: var(--holiday-bg); color: var(--holiday-fg); }
+/* Under each hour, the city's sun at that hour: the cards' sun strip, aligned
+   to the hours (DESIGN.md). td[class] outranks the colour rules above. */
+#planner-table td[class] {
+  background-image: linear-gradient(var(--sun, transparent), var(--sun, transparent));
+  background-position: bottom;
+  background-size: 100% 3px;
+  background-repeat: no-repeat;
+}
+#planner-table td.sun-night { --sun: var(--strip-night); }
+#planner-table td.sun-day { --sun: var(--strip-day); }
+#planner-table td:is(.sun-dawn, .sun-dusk) { --sun: color-mix(in srgb, var(--strip-night), var(--strip-day)); }
+/* Weekends and holidays carry a hatch as well as a colour. */
+#planner-table td:is(.weekend, .holiday) {
+  background-image: linear-gradient(var(--sun, transparent), var(--sun, transparent)),
+    repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, currentColor 14%, transparent) 6px 8px);
+  background-position: bottom, 0 0;
+  background-size: 100% 3px, auto;
+  background-repeat: no-repeat, repeat;
+}
+/* The city's date changes here: a rule and the day's short name (read out in full by the hidden text). */
+#planner-table td.day-start { border-left: 2px solid var(--text); }
+#planner-table td.day-start::before { content: attr(data-day) / ""; display: block; font-size: 0.75rem; font-weight: 700; line-height: 1.1; }
 #planner-table th[scope="row"] .holiday-name { color: var(--holiday-fg); white-space: normal; max-width: 16ch; }
 
 #planner-table thead .all-work button { background: var(--all-work); color: var(--all-work-fg); font-weight: 700; }
@@ -1736,7 +1770,7 @@ dialog { overscroll-behavior: contain; }
   min-width: 42px;
   padding: 5px 8px;
   border: 1px solid var(--input-border);
-  border-radius: 999px;
+  border-radius: 6px;
   text-align: center;
 }
 .day-toggle input:checked + span { background: var(--weekend-bg); color: var(--weekend-fg); border-color: transparent; font-weight: 700; }
@@ -1769,7 +1803,7 @@ dialog { overscroll-behavior: contain; }
 
 .fact-offset {
   font-size: clamp(2rem, 1.2rem + 3vw, 3rem);
-  font-weight: 300;
+  font-weight: 400;
   line-height: 1;
   letter-spacing: -0.03em;
   white-space: nowrap;
@@ -1787,23 +1821,11 @@ dialog { overscroll-behavior: contain; }
 
 /* ---------- About ---------- */
 
-.about {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 40px;
-}
-
-.about > div { padding-top: 20px; border-top: 1px solid var(--panel-border); }
-.about p { margin: 0; color: var(--muted); }
-.about p + p { margin-top: 12px; }
-
-.privacy { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--panel-border); }
+.privacy { padding-top: 16px; border-top: 1px solid var(--panel-border); }
 .privacy summary { font-weight: 700; cursor: pointer; }
+.privacy h3 { margin: 24px 0 0; font-size: 1rem; }
 .privacy p { margin: 12px 0 0; max-width: 75ch; color: var(--muted); }
-
-@media (max-width: 860px) {
-  .about { grid-template-columns: minmax(0, 1fr); gap: 28px; }
-}
+.privacy h3 + p { margin-top: 4px; }
 
 /* ---------- Footer ---------- */
 
@@ -1828,9 +1850,41 @@ dialog { overscroll-behavior: contain; }
   align-items: center;
   gap: 10px;
   color: var(--text);
-  font-family: "Unbounded", "Manrope", system-ui, sans-serif;
-  font-weight: 600;
+  font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+  font-weight: 700;
 }
+
+/* ---------- Touch targets ----------
+   Every control in the header and the world tab is at least 44 x 44 px
+   (antislop R-03), with 8 px between neighbours. The look stays the same
+   size where it can; the padding grows the area a finger can hit. */
+.site-nav :is(.brand, .nav-links a, .toggle),
+#dunia :is(button, .btn, input:not([type="checkbox"], [type="radio"]), select, summary, .day-toggle span) {
+  min-height: 44px;
+}
+.site-nav .brand, .nav-links a, .toggle { display: inline-flex; align-items: center; }
+/* Five 44 px controls and the name do not fit one 360 px row: while the
+   install button shows, the name is kept for screen readers only. */
+@media (max-width: 400px) {
+  .nav-inner:has(#install:not([hidden])) .brand-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+@media (max-width: 340px) {
+  .brand-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* °C/°F on its own line, so the city field is wide enough for its example. */
+  #add-form { flex-wrap: wrap; }
+  #add-form #zone-input { flex: 1 1 140px; }
+  #add-form .unit-toggle { margin-left: 0; }
+}
+.header-actions { gap: 8px; }
+.icon-btn, .header-actions .icon-btn, .globe-zoom button, .play-btn { width: 44px; height: 44px; }
+.unit-toggle button, #planner-table thead button, .day-toggle span { min-width: 44px; }
+.day-toggle span { display: inline-flex; align-items: center; justify-content: center; }
+#time-slider { height: 44px; margin-block: 0; }
+.card-head { padding-right: 44px; }
+.card .drag-handle, .card .person-edit, .card .remove { flex: none; width: 44px; height: 44px; padding: 0; }
+.card .drag-handle { margin-left: -12px; }
+.card .remove { top: 4px; right: 4px; }
+#dunia .weather-toggle { min-height: 0; } /* words inside a sentence: the inline exception */
 
 /* Keep animation events firing (card removal waits for one) but make them instant. */
 @media (prefers-reduced-motion: reduce) {
