@@ -2,7 +2,7 @@
 // redraws every second (tick). Each part of the page lives in js/.
 
 import { cityKey, createGlobe } from './globe.js';
-import { addCity, balanceColumns, clocksEl, describeCity, flashCard, renderCards, renderDstLine, renderSunLine, renderWorldPrayer } from './js/cards.js';
+import { addCity, balanceColumns, clocksEl, describeCity, flashCard, renderCards, renderDstLine, renderSunLine, renderSunStrip, renderWorldPrayer } from './js/cards.js';
 import { icon, placeIcons } from './js/icons.js';
 import { renderLocalPanel, retryButton } from './js/local-panel.js';
 import { renderFacts, renderMalaysia } from './js/malaysia.js';
@@ -15,7 +15,7 @@ import { cityForZone, loadState, makeCity, saveState } from './js/storage.js';
 import { showTab } from './js/tabs.js';
 import { applyTheme, systemDark, themeEl } from './js/theme.js';
 import { ALL_ZONES, HOUR_MS, LOCAL_ZONE, MINUTE_MS, PHASES, QUARTER_MS, cityName, cityPhase, dayPhase, displayDate, floorToQuarter, formatDiff, formatUtcOffset, isValidZone, minuteOfDay, signedDuration, utcOffsetMinutes } from './js/time.js';
-import { createLocalData, normalizeName, renderKeyed } from './js/util.js';
+import { createLocalData, el, normalizeName, renderKeyed } from './js/util.js';
 import { currentWeather, renderHourly, renderWeatherLine, setupWeather } from './js/weather.js';
 import { setupMonth, setupZone } from './js/zones.js';
 
@@ -67,6 +67,57 @@ function renderHero(state, now) {
   });
 }
 
+// The globe's map libraries (d3, topojson and the land outline) are fetched
+// once its section nears the screen, or when a card asks it to turn, not on
+// first load (DESIGN.md). In order: d3-geo needs d3-array. Resolves to the
+// globe, or to null after saying on the page that it failed (asked again, it retries).
+const GLOBE_SCRIPTS = ['vendor/d3-array.min.js', 'vendor/d3-geo.min.js', 'vendor/topojson-client.min.js', 'vendor/land-110m.js'];
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = () => {
+      script.remove(); // so a retry fetches it again
+      reject(new Error(`${src} gagal dimuat`));
+    };
+    document.head.append(script);
+  });
+}
+
+function whenGlobe(state) {
+  const status = document.getElementById('globe-status');
+  state.globeReady ??= (async () => {
+    status.textContent = 'Memuatkan glob…';
+    for (const src of GLOBE_SCRIPTS) {
+      if (!document.querySelector(`script[src="${src}"]`)) await loadScript(src);
+    }
+    status.textContent = '';
+    return createGlobe(document.getElementById('globe'), {
+      onCityClick(city) {
+        const listed = makeCity(city.name, city.zone, city.lat, city.lon);
+        addCity(state, listed);
+        flashCard(listed);
+      },
+      getSelectedCities: () => state.cities,
+      isHour24: () => state.hour24,
+      getNow: () => displayDate(state),
+      describeCity: (city, now) => describeCity(state, city, now),
+      offsetBetween(from, to, now) {
+        const diff = utcOffsetMinutes(to, now) - utcOffsetMinutes(from, now);
+        return diff === 0 ? 'Sama' : signedDuration(diff);
+      },
+    });
+  })().catch((err) => {
+    console.warn('Jam Dunia: glob gagal dimuat.', err);
+    status.textContent = 'Glob gagal dimuat. Klik kad bandar atau butang zum untuk cuba lagi.';
+    state.globeReady = null;
+    return null;
+  });
+  return state.globeReady;
+}
+
 function tick(state) {
   const now = displayDate(state);
   renderHero(state, now);
@@ -83,6 +134,8 @@ function tick(state) {
     const phase = city ? cityPhase(city, now.getTime()) : dayPhase(minutes);
     card.dataset.phase = phase;
     renderKeyed(card.querySelector('.phase'), phase, () => [icon(PHASES[phase].icon)]);
+    card.querySelector('.phase-name').textContent = PHASES[phase].name; // the phase in words, not colour alone
+    if (city) renderSunStrip(card, city, now);
     card.querySelector('.utc').textContent = formatUtcOffset(offset);
     card.querySelector('.time').textContent = now.toLocaleTimeString('ms-MY', {
       timeZone: zone,
@@ -95,7 +148,8 @@ function tick(state) {
     card.querySelector('.diff').textContent = formatDiff(offset - localOffset);
     if (city) renderSunLine(state, card.querySelector('.sun'), city, now);
     if (city) renderDstLine(state, card.querySelector('.dst'), city, now);
-    renderWeatherLine(state, card.querySelector('.weather'), city && weatherFor(city));
+    const hasPlace = Boolean(city && city.lat !== null && city.lon !== null);
+    renderWeatherLine(state, card.querySelector('.weather'), city && weatherFor(city), hasPlace ? weatherFor.status : 'none');
     if (city) renderHourly(state, card, city);
     card.querySelector('.hand.hour').setAttribute('transform', `rotate(${(minutes % 720) / 2} 50 50)`);
     card.querySelector('.hand.minute').setAttribute('transform', `rotate(${(minutes % 60) * 6 + seconds / 10} 50 50)`);
@@ -111,8 +165,17 @@ function tick(state) {
   if (state.tab === 'dunia' && state.countdownWanted) {
     const key = 'modul-kiraan';
     const countdowns = state.localData.get(key, () => import('./js/countdown.js'));
+    // The form is in the page already; only the list's one line says how loading went.
+    const list = document.querySelector('#countdowns .countdown-list');
     if (countdowns.status === 'ok') countdowns.data.renderCountdowns(state);
-    else if (countdowns.status === 'error') renderKeyed(document.getElementById('countdowns'), 'error', () => [retryButton(state, key)]);
+    else if (countdowns.status === 'error') {
+      renderKeyed(list, 'error', () => {
+        const item = el('li', 'empty', 'Kiraan detik gagal dimuat. ');
+        item.append(retryButton(state, key));
+        return [item];
+      });
+    }
+    else renderKeyed(list, 'loading', () => [el('li', 'empty', 'Memuatkan kiraan detik…')]);
   }
   if (state.tab === 'malaysia') renderMalaysia(state, now);
   if (state.tab === 'bandar-malaysia') {
@@ -148,6 +211,8 @@ function setViewTime(state, ms) {
     timeSliderEl.classList.remove('beyond');
     timeLabelEl.textContent = 'Sekarang';
   }
+  // Screen readers read the slider's value as this sentence, not its step number.
+  timeSliderEl.setAttribute('aria-valuetext', timeLabelEl.textContent);
   tick(state);
 }
 
@@ -224,23 +289,15 @@ function init() {
   document.getElementById('city-dialog').addEventListener('close', () => { state.dialogState = null; });
   shareBannerEl.hidden = !state.shared;
 
-  const globe = createGlobe(document.getElementById('globe'), {
-    onCityClick(city) {
-      const listed = makeCity(city.name, city.zone, city.lat, city.lon);
-      addCity(state, listed);
-      flashCard(listed);
-    },
-    getSelectedCities: () => state.cities,
-    isHour24: () => state.hour24,
-    getNow: () => displayDate(state),
-    describeCity: (city, now) => describeCity(state, city, now),
-    offsetBetween(from, to, now) {
-      const diff = utcOffsetMinutes(to, now) - utcOffsetMinutes(from, now);
-      return diff === 0 ? 'Sama' : signedDuration(diff);
-    },
-  });
-  zoomInEl.addEventListener('click', () => globe.zoomBy(1.4));
-  zoomOutEl.addEventListener('click', () => globe.zoomBy(1 / 1.4));
+  state.globeReady = null; // the globe, once its libraries have loaded (whenGlobe)
+  const globeSeen = new IntersectionObserver((entries) => {
+    if (!entries.some((e) => e.isIntersecting)) return;
+    globeSeen.disconnect();
+    whenGlobe(state);
+  }, { rootMargin: '600px' });
+  globeSeen.observe(document.getElementById('glob'));
+  zoomInEl.addEventListener('click', () => whenGlobe(state).then((globe) => globe?.zoomBy(1.4)));
+  zoomOutEl.addEventListener('click', () => whenGlobe(state).then((globe) => globe?.zoomBy(1 / 1.4)));
 
   applyTheme(state);
   systemDark.addEventListener('change', () => applyTheme(state));
@@ -276,12 +333,18 @@ function init() {
   const PLAY_MIN_PER_SEC = 72; // a full day in 20 seconds
   let playFrame = null;
   let playLast = 0;
+  // A toggle with one name: screen readers announce "pressed" or "not pressed"
+  // as it changes, and the time label stops speaking every frame while it plays.
+  const timeLabelEl = document.getElementById('time-label');
+  function showPlaying(playing) {
+    playEl.textContent = playing ? '⏸' : '▶';
+    playEl.setAttribute('aria-pressed', String(playing));
+    timeLabelEl.setAttribute('aria-live', playing ? 'off' : 'polite');
+  }
   function stopPlay() {
     if (playFrame !== null) cancelAnimationFrame(playFrame);
     playFrame = null;
-    playEl.textContent = '▶';
-    playEl.setAttribute('aria-label', 'Main 24 jam');
-    playEl.classList.remove('playing');
+    showPlaying(false);
   }
   function playStep(t) {
     const elapsed = t - playLast;
@@ -297,9 +360,7 @@ function init() {
       stopPlay();
       return;
     }
-    playEl.textContent = '⏸';
-    playEl.setAttribute('aria-label', 'Jeda');
-    playEl.classList.add('playing');
+    showPlaying(true);
     playLast = performance.now();
     playFrame = requestAnimationFrame(playStep);
   });
@@ -365,7 +426,7 @@ function init() {
     const card = e.target.closest('.card');
     if (!card || e.target.closest('.remove, .drag-handle, .person-edit, .local-toggle, .local-panel, .weather-toggle, .hourly')) return;
     const city = state.cities.find((c) => cityKey(c) === card.dataset.key);
-    if (city) globe.focusCity(city);
+    if (city) whenGlobe(state).then((globe) => globe?.focusCity(city));
   });
 
   function showCityListError(err) {

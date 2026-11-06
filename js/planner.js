@@ -6,7 +6,7 @@ import { holidaysFor, holidaysLoaded } from './holidays.js';
 import { icon } from './icons.js';
 import { copyShareLink } from './share.js';
 import { saveState } from './storage.js';
-import { HOUR_MS, LOCAL_ZONE, MINUTE_MS, cityDate, formatClock, formatUtcOffset, hourLabel, minuteOfDay, minuteText, utcOffsetMinutes, weekdayOf } from './time.js';
+import { HOUR_MS, LOCAL_ZONE, MINUTE_MS, cityDate, cityPhase, formatClock, formatUtcOffset, hourLabel, minuteOfDay, minuteText, utcOffsetMinutes, weekdayOf } from './time.js';
 import { el, renderKeyed } from './util.js';
 
 export const plannerSummaryEl = document.getElementById('planner-summary');
@@ -33,6 +33,7 @@ function dayName(ms) {
 }
 
 export const WEEKDAYS = [[1, 'Isnin', 'Isn'], [2, 'Selasa', 'Sel'], [3, 'Rabu', 'Rab'], [4, 'Khamis', 'Kha'], [5, 'Jumaat', 'Jum'], [6, 'Sabtu', 'Sab'], [0, 'Ahad', 'Ahd']];
+const CATEGORY_WORDS = { work: 'waktu kerja', off: 'luar waktu kerja', sleep: 'waktu tidur', weekend: 'hujung minggu', holiday: 'cuti umum' };
 export const SLEEP_START_MIN = 22 * 60;
 export const SLEEP_END_MIN = 7 * 60;
 
@@ -124,7 +125,11 @@ export function renderPlanner(state, now) {
     row.append(th);
     slots.forEach((ms, i) => {
       const td = row.insertCell();
-      td.className = [categories[r][i], i === currentSlot && 'current', picked(ms) && 'picked'].filter(Boolean).join(' ');
+      // Where the city's own date changes (and where its row starts on another
+      // day than yours), the cell carries that day's name, seen and read.
+      const date = cityDate(zone, new Date(ms)).iso;
+      const newDay = date !== (i === 0 ? day : cityDate(zone, new Date(slots[i - 1])).iso);
+      td.className = [categories[r][i], `sun-${cityPhase(city, ms + HOUR_MS / 2)}`, newDay && 'day-start', i === currentSlot && 'current', picked(ms) && 'picked'].filter(Boolean).join(' ');
       td.dataset.slot = ms;
       td.textContent = hourLabel(minuteOfDay(zone, ms), state.hour24);
       const prayer = prayers[r][i];
@@ -132,6 +137,13 @@ export function renderPlanner(state, now) {
         td.classList.add('prayer');
         td.title = prayer.join(', ');
         td.append(el('span', 'visually-hidden', `, ${prayer.join(', ')}`));
+      }
+      // What the colour says, for screen readers (antislop R-39: not colour alone).
+      td.append(el('span', 'visually-hidden', `, ${CATEGORY_WORDS[categories[r][i]]}`));
+      if (newDay) {
+        const [, long, short] = WEEKDAYS.find(([n]) => n === weekdayOf(zone, ms));
+        td.dataset.day = short;
+        td.append(el('span', 'visually-hidden', `, ${long}`));
       }
     });
   });

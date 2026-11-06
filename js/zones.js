@@ -124,7 +124,7 @@ export function renderZone(state, now) {
     const list = el('ul', 'zone-times');
     for (const [field, label] of PRAYER_TIMES) {
       const item = el('li', field === next ? 'next' : '');
-      item.append(el('span', '', label), el('strong', '', today[field] ? formatClock(state, 'Asia/Kuala_Lumpur', today[field] * 1000) : '—'));
+      item.append(el('span', '', label), el('strong', '', today[field] ? formatClock(state, 'Asia/Kuala_Lumpur', today[field] * 1000) : 'tiada'));
       if (field === next) item.append(el('span', 'visually-hidden', ' (seterusnya)'));
       list.append(item);
     }
@@ -202,8 +202,8 @@ function renderMonth(state) {
       const date = el('th', '', new Date(year, month - 1, p.day).toLocaleDateString('ms-MY', { weekday: 'short', day: 'numeric' }));
       date.scope = 'row';
       const hijri = hijriParts(p);
-      row.append(date, el('td', '', hijri.day ? `${hijri.day} ${HIJRI_MONTHS[hijri.month - 1]}` : '—'));
-      for (const [field] of columns) row.append(el('td', '', p[field] ? formatClock(state, 'Asia/Kuala_Lumpur', p[field] * 1000) : '—'));
+      row.append(date, el('td', '', hijri.day ? `${hijri.day} ${HIJRI_MONTHS[hijri.month - 1]}` : 'tiada'));
+      for (const [field] of columns) row.append(el('td', '', p[field] ? formatClock(state, 'Asia/Kuala_Lumpur', p[field] * 1000) : 'tiada'));
     }
     return [head, body];
   });

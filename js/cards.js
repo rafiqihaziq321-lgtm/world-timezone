@@ -4,7 +4,7 @@ import { cityKey } from '../globe.js';
 import { icon } from './icons.js';
 import { isMalaysian, retryButton } from './local-panel.js';
 import { saveState } from './storage.js';
-import { HOUR_MS, LOCAL_ZONE, MINUTE_MS, PHASES, cityDate, cityPhase, formatClock, formatUtcOffset, minuteText, nextOffsetChange, signedDuration, sunTimes, utcOffsetMinutes } from './time.js';
+import { HOUR_MS, LOCAL_ZONE, MINUTE_MS, PHASES, cityDate, cityPhase, formatClock, formatUtcOffset, minuteText, nextOffsetChange, signedDuration, sunTimes, utcOffsetMinutes, zonedTime } from './time.js';
 import { el, renderKeyed } from './util.js';
 
 export const clocksEl = document.getElementById('clocks');
@@ -39,6 +39,40 @@ export function renderDstLine(state, node, city, now) {
   });
 }
 
+// A city's calendar day, midnight to midnight, as runs of one part of the day
+// (night, dawn, day, dusk), sampled every 5 minutes by the rule that names the
+// card's phase. Polar days and nights come out as one run. Times are epoch ms.
+export function daySegments(city, ms) {
+  const { year, month, day } = cityDate(city.zone, new Date(ms));
+  const start = zonedTime(city.zone, year, month, day, 0, 0);
+  const end = zonedTime(city.zone, year, month, day + 1, 0, 0);
+  const runs = [];
+  for (let t = start; t < end; t += 5 * MINUTE_MS) {
+    const phase = cityPhase(city, t + 2.5 * MINUTE_MS);
+    const to = Math.min(t + 5 * MINUTE_MS, end);
+    if (runs.at(-1)?.phase === phase) runs.at(-1).to = to;
+    else runs.push({ phase, from: t, to });
+  }
+  return { start, end, runs };
+}
+
+// The sun strip under a card's clock (DESIGN.md): drawn once a day, with a mark
+// at the time shown that moves every tick. Its words are the phase name beside it.
+export function renderSunStrip(card, city, now) {
+  const strip = card.querySelector('.sun-strip');
+  renderKeyed(strip.firstElementChild, `${cityDate(city.zone, now).iso}|${city.lat}|${city.lon}`, () => {
+    const { start, end, runs } = daySegments(city, now.getTime());
+    Object.assign(strip.dataset, { start, end });
+    return runs.map(({ phase, from, to }) => {
+      const run = el('span', phase);
+      run.style.width = `${((to - from) / (end - start)) * 100}%`;
+      return run;
+    });
+  });
+  const { start, end } = strip.dataset;
+  strip.lastElementChild.style.left = `${((now.getTime() - start) / (end - start)) * 100}%`;
+}
+
 export const ANALOG_TICKS = Array.from({ length: 12 }, (_, i) => {
   const major = i % 3 === 0;
   return `<line class="tick" x1="50" y1="${major ? 8 : 10}" x2="50" y2="${major ? 16 : 14}" transform="rotate(${i * 30} 50 50)"/>`;
@@ -53,7 +87,7 @@ export function createCard(state, city) {
     <div class="card-head">
       <button class="drag-handle" type="button"></button>
       <span class="phase" aria-hidden="true"></span>
-      <span class="city"></span>
+      <h3 class="city"></h3>
       <span class="utc"></span>
       <button class="person-edit" type="button"></button>
     </div>
@@ -76,9 +110,14 @@ export function createCard(state, city) {
         <circle class="pin" cx="50" cy="50" r="3"/>
       </svg>
     </div>
+    <div class="day-line">
+      <span class="phase-name"></span>
+      <div class="sun-strip" aria-hidden="true"><div class="sun-runs"></div><span class="sun-now"></span></div>
+    </div>
     <div class="hourly" hidden></div>
     <button class="remove" type="button"></button>`;
   card.querySelector('.city').textContent = city.name;
+  card.setAttribute('aria-label', city.name);
   // Whose city this is and their working day, set in a dialog loaded on first
   // use. The card is kept when the list changes, so the city is looked up anew.
   const edit = card.querySelector('.person-edit');
@@ -102,9 +141,6 @@ export function createCard(state, city) {
       state.refresh();
       offerUndo(state, city, index);
     }, { once: true });
-  });
-  card.addEventListener('animationend', (e) => {
-    if (e.animationName === 'card-in') card.classList.remove('enter');
   });
   // Malaysian cities: JAKIM prayer times and MET weather. Elsewhere, prayer
   // times worked out in the browser, for any city whose position is known.
@@ -240,14 +276,8 @@ export function renderCards(state) {
     clocksEl.append(p);
     return;
   }
-  let entering = 0;
   for (const city of state.cities) {
-    let card = existing.get(cityKey(city));
-    if (!card) {
-      card = createCard(state, city);
-      card.classList.add('enter');
-      card.style.setProperty('--i', entering++);
-    }
+    const card = existing.get(cityKey(city)) ?? createCard(state, city);
     showPerson(card, city);
     clocksEl.append(card);
   }
@@ -312,7 +342,6 @@ export function addCity(state, city) {
 export function flashCard(city) {
   const card = clocksEl.querySelector(`.card[data-key="${CSS.escape(cityKey(city))}"]`);
   card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  if (card.classList.contains('enter')) return; // its entrance animation is feedback enough
   card.classList.remove('flash');
   void card.offsetWidth; // restart the animation if it is already running
   card.classList.add('flash');

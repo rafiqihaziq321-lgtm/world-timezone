@@ -2,7 +2,7 @@
 // Strategy is stale-while-revalidate: answer from the cache at once, then
 // refresh that cache from the network so the next visit gets updates.
 // Bump CACHE when the precache list changes so old caches are cleared.
-const CACHE = 'jam-dunia-v13';
+const CACHE = 'jam-dunia-v14';
 
 // The app shell. vendor/cities.js (~400 KB) is not precached: it is cached the
 // first time someone searches, keeping the first visit light.
@@ -57,8 +57,8 @@ const PRECACHE = [
   'vendor/d3-geo.min.js',
   'vendor/topojson-client.min.js',
   'vendor/land-110m.js',
-  'vendor/fonts/unbounded-latin-wght-normal.woff2',
-  'vendor/fonts/manrope-latin-wght-normal.woff2',
+  'vendor/fonts/plus-jakarta-sans-latin-400-normal.woff2',
+  'vendor/fonts/plus-jakarta-sans-latin-700-normal.woff2',
 ];
 
 self.addEventListener('install', (event) => {

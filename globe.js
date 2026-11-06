@@ -82,11 +82,7 @@ export function createGlobe(canvas, options) {
   const projection = d3.geoOrthographic().clipAngle(90).precision(0.5);
   const path = d3.geoPath(projection, ctx);
   const nightCircle = d3.geoCircle().precision(2);
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const AUTO_ROTATE_DEG_PER_MS = 0.006;
-  const IDLE_BEFORE_AUTO_ROTATE_MS = 3000;
   const FOCUS_DURATION_MS = 800;
-  const INTRO_DURATION_MS = 1100;
   const MIN_ZOOM = 1;
   const MAX_ZOOM = 4;
   const RADIUS_RATIO = 0.88; // leave room around the sphere for the atmosphere glow
@@ -103,9 +99,7 @@ export function createGlobe(canvas, options) {
   let drag = null;
   let pinch = null;
   let focusAnim = null;
-  let autoRotateAfter = 0;
   let lastFrame = performance.now();
-  const introStart = performance.now();
   let hitTargets = [];
   let tipCity = null;
   let tipKey = '';
@@ -142,10 +136,6 @@ export function createGlobe(canvas, options) {
     return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
   }
 
-  function easeOutCubic(k) {
-    return 1 - Math.pow(1 - k, 3);
-  }
-
   function easeInOut(k) {
     return k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
   }
@@ -159,15 +149,14 @@ export function createGlobe(canvas, options) {
     return { x: x - w / 2, y: y - 9, w, h: 18 };
   }
 
-  function draw(now, t) {
-    const intro = reduceMotion ? 1 : easeOutCubic(Math.min(1, (t - introStart) / INTRO_DURATION_MS));
-    const radius = (size / 2) * RADIUS_RATIO * zoom * (0.7 + 0.3 * intro);
+  // Nothing moves on its own (DESIGN.md, MOTION 1): no intro, marching dashes or pulsing rings.
+  function draw(now) {
+    const radius = (size / 2) * RADIUS_RATIO * zoom;
     projection.rotate(rotation).scale(radius);
     const cx = size / 2;
     const cy = size / 2;
 
     ctx.clearRect(0, 0, size, size);
-    ctx.globalAlpha = intro;
 
     // Atmosphere glow just outside the sphere.
     const glow = ctx.createRadialGradient(cx, cy, radius * 0.98, cx, cy, radius * 1.12);
@@ -203,14 +192,13 @@ export function createGlobe(canvas, options) {
     const placedLabels = [];
 
     // Arcs from the first listed city to each other listed city, with the
-    // time difference at the midpoint. Dashes march unless motion is reduced.
+    // time difference at the midpoint.
     const selectedCities = getSelectedCities().filter((c) => c.lat !== null && c.lon !== null);
     const selectedKeys = new Set(selectedCities.map(cityKey));
     const [home, ...others] = selectedCities;
     if (home) {
       ctx.save();
       ctx.setLineDash([6, 6]);
-      ctx.lineDashOffset = reduceMotion ? 0 : -((t / 40) % 12);
       ctx.strokeStyle = GLOBE_COLORS.arc;
       ctx.lineWidth = 1.6;
       for (const other of others) {
@@ -239,17 +227,10 @@ export function createGlobe(canvas, options) {
       .filter(({ x, y }) => onScreen([x, y]));
     hitTargets = visible;
 
-    const pulse = reduceMotion ? 0 : (t % 1600) / 1600;
     for (const { city, x, y } of visible) {
       const selected = selectedKeys.has(cityKey(city));
       const isDay = d3.geoDistance([city.lon, city.lat], sun) < Math.PI / 2;
       const color = isDay ? GLOBE_COLORS.cityDay : GLOBE_COLORS.cityNight;
-      if (selected && pulse) {
-        ctx.beginPath();
-        ctx.arc(x, y, 4.5 + 8 * pulse, 0, 2 * Math.PI);
-        ctx.strokeStyle = color; ctx.globalAlpha = intro * (1 - pulse); ctx.lineWidth = 1.5; ctx.stroke();
-        ctx.globalAlpha = intro;
-      }
       ctx.beginPath();
       ctx.arc(x, y, selected ? 4.5 : 3, 0, 2 * Math.PI);
       ctx.fillStyle = color;
@@ -278,7 +259,6 @@ export function createGlobe(canvas, options) {
       ctx.strokeStyle = GLOBE_COLORS.labelHalo; ctx.lineWidth = 3; ctx.strokeText(text, lx, ly);
       ctx.fillStyle = GLOBE_COLORS.label; ctx.fillText(text, lx, ly);
     }
-    ctx.globalAlpha = 1;
 
     updateTip(now, visible);
   }
@@ -334,10 +314,8 @@ export function createGlobe(canvas, options) {
       const [lon, lat] = focusAnim.interpolate(easeInOut(k));
       rotation = [-lon, -lat];
       if (k === 1) focusAnim = null;
-    } else if (!drag && !pinch && !tipCity && !reduceMotion && t > autoRotateAfter) {
-      rotation = [rotation[0] + (dt * AUTO_ROTATE_DEG_PER_MS) / zoom, rotation[1]];
-    }
-    draw(getNow(), t);
+    } // no turning on its own (DESIGN.md, MOTION 1): only a drag, pinch or chosen city moves it
+    draw(getNow());
     if (onScreen) requestFrame();
   }
 
@@ -357,10 +335,6 @@ export function createGlobe(canvas, options) {
   function pointerDistance() {
     const [a, b] = [...pointers.values()];
     return Math.hypot(a.x - b.x, a.y - b.y);
-  }
-
-  function pauseAutoRotate() {
-    autoRotateAfter = performance.now() + IDLE_BEFORE_AUTO_ROTATE_MS;
   }
 
   canvas.addEventListener('pointerdown', (e) => {
@@ -412,7 +386,6 @@ export function createGlobe(canvas, options) {
     pointers.delete(e.pointerId);
     if (pointers.size < 2) pinch = null;
     drag = null;
-    pauseAutoRotate();
     canvas.style.cursor = cityAt(e) ? 'pointer' : 'grab';
   }
 
@@ -425,7 +398,6 @@ export function createGlobe(canvas, options) {
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     targetZoom = clampZoom(targetZoom * Math.exp(-e.deltaY * 0.0015));
-    pauseAutoRotate();
   }, { passive: false });
 
   new ResizeObserver(resize).observe(canvas);
@@ -437,16 +409,21 @@ export function createGlobe(canvas, options) {
   requestFrame();
 
   return {
-    // Smoothly rotates the globe to centre on `city`, if its position is known.
+    // Smoothly rotates the globe to centre on `city`, if its position is known;
+    // with reduced motion asked for, it jumps there at once.
     focusCity(city) {
       if (city.lat === null || city.lon === null) return;
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        focusAnim = null;
+        rotation = [-city.lon, -city.lat];
+        requestFrame();
+        return;
+      }
       const start = performance.now();
       focusAnim = { start, interpolate: d3.geoInterpolate([-rotation[0], -rotation[1]], [city.lon, city.lat]) };
-      autoRotateAfter = start + FOCUS_DURATION_MS + IDLE_BEFORE_AUTO_ROTATE_MS;
     },
     zoomBy(factor) {
       targetZoom = clampZoom(targetZoom * factor);
-      pauseAutoRotate();
     },
   };
 }
