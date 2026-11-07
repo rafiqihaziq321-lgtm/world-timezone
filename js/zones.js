@@ -44,7 +44,7 @@ export const HIJRI_MONTHS = ['Muharam', 'Safar', 'Rabiulawal', 'Rabiulakhir', 'J
   'Rejab', 'Syaaban', 'Ramadan', 'Syawal', 'Zulkaedah', 'Zulhijah'];
 
 // The states MET names for a zone (the Federal Territories one by one).
-function zoneStates(zone) {
+export function zoneStates(zone) {
   if (zone.code === 'WLY01') return ['W.P. Kuala Lumpur', 'W.P. Putrajaya'];
   if (zone.code === 'WLY02') return ['W.P. Labuan'];
   return [zone.negeri];

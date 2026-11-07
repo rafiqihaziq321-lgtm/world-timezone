@@ -5,8 +5,9 @@ import { PRAYER_TIMES, WEATHER_API, hijriParts, nextPrayer, prayerFor, retryButt
 import { makeCity } from './storage.js';
 import { MINUTE_MS, addDaysIso, cityDate, formatClock, parseMyt } from './time.js';
 import { el, formatTempRange, normalizeName, renderKeyed } from './util.js';
-import { activeWarnings, levelTag, warningSummary } from './warnings.js';
-import { renderZone } from './zones.js';
+import { JAKIM_ZONES, zoneByCode } from './jakim-zones.js';
+import { activeWarnings, levelTag, warningPlaces, warningSummary } from './warnings.js';
+import { renderZone, zoneStates } from './zones.js';
 import { MALAYSIA_STATES, MALAYSIA_TOTAL } from '../malaysia-data.js';
 
 export const QUAKE_API = 'https://api.data.gov.my/weather/warning/earthquake';
@@ -67,6 +68,58 @@ function allClear(text) {
   return chip;
 }
 
+// ---------- "Semak kawasan anda": find a place in the weather warnings ----------
+
+const searchKey = (text) => normalizeName(text).replace(/&/g, 'dan').replace(/\s+/g, ' ');
+// The states a typed place lies in, from JAKIM's zone list of districts
+// ("Kota Bharu" -> Kelantan), so a warning for a whole state still counts.
+function statesFor(query) {
+  const states = new Set();
+  for (const zone of JAKIM_ZONES) {
+    if (searchKey(`${zone.negeri}, ${zone.daerah}`).includes(query)) for (const s of zoneStates(zone)) states.add(s);
+  }
+  return states;
+}
+
+// Marks the places that match what was typed, folds the warnings that do not
+// name it, and says so. A warning that names the place's state but not the
+// place stays open: MET's district may not be the word the reader typed.
+function applyAlertSearch() {
+  const input = document.getElementById('alert-search');
+  const statusEl = document.getElementById('alert-search-status');
+  const typed = input.value.trim();
+  const query = searchKey(typed);
+  const on = query.length >= 2;
+  const inStates = on ? statesFor(query) : new Set();
+  let named = 0;
+  let stateOnly = 0;
+  for (const card of document.querySelectorAll('#my-warnings .alert')) {
+    let hit = false;
+    let near = false;
+    for (const area of card.querySelectorAll('.alert-area')) {
+      const stateHit = on && searchKey(area.dataset.state).includes(query);
+      area.classList.toggle('is-match', stateHit);
+      hit ||= stateHit;
+      for (const chip of area.querySelectorAll('.place-chips li')) {
+        const match = on && (chip.dataset.names.includes(query) || (chip.classList.contains('whole') && inStates.has(area.dataset.state)));
+        chip.classList.toggle('is-match', match);
+        hit ||= match;
+      }
+      near ||= inStates.has(area.dataset.state);
+    }
+    if (on && !card.querySelector('.alert-area') && card.dataset.text.includes(query)) hit = true;
+    card.classList.toggle('is-folded', on && !hit && !near);
+    if (hit) named += 1;
+    else if (on && near) stateOnly += 1;
+  }
+  let text = '';
+  if (on && named) text = `"${typed}" disebut dalam ${named} amaran.`;
+  else if (on && stateOnly) text = `"${typed}" tidak disebut, tetapi negerinya ada dalam ${stateOnly} amaran. Semak senarai daerah di bawah.`;
+  else if (on) text = `Tiada amaran aktif yang menyebut "${typed}" atau negerinya.`;
+  if (statusEl.textContent !== text) statusEl.textContent = text;
+}
+document.getElementById('alert-search').addEventListener('input', applyAlertSearch);
+
 export function renderMalaysia(state, now) {
   const minute = Math.floor(now.getTime() / MINUTE_MS);
   document.getElementById('my-today').textContent = `${now.toLocaleDateString('ms-MY', {
@@ -76,22 +129,51 @@ export function renderMalaysia(state, now) {
   // Warnings still in force.
   const { key: warnKey, entry: warnings, active } = activeWarnings(state, now);
   // Keyed on what is shown, not the minute, so an opened "Baca penuh" stays open.
-  const warnRenderKey = [warnings.status, state.hour24, ...active.map((w) => `${w.warning_issue?.issued}|${w.valid_to}|${w.text_bm}`)].join('|');
-  renderKeyed(document.getElementById('my-warnings'), warnRenderKey, () => {
+  const warnRenderKey = [warnings.status, state.hour24, state.prayerZone, ...active.map((w) => `${w.warning_issue?.issued}|${w.valid_to}|${w.text_bm}`)].join('|');
+  const myStates = zoneByCode(state.prayerZone) ? zoneStates(zoneByCode(state.prayerZone)) : [];
+  const warningsEl = document.getElementById('my-warnings');
+  renderKeyed(warningsEl, warnRenderKey, () => {
     const heading = el('h3', '', 'Amaran cuaca');
     if (warnings.status !== 'ok') return [heading, statusLine(state, warnings, warnKey, 'Amaran cuaca')];
     if (!active.length) return [heading, allClear('Tiada amaran cuaca aktif')];
     return [heading, ...active.map((w) => {
       const item = el('article', 'alert');
       const text = w.text_bm || '';
-      const summary = warningSummary(text);
+      item.dataset.text = searchKey(text);
       const tag = levelTag(w);
       if (tag) item.append(tag);
-      item.append(el('h4', '', w.warning_issue?.title_bm || w.heading_bm || 'Amaran'), el('p', '', summary));
-      if (summary !== text) {
-        const more = el('details', 'alert-more');
-        more.append(el('summary', '', 'Baca penuh'), el('p', '', text));
-        item.append(more);
+      item.append(el('h4', '', w.warning_issue?.title_bm || w.heading_bm || 'Amaran'));
+      const sections = warningPlaces(text);
+      if (sections) {
+        // The places by state, so a reader finds theirs without reading the paragraph.
+        for (const { period, areas } of sections) {
+          if (period) item.append(el('p', 'alert-period', period));
+          for (const { state: name, places } of areas) {
+            const area = el('div', 'alert-area');
+            area.dataset.state = name;
+            const title = el('h5', '', name.replace(/^W\.P\. /, ''));
+            if (myStates.includes(name)) title.append(' ', el('span', 'your-state', 'negeri zon anda'));
+            const chips = el('ul', 'place-chips');
+            for (const p of places.length ? places : [{ name: 'Seluruh negeri', within: [], whole: true }]) {
+              const chip = el('li', p.whole ? 'whole' : '', p.within.length ? `${p.name}: ${p.within.join(', ')}` : p.name);
+              chip.dataset.names = searchKey([p.whole ? name : p.name, ...p.within].join('|'));
+              chips.append(chip);
+            }
+            area.append(title, chips);
+            item.append(area);
+          }
+        }
+        const full = el('details', 'alert-more');
+        full.append(el('summary', '', 'Teks penuh MET'), el('p', '', text));
+        item.append(full);
+      } else {
+        const summary = warningSummary(text);
+        item.append(el('p', '', summary));
+        if (summary !== text) {
+          const more = el('details', 'alert-more');
+          more.append(el('summary', '', 'Baca penuh'), el('p', '', text));
+          item.append(more);
+        }
       }
       const until = parseMyt(w.valid_to);
       if (Number.isFinite(until)) {
@@ -103,6 +185,7 @@ export function renderMalaysia(state, now) {
       return item;
     })];
   });
+  applyAlertSearch();
 
   // The latest earthquakes MET reports.
   const quakeKey = 'gempa';
