@@ -6,7 +6,7 @@ import { makeCity } from './storage.js';
 import { MINUTE_MS, addDaysIso, cityDate, formatClock, parseMyt } from './time.js';
 import { el, formatTempRange, normalizeName, renderKeyed } from './util.js';
 import { JAKIM_ZONES, zoneByCode } from './jakim-zones.js';
-import { activeWarnings, levelTag, warningPlaces, warningSummary } from './warnings.js';
+import { activeWarnings, levelTag, seaWarningParts, warningPlaces, warningSummary } from './warnings.js';
 import { renderZone, zoneStates } from './zones.js';
 import { MALAYSIA_STATES, MALAYSIA_TOTAL } from '../malaysia-data.js';
 
@@ -101,7 +101,8 @@ function applyAlertSearch() {
       area.classList.toggle('is-match', stateHit);
       hit ||= stateHit;
       for (const chip of area.querySelectorAll('.place-chips li')) {
-        const match = on && (chip.dataset.names.includes(query) || (chip.classList.contains('whole') && inStates.has(area.dataset.state)));
+        // A whole-state chip names its state; it counts for any place in that state.
+        const match = on && (chip.dataset.names.includes(query) || (chip.classList.contains('whole') && inStates.has(chip.dataset.state)));
         chip.classList.toggle('is-match', match);
         hit ||= match;
       }
@@ -146,23 +147,63 @@ export function renderMalaysia(state, now) {
       const sections = warningPlaces(text);
       if (sections) {
         // The places by state, so a reader finds theirs without reading the paragraph.
+        const short = (name) => name.replace(/^W\.P\. /, '');
         for (const { period, areas } of sections) {
           if (period) item.append(el('p', 'alert-period', period));
-          for (const { state: name, places } of areas) {
+          // States named with their districts, one block each.
+          for (const { state: name, places } of areas.filter((a) => a.places.length)) {
             const area = el('div', 'alert-area');
             area.dataset.state = name;
-            const title = el('h5', '', name.replace(/^W\.P\. /, ''));
+            const title = el('h5', '', short(name));
             if (myStates.includes(name)) title.append(' ', el('span', 'your-state', 'negeri zon anda'));
             const chips = el('ul', 'place-chips');
-            for (const p of places.length ? places : [{ name: 'Seluruh negeri', within: [], whole: true }]) {
-              const chip = el('li', p.whole ? 'whole' : '', p.within.length ? `${p.name}: ${p.within.join(', ')}` : p.name);
-              chip.dataset.names = searchKey([p.whole ? name : p.name, ...p.within].join('|'));
+            for (const p of places) {
+              const chip = el('li', '', p.within.length ? `${p.name}: ${p.within.join(', ')}` : p.name);
+              chip.dataset.names = searchKey([p.name, ...p.within].join('|'));
               chips.append(chip);
             }
             area.append(title, chips);
             item.append(area);
           }
+          // States named without districts share one line: the whole state is covered.
+          const whole = areas.filter((a) => !a.places.length);
+          if (whole.length) {
+            const area = el('div', 'alert-area');
+            area.dataset.state = '';
+            const chips = el('ul', 'place-chips');
+            for (const { state: name } of whole) {
+              const chip = el('li', 'whole', short(name));
+              if (myStates.includes(name)) chip.append(el('span', 'your-state', ' · zon anda'));
+              chip.dataset.state = name;
+              chip.dataset.names = searchKey(name);
+              chips.append(chip);
+            }
+            area.append(el('h5', '', 'Seluruh negeri'), chips);
+            item.append(area);
+          }
         }
+      }
+      const sea = sections ? null : seaWarningParts(text);
+      if (sea) {
+        // At sea: each kind of warning with when, the sea areas, and what it means for boats.
+        for (const { heading, items } of sea) {
+          item.append(el('h5', 'alert-section', heading));
+          for (const { title, period, waters, impact } of items) {
+            const area = el('div', 'alert-area');
+            area.dataset.state = '';
+            const chips = el('ul', 'place-chips');
+            for (const water of waters) {
+              const chip = el('li', '', water);
+              chip.dataset.names = searchKey(water);
+              chips.append(chip);
+            }
+            area.append(el('p', 'alert-item', title), el('p', 'alert-period', period), chips);
+            if (impact) area.append(el('p', 'alert-impact', impact));
+            item.append(area);
+          }
+        }
+      }
+      if (sections || sea) {
         const full = el('details', 'alert-more');
         full.append(el('summary', '', 'Teks penuh MET'), el('p', '', text));
         item.append(full);

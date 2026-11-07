@@ -2018,8 +2018,42 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     await page.clock.runFor(61_000);
     await expect(storm.locator('.alert-more p')).toBeVisible();
     // A warning naming a state and no districts covers the whole state.
-    await expect(alerts.nth(1).locator('.alert-area h5')).toHaveText('Selangor');
-    await expect(alerts.nth(1).locator('.place-chips li')).toHaveText('Seluruh negeri');
+    await expect(alerts.nth(1).locator('.alert-area h5')).toHaveText('Seluruh negeri');
+    await expect(alerts.nth(1).locator('.place-chips li')).toHaveText('Selangor');
+  });
+
+  // MET's own texts of 7 November 2026 (api.data.gov.my), shortened where they repeat.
+  test('amaran MET sebenar: laut ikut seksyen, Negeri Sembilan dibaca, "Tiada Nasihat" tidak dipapar', async ({ page }) => {
+    const sea = { warning_issue: { issued: '2026-10-14T05:00:00', title_bm: 'Amaran Angin Kencang dan Laut Bergelora' }, heading_bm: 'AMARAN ANGIN KENCANG DAN LAUT BERGELORA KATEGORI PERTAMA', valid_to: '2026-10-16T23:59:59',
+      text_bm: 'SEKSYEN A: UNTUK PERAIRAN MALAYSIA [DALAM LINGKUNGAN 24 BATU NAUTIKA] 1) AMARAN RIBUT PETIR Ribut petir, hujan lebat dan angin kencang dijangka di kawasan perairan Perlis & Kedah • Pulau Pinang • Sabah Barat dan Labuan sehingga 10:00 Malam; Sabtu, 7 November 2026. Keadaan ini boleh menyebabkan angin kencang sehingga 50 kmsj dan laut bergelora dengan ombak mencapai ketinggian 3.5 meter dan berbahaya kepada bot-bot kecil. SEKSYEN B: UNTUK PERKAPALAN 1) AMARAN ANGIN KENCANG DAN LAUT BERGELORA (KATEGORI PERTAMA) Angin kencang timur laut berkelajuan 40 - 50 kmsj dengan ombak mencapai ketinggian sehingga 3.5 meter dijangka di kawasan perairan Condore • Reef North dalam tempoh Ahad, 8 November 2026 sehingga Selasa, 10 November 2026. Keadaan angin kencang dan laut bergelora ini adalah berbahaya kepada bot-bot kecil, rekreasi laut dan sukan laut. 2) AMARAN RIBUT PETIR Ribut petir, hujan lebat dan angin kencang dijangka di kawasan perairan Samui • Utara Tioman sehingga 10:00 Malam; Sabtu, 7 November 2026. Keadaan ini boleh menyebabkan angin kencang sehingga 50 kmsj.' };
+    const storm = { warning_issue: { issued: '2026-10-14T05:30:00', title_bm: 'Amaran Ribut Petir' }, heading_bm: 'AMARAN RIBUT PETIR', valid_to: '2026-10-14T21:00:00',
+      text_bm: 'Ribut petir, hujan lebat dan angin kencang dijangka di negeri Kedah (Yan dan Kulim) • Pulau Pinang • W.P. Kuala Lumpur • Negeri Sembilan • Sarawak: Miri, Sri Aman (Pantu dan Lingga), Kuching (Kuching dan Bau) • Sabah: Pedalaman (Beaufort dan Tenom), Pantai Barat (Ranau) • W.P. Labuan sehingga 9:00 Malam; Sabtu, 7 November 2026.' };
+    const none = { warning_issue: { issued: '2026-10-14T05:40:00', title_bm: 'Tiada Nasihat' }, heading_bm: 'Tiada Nasihat', valid_to: null,
+      text_bm: 'Tiada sistem Siklon Tropika dicerap di dalam kawasan pemantauan MMD (Latitud: 0-20 Utara & Longitud: 95-130 Timur)' };
+    await mockAll(page, { warningRows: [sea, storm, none] });
+    await openApp(page, undefined, '#malaysia');
+    const alerts = page.locator('#my-warnings .alert');
+    await expect(alerts).toHaveCount(2); // no "Tiada Nasihat": it says there is no cyclone
+    await expect(page.locator('#my-warnings')).not.toContainText('Siklon');
+
+    const seaCard = alerts.first();
+    await expect(seaCard.locator('.level-tag')).toHaveCount(0); // MET names no level here
+    await expect(seaCard.locator('.alert-section')).toHaveText(['Untuk perairan Malaysia (dalam lingkungan 24 batu nautika)', 'Untuk perkapalan']);
+    await expect(seaCard.locator('.alert-item')).toHaveText(['Ribut petir', 'Angin kencang dan laut bergelora (kategori pertama)', 'Ribut petir']);
+    await expect(seaCard.locator('.alert-area').first().locator('li')).toHaveText(['Perlis & Kedah', 'Pulau Pinang', 'Sabah Barat dan Labuan']);
+    await expect(seaCard.locator('.alert-area').nth(1).locator('.alert-period')).toHaveText('Ahad, 8 November 2026 sehingga Selasa, 10 November 2026');
+
+    const stormCard = alerts.nth(1);
+    await expect(stormCard.locator('.level-tag')).toHaveCount(0); // "Amaran Ribut Petir" names no level: no made-up "Waspada"
+    await expect(stormCard.locator('.alert-period')).toHaveText('sehingga 9:00 Malam; Sabtu, 7 November 2026');
+    await expect(stormCard.locator('.alert-area h5')).toHaveText(['Kedah', 'Sarawak', 'Sabah', 'Seluruh negeri']);
+    await expect(stormCard.locator('.alert-area').nth(1).locator('li')).toHaveText(['Miri', 'Sri Aman: Pantu, Lingga', 'Kuching: Kuching, Bau']);
+    await expect(stormCard.locator('.alert-area').last().locator('li')).toHaveText(['Pulau Pinang', 'Kuala Lumpur', 'Negeri Sembilan', 'Labuan']);
+
+    // Sea areas are searchable too.
+    await page.getByLabel('Semak kawasan anda').fill('Tioman');
+    await expect(seaCard.locator('li.is-match')).toHaveText('Utara Tioman');
+    await expect(stormCard).toHaveClass(/is-folded/);
   });
 
   test('amaran MET: teks yang tidak dapat dibaca kekal sebagai ringkasan dengan "Baca penuh"', async ({ page }) => {
@@ -2082,7 +2116,7 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
 
     // A whole-state warning counts for any place in that state.
     await search.fill('Shah Alam');
-    await expect(alerts.nth(1).locator('li.is-match')).toHaveText('Seluruh negeri');
+    await expect(alerts.nth(1).locator('li.is-match')).toHaveText('Selangor');
     await expect(alerts.first()).toHaveClass(/is-folded/);
 
     await search.fill('Kuching');

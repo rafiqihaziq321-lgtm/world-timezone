@@ -125,7 +125,7 @@ Meja kerja yang kemas pada pagi Isnin: kertas putih kehijauan, dakwat teal gelap
 - **Butang (7 Nov 2026):** satu tindakan utama setiap bahagian sahaja diisi teal (contohnya Main 24 jam, Tambah bandar, Tambah kiraan). Tindakan lain ialah butang senyap: latar tinta 8% tanpa garis luar. Butang ikon (pautan, tema, imej, zum glob, ‹ ›, ×) tanpa sempadan.
 - **Tab:** tab semasa ditanda dengan garis bawah teal 2 px, bukan pil berisi.
 - **Tahap amaran:** perkataan MET ("Waspada", "Buruk", "Bahaya") dalam label, bukan jalur warna di tepi kad.
-- **Kawasan amaran:** teks MET dipecah kepada tempoh, negeri dan daerah (label kecil), dengan "Semak kawasan anda" di atas. Padanan memakai warna pilihan (teal); amaran yang tidak menyebut tempat itu dilipat ke tajuknya. Teks penuh MET kekal di bawah, dan jika teks tidak dapat dipecah, ringkasan lama dipaparkan.
+- **Kawasan amaran:** teks MET dipecah kepada tempoh, negeri dan daerah (label kecil), dengan "Semak kawasan anda" di atas. Padanan memakai warna pilihan (teal); amaran yang tidak menyebut tempat itu dilipat ke tajuknya. Amaran laut dipecah ikut seksyen MET (perairan Malaysia, perkapalan), jenis amaran, tempoh dan kawasan perairan. Negeri tanpa daerah berkongsi satu baris "Seluruh negeri". Label tahap hanya jika MET menamakannya; buletin "Tiada Nasihat" tidak dipaparkan. Teks penuh MET kekal di bawah, dan jika teks tidak dapat dipecah, ringkasan lama dipaparkan.
 - **Di bawah tajuk bahagian:** hanya sumber data rasmi, kecil (`0.875rem`).
 
 - **Radius:** 6 px untuk kawalan (butang, input), 10 px untuk baris dan panel. Bentuk pil hanya untuk cip penapis dan lencana UTC, kerana bentuk itu memberi tahu "ini label, bukan butang".

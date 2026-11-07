@@ -12,6 +12,8 @@ export function activeWarnings(state, now) {
   const seen = new Set();
   const active = (entry.status === 'ok' && Array.isArray(entry.data) ? entry.data : [])
     .filter((w) => !(parseMyt(w.valid_to) < now.getTime()))
+    // "Tiada Nasihat": MET's cyclone bulletin saying there is none. Not a warning, and it never expires.
+    .filter((w) => !/^tiada\b/i.test((w.warning_issue?.title_bm || w.heading_bm || '').trim()))
     .filter((w) => {
       const id = `${w.warning_issue?.title_bm || w.heading_bm}|${w.text_bm}`;
       if (seen.has(id)) return false;
@@ -34,10 +36,12 @@ export const WARNING_LEVELS = { alert: 'Amaran', severe: 'Buruk', danger: 'Bahay
 // MET's own words for each level, shown as a text label on a warning (not a colour stripe).
 const LEVEL_WORDS = { alert: 'Waspada', severe: 'Buruk', danger: 'Bahaya' };
 
-// "Tahap: Bahaya" as a small label for warning `w`; null for a sea warning, which has no level.
+// "Tahap: Bahaya" as a small label for warning `w`, only where MET names the
+// level in its title or heading (a thunderstorm or sea warning names none).
 export function levelTag(w) {
   const { level } = warningArea(w);
-  if (!level) return null;
+  const named = /waspada|buruk|bahaya/i.test(`${w.warning_issue?.title_bm ?? ''} ${w.heading_bm ?? ''}`);
+  if (!level || !named) return null;
   const tag = el('span', `level-tag level-${level}`, LEVEL_WORDS[level]);
   tag.prepend(el('span', 'visually-hidden', 'Tahap: '));
   return tag;
@@ -99,8 +103,9 @@ function splitOutside(s, seps) {
 
 // The state a leading name stands for ("Kelantan", "negeri Sabah"), or null.
 function stateNamed(name) {
-  const bare = name.replace(/^(negeri|Wilayah Persekutuan|W\.\s?P\.?)\s+/i, '').trim();
-  return WARNING_STATE_NAMES.find(([, pattern]) => new RegExp(`^${pattern.source}$`, 'i').test(bare))?.[0] ?? null;
+  const named = (text) => WARNING_STATE_NAMES.find(([, pattern]) => new RegExp(`^${pattern.source}$`, 'i').test(text))?.[0] ?? null;
+  // As written first: "Negeri Sembilan" is a state, not "negeri" + "Sembilan".
+  return named(name.trim()) ?? named(name.replace(/^(negeri|Wilayah Persekutuan|W\.\s?P\.?)\s+/i, '').trim());
 }
 
 // "Sandakan (Paitan, Telupid)" as { name: 'Sandakan', within: ['Paitan', 'Telupid'] }.
@@ -141,4 +146,39 @@ export function warningPlaces(text) {
     sections.push({ period, areas: areas.map(({ state, places }) => ({ state, places })) });
   }
   return sections.length ? sections : null;
+}
+
+// MET's CAPITALS as a sentence: "UNTUK PERAIRAN MALAYSIA [DALAM ...]" -> "Untuk perairan Malaysia (dalam ...)".
+function sentence(caps) {
+  const s = caps.toLowerCase().replace(/\[/g, '(').replace(/\]/g, ')').replace(/\bmalaysia\b/g, 'Malaysia').trim();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// A sea warning (strong winds, rough seas, storms at sea), read from MET's usual wording:
+//   "SEKSYEN A: UNTUK PERAIRAN MALAYSIA [...] 1) AMARAN RIBUT PETIR Ribut petir ... di kawasan perairan
+//    Perlis & Kedah • Pulau Pinang sehingga 10:00 Malam; Sabtu, 7 November 2026. Keadaan ini ... SEKSYEN B: ..."
+// as [{ heading, items: [{ title, period, waters, impact }] }]. Null when any part does not read that way.
+export function seaWarningParts(text) {
+  const body = String(text ?? '');
+  if (!/SEKSYEN [A-Z]:/.test(body)) return null;
+  const sections = [];
+  for (const chunk of body.split(/(?=SEKSYEN [A-Z]:)/).map((s) => s.trim()).filter(Boolean)) {
+    const head = chunk.match(/^SEKSYEN [A-Z]:\s*(.*?)\s+(?=1\)\s)/s);
+    if (!head) return null;
+    const items = [];
+    for (const part of chunk.slice(head[0].length).split(/(?:^|\s)\d+\)\s+/).map((s) => s.trim()).filter(Boolean)) {
+      const title = part.match(/^([^a-z]+?)\s+(?=[A-Z][a-z])/)?.[1];
+      const where = part.match(/\bdi kawasan perairan (.+?)\s+(dalam tempoh|sehingga)\s+(.+?)\.(?:\s|$)/s);
+      if (!title || !where) return null;
+      items.push({
+        title: sentence(title.replace(/^AMARAN\s+/, '')),
+        period: where[2] === 'sehingga' ? `sehingga ${where[3]}` : where[3],
+        waters: splitOutside(where[1], ['•']),
+        impact: part.slice(where.index + where[0].length).trim(),
+      });
+    }
+    if (!items.length) return null;
+    sections.push({ heading: sentence(head[1]), items });
+  }
+  return sections;
 }
