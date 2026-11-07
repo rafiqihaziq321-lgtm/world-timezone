@@ -2001,21 +2001,95 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     await expect(dialog).toBeHidden();
   });
 
-  test('amaran MET: pendua dibuang, ringkasan dengan "Baca penuh" yang kekal terbuka', async ({ page }) => {
+  test('amaran MET: pendua dibuang, daerah ikut negeri, teks penuh kekal terbuka', async ({ page }) => {
     const repeated = { warning_issue: { issued: '2026-10-14T05:00:00', title_bm: 'Amaran Ribut Petir' }, valid_to: '2026-10-14T18:00:00', text_bm: longWarning };
     await mockAll(page, { warningRows: [repeated, { ...repeated, warning_issue: { ...repeated.warning_issue, issued: '2026-10-14T04:00:00' } }, ...warnings] });
     await openApp(page, undefined, '#malaysia');
     const alerts = page.locator('#my-warnings .alert');
     await expect(alerts).toHaveCount(2); // the repeat and the expired warning are gone
     const storm = alerts.first();
-    // The lead clause, not cut at the colon in "6:00".
-    await expect(storm.locator('> p').first()).toHaveText('Ribut petir, hujan lebat dan angin kencang dijangka berlaku sehingga jam 6:00 petang di kawasan berikut');
-    await expect(storm.getByText('Hulu Perak')).toBeHidden();
-    await storm.getByText('Baca penuh').click();
-    await expect(storm.getByText(/Hulu Perak/)).toBeVisible();
-    await page.clock.runFor(61_000); // the panel refreshes every minute
-    await expect(storm.getByText(/Hulu Perak/)).toBeVisible();
-    await expect(alerts.nth(1).locator('details')).toHaveCount(0); // a short warning needs no "Baca penuh"
+    // When, then each state with its districts, read out of MET's paragraph.
+    await expect(storm.locator('.alert-period')).toHaveText('sehingga jam 6:00 petang');
+    await expect(storm.locator('.alert-area h5')).toHaveText(['Perak', 'Pahang', 'Selangor']);
+    await expect(storm.locator('.alert-area').first().locator('li')).toHaveText(['Hulu Perak', 'Kuala Kangsar', 'Kinta']);
+    // MET's own words stay one click away, and stay open through the minute's refresh.
+    await storm.getByText('Teks penuh MET').click();
+    await expect(storm.locator('.alert-more p')).toHaveText(longWarning);
+    await page.clock.runFor(61_000);
+    await expect(storm.locator('.alert-more p')).toBeVisible();
+    // A warning naming a state and no districts covers the whole state.
+    await expect(alerts.nth(1).locator('.alert-area h5')).toHaveText('Selangor');
+    await expect(alerts.nth(1).locator('.place-chips li')).toHaveText('Seluruh negeri');
+  });
+
+  test('amaran MET: teks yang tidak dapat dibaca kekal sebagai ringkasan dengan "Baca penuh"', async ({ page }) => {
+    const sea = { warning_issue: { issued: '2026-10-14T05:00:00', title_bm: 'Amaran Laut Bergelora' }, valid_to: '2026-10-15T00:00:00',
+      text_bm: 'Angin kencang dan laut bergelora dijangka berlaku di perairan Sarawak dan Labuan: ombak setinggi 4.5 meter boleh membahayakan semua aktiviti perkapalan dan pantai.' };
+    await mockAll(page, { warningRows: [sea] });
+    await openApp(page, undefined, '#malaysia');
+    const alert = page.locator('#my-warnings .alert');
+    await expect(alert.locator('.alert-area')).toHaveCount(0); // waters, not states: no state list made up
+    await expect(alert.locator('> p').first()).toHaveText('Angin kencang dan laut bergelora dijangka berlaku di perairan Sarawak dan Labuan');
+    await alert.getByText('Baca penuh').click();
+    await expect(alert.getByText(/ombak setinggi/)).toBeVisible();
+  });
+
+  test('amaran MET: pemecah teks membaca bahagian, tempoh, negeri dan daerah', async ({ page }) => {
+    await mockAll(page);
+    await openApp(page, undefined, '#malaysia');
+    const read = await page.evaluate(async () => {
+      const { warningPlaces } = await import('./js/warnings.js');
+      return {
+        sections: warningPlaces('AMARAN HUJAN BERTERUSAN (WASPADA) I) Hujan berterusan dijangka berlaku di negeri Kelantan (Tumpat, Kota Bharu dan Pasir Puteh) • Terengganu (Besut dan Setiu) dalam tempoh Ahad, 8 November 2026 sehingga Rabu, 11 November 2026. II) Hujan berterusan dijangka berlaku di negeri Sabah: Kudat, Sandakan (Paitan, Labuk & Sugut dan Kinabatangan) dalam tempoh Isnin, 9 November 2026 sehingga Rabu, 11 November 2026.'),
+        list: warningPlaces('Ribut petir dijangka berlaku di Perlis, Kedah, Pulau Pinang dan Perak sehingga 9 malam.'),
+        odd: warningPlaces('Sila rujuk laman web MET Malaysia untuk butiran.'),
+      };
+    });
+    expect(read.sections).toEqual([
+      { period: 'Ahad, 8 November 2026 sehingga Rabu, 11 November 2026', areas: [
+        { state: 'Kelantan', places: [{ name: 'Tumpat', within: [] }, { name: 'Kota Bharu', within: [] }, { name: 'Pasir Puteh', within: [] }] },
+        { state: 'Terengganu', places: [{ name: 'Besut', within: [] }, { name: 'Setiu', within: [] }] },
+      ] },
+      { period: 'Isnin, 9 November 2026 sehingga Rabu, 11 November 2026', areas: [
+        { state: 'Sabah', places: [{ name: 'Kudat', within: [] }, { name: 'Sandakan', within: ['Paitan', 'Labuk & Sugut', 'Kinabatangan'] }] },
+      ] },
+    ]);
+    expect(read.list).toEqual([{ period: 'sehingga 9 malam', areas: ['Perlis', 'Kedah', 'Pulau Pinang', 'Perak'].map((state) => ({ state, places: [] })) }]);
+    expect(read.odd).toBeNull();
+  });
+
+  test('semak kawasan anda: daerah diserlah, amaran lain dilipat, negeri sahaja tetap terbuka', async ({ page }) => {
+    const rain = { warning_issue: { issued: '2026-10-14T04:00:00', title_bm: 'Amaran Hujan Berterusan' }, valid_to: '2026-10-16T00:00:00',
+      text_bm: 'Hujan berterusan dijangka berlaku di negeri Kelantan (Tumpat, Kota Bharu dan Pasir Puteh) • Terengganu (Besut dan Setiu) dalam tempoh Rabu, 14 Oktober 2026 sehingga Jumaat, 16 Oktober 2026.' };
+    await mockAll(page, { warningRows: [rain, ...warnings] });
+    await openApp(page, { zones: ['Asia/Kuala_Lumpur'], hour24: true, prayerZone: 'KTN01' }, '#malaysia');
+    const alerts = page.locator('#my-warnings .alert');
+    const search = page.getByLabel('Semak kawasan anda');
+    const status = page.locator('#alert-search-status');
+    await expect(alerts.first().locator('.alert-area').first()).toContainText('negeri zon anda'); // KTN01 is in Kelantan
+
+    await search.fill('kota bharu');
+    await expect(alerts.first().locator('li.is-match')).toHaveText('Kota Bharu');
+    await expect(alerts.nth(1)).toHaveClass(/is-folded/); // the Selangor warning
+    await expect(alerts.nth(1).locator('.place-chips')).toBeHidden();
+    await expect(status).toHaveText('"kota bharu" disebut dalam 1 amaran.');
+
+    // Machang is in Kelantan (JAKIM's zones) but not in this warning's list: it stays open to check.
+    await search.fill('Machang');
+    await expect(alerts.first()).not.toHaveClass(/is-folded/);
+    await expect(alerts.first().locator('li.is-match')).toHaveCount(0);
+    await expect(status).toHaveText('"Machang" tidak disebut, tetapi negerinya ada dalam 1 amaran. Semak senarai daerah di bawah.');
+
+    // A whole-state warning counts for any place in that state.
+    await search.fill('Shah Alam');
+    await expect(alerts.nth(1).locator('li.is-match')).toHaveText('Seluruh negeri');
+    await expect(alerts.first()).toHaveClass(/is-folded/);
+
+    await search.fill('Kuching');
+    await expect(status).toHaveText('Tiada amaran aktif yang menyebut "Kuching" atau negerinya.');
+    await search.fill('');
+    await expect(page.locator('#my-warnings .alert.is-folded')).toHaveCount(0);
+    await expect(status).toBeHidden();
   });
 
   test('IPU anggaran: 100 = piawai 24 jam, kategori JAS, hanya 24 jam terakhir', async ({ page }) => {

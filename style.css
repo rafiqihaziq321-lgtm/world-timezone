@@ -992,6 +992,39 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 .alert-more summary { margin-top: 4px; color: var(--accent-ink); font-size: 0.85rem; font-weight: 700; cursor: pointer; }
 .alert-more p { color: var(--muted); }
 
+/* Structured warnings: when, then each state with its districts as small labels. */
+.alert-period { margin: 6px 0 2px !important; font-weight: 700; }
+.alert-area { margin-top: 10px; }
+.alert-area h5 { margin: 0 0 6px; font-size: 0.875rem; font-weight: 700; }
+.alert-area.is-match h5 { color: var(--accent-ink); }
+.your-state { font-weight: 400; color: var(--muted); }
+.place-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.place-chips li {
+  padding: 2px 10px;
+  border-radius: 999px; /* labels, not buttons (DESIGN.md) */
+  background: var(--quiet);
+  font-size: 0.875rem;
+}
+.place-chips li.whole { font-style: italic; }
+/* A place that matches the search: the chosen state, in the teal of selection. */
+.place-chips li.is-match { background: var(--accent); color: var(--accent-contrast); font-weight: 700; }
+/* A warning that does not name the searched place shrinks to its title. */
+.alert.is-folded > :not(h4, .level-tag) { display: none; }
+.alert.is-folded { padding-block: 8px; }
+
+/* "Semak kawasan anda" above the two warning lists. */
+.alert-search { display: grid; gap: 6px; max-width: 420px; margin-bottom: 20px; }
+.alert-search input {
+  padding: 10px 16px;
+  font: inherit;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+}
+.alert-search p { margin: 0; }
+.alert-search p:empty { display: none; }
+
 .reminder {
   display: flex;
   flex-wrap: wrap;
