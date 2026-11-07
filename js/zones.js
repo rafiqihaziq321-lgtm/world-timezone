@@ -10,7 +10,7 @@ import { locate, locationErrorText } from './qibla.js';
 import { saveState } from './storage.js';
 import { cityDate, formatClock } from './time.js';
 import { el, fetchJson, renderKeyed } from './util.js';
-import { activeWarnings, warningArea } from './warnings.js';
+import { activeWarnings, levelTag, warningArea } from './warnings.js';
 
 export const ZONE_API = 'https://api.waktusolat.app';
 
@@ -155,7 +155,10 @@ function renderZoneAlerts(state, now) {
     const alert = el('p', `zone-alert level-${warningArea(w).level}`);
     const more = el('a', '', 'Baca amaran');
     more.href = '#my-alerts-title';
-    alert.append(icon('warning'), el('strong', '', w.warning_issue?.title_bm || w.heading_bm || 'Amaran MET'), more);
+    alert.append(icon('warning'), el('strong', '', w.warning_issue?.title_bm || w.heading_bm || 'Amaran MET'));
+    const tag = levelTag(w);
+    if (tag) alert.append(tag);
+    alert.append(more);
     return alert;
   }));
 }

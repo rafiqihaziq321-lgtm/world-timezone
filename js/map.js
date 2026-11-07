@@ -89,6 +89,13 @@ export async function createMalaysiaMap(state) {
     map.addSource('dem-terrain', { type: 'raster-dem', tiles: [DEM_TILES], encoding: 'terrarium', tileSize: 256, maxzoom: 12, attribution: DEM_ATTRIBUTION });
     map.addSource('dem-shade', { type: 'raster-dem', tiles: [DEM_TILES], encoding: 'terrarium', tileSize: 256, maxzoom: 12 });
     const firstSymbol = map.getStyle().layers.find((layer) => layer.type === 'symbol')?.id;
+    // The basemap's own city, town and village names sit under our name tags and
+    // overlap them; our markers name those places, so only state and country names stay.
+    for (const layer of map.getStyle().layers) {
+      if (layer.type === 'symbol' && layer['source-layer'] === 'place' && !/country|state/.test(layer.id)) {
+        map.setLayoutProperty(layer.id, 'visibility', 'none');
+      }
+    }
     map.addLayer({ id: 'hillshade', type: 'hillshade', source: 'dem-shade', paint: { 'hillshade-exaggeration': 0.35 } }, firstSymbol);
     map.setTerrain({ source: 'dem-terrain', exaggeration: 1.5 });
 

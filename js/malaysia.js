@@ -5,7 +5,7 @@ import { PRAYER_TIMES, WEATHER_API, hijriParts, nextPrayer, prayerFor, retryButt
 import { makeCity } from './storage.js';
 import { MINUTE_MS, addDaysIso, cityDate, formatClock, parseMyt } from './time.js';
 import { el, formatTempRange, normalizeName, renderKeyed } from './util.js';
-import { activeWarnings, warningSummary } from './warnings.js';
+import { activeWarnings, levelTag, warningSummary } from './warnings.js';
 import { renderZone } from './zones.js';
 import { MALAYSIA_STATES, MALAYSIA_TOTAL } from '../malaysia-data.js';
 
@@ -85,6 +85,8 @@ export function renderMalaysia(state, now) {
       const item = el('article', 'alert');
       const text = w.text_bm || '';
       const summary = warningSummary(text);
+      const tag = levelTag(w);
+      if (tag) item.append(tag);
       item.append(el('h4', '', w.warning_issue?.title_bm || w.heading_bm || 'Amaran'), el('p', '', summary));
       if (summary !== text) {
         const more = el('details', 'alert-more');
