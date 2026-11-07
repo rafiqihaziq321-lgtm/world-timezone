@@ -994,6 +994,12 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 
 /* Structured warnings: when, then each state with its districts as small labels. */
 .alert-period { margin: 6px 0 2px !important; font-weight: 700; }
+/* Sea warnings: MET's sections, then each kind of warning with its sea areas. */
+.alert-section { margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--panel-border); font-size: 0.875rem; color: var(--muted); }
+.alert-section:first-of-type { border-top: 0; padding-top: 0; }
+.alert-area .alert-item { margin: 0 !important; font-weight: 700; }
+.alert-area .alert-period { margin: 0 0 6px !important; font-weight: 400; color: var(--muted); }
+.alert-impact { margin: 6px 0 0 !important; color: var(--muted); font-size: 0.875rem !important; }
 .alert-area { margin-top: 10px; }
 .alert-area h5 { margin: 0 0 6px; font-size: 0.875rem; font-weight: 700; }
 .alert-area.is-match h5 { color: var(--accent-ink); }
@@ -1005,7 +1011,7 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
   background: var(--quiet);
   font-size: 0.875rem;
 }
-.place-chips li.whole { font-style: italic; }
+.place-chips li.is-match .your-state { color: inherit; }
 /* A place that matches the search: the chosen state, in the teal of selection. */
 .place-chips li.is-match { background: var(--accent); color: var(--accent-contrast); font-weight: 700; }
 /* A warning that does not name the searched place shrinks to its title. */
