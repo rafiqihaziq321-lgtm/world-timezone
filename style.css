@@ -62,6 +62,9 @@
   --strip-day: #fde68a;
   --strip-line: #7b8b89;
   --now-line: #b45309;
+  /* Quiet buttons (DESIGN.md): a faint tint of the ink, no outline. */
+  --quiet: rgba(19, 78, 74, 0.08);
+  --quiet-hover: rgba(19, 78, 74, 0.14);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -77,9 +80,9 @@
     --sun-ink: #fbbf24;
     --moon: #9db4ff;
     --mark-night: #24306e;
-    --accent: #2dd4bf;
+    --accent: #5fb3a8; /* teal at saturation 0.36, not 0.66: calmer on the dark page (7.13:1 under #0f1b1a text) */
     --accent-contrast: #0f1b1a;
-    --accent-ink: #5eead4;
+    --accent-ink: #8fd0c6;
     --error: #ff8a80;
     --input-bg: #152523;
     --input-border: #5f7572;
@@ -93,7 +96,7 @@
     --weekend-fg: #fde68a;
     --holiday-bg: #4a3410;
     --holiday-fg: #fde68a;
-    --all-work: #2dd4bf;
+    --all-work: #5fb3a8;
     --all-work-fg: #0f1b1a;
     --scroll-shade: rgba(0, 0, 0, 0.55);
     --moon-dark: #1e293b;
@@ -103,6 +106,8 @@
     --strip-day: #e8c766;
     --strip-line: #5f7572;
     --now-line: #fbbf24;
+    --quiet: rgba(230, 242, 240, 0.08);
+    --quiet-hover: rgba(230, 242, 240, 0.14);
   }
 }
 
@@ -118,9 +123,9 @@
   --sun-ink: #fbbf24;
   --moon: #9db4ff;
   --mark-night: #24306e;
-  --accent: #2dd4bf;
+  --accent: #5fb3a8; /* teal at saturation 0.36, not 0.66: calmer on the dark page (7.13:1 under #0f1b1a text) */
   --accent-contrast: #0f1b1a;
-  --accent-ink: #5eead4;
+  --accent-ink: #8fd0c6;
   --error: #ff8a80;
   --input-bg: #152523;
   --input-border: #5f7572;
@@ -134,7 +139,7 @@
   --weekend-fg: #fde68a;
   --holiday-bg: #4a3410;
   --holiday-fg: #fde68a;
-  --all-work: #2dd4bf;
+  --all-work: #5fb3a8;
   --all-work-fg: #0f1b1a;
   --scroll-shade: rgba(0, 0, 0, 0.55);
   --moon-dark: #1e293b;
@@ -144,6 +149,8 @@
   --strip-day: #e8c766;
   --strip-line: #5f7572;
   --now-line: #fbbf24;
+  --quiet: rgba(230, 242, 240, 0.08);
+  --quiet-hover: rgba(230, 242, 240, 0.14);
 }
 
 /* ---------- Base ---------- */
@@ -266,7 +273,7 @@ button, .btn { gap: 6px; }
   .play-btn:hover { background: color-mix(in srgb, var(--accent) 86%, #000); }
   .btn.secondary:hover,
   button.secondary:hover,
-  .icon-btn:hover { background: var(--panel); border-color: var(--input-border); }
+  .icon-btn:hover { background: var(--quiet-hover); }
 }
 
 /* Off until it can work (the countdown's Tambah while its module loads): flat, no press, no pointer. */
@@ -279,13 +286,16 @@ button:disabled:is(:hover, :active) {
   border-color: var(--input-border);
 }
 select { cursor: pointer; }
+input[type="checkbox"] { accent-color: var(--accent); } /* a chosen state, in the palette's teal (not the browser's blue) */
 .icon-btn .icon { width: 20px; height: 20px; }
 
+/* Every action but a section's one primary: a quiet tint, no outline. The words
+   (or the icon's name) say it is a button; only the primary gets the teal fill. */
 button.secondary,
 .btn.secondary {
-  background: transparent;
+  background: var(--quiet);
   color: var(--text);
-  border-color: var(--input-border); /* a control's edge, like a field's: 3:1 (audit #5) */
+  border-color: transparent;
 }
 
 .icon-btn {
@@ -294,8 +304,8 @@ button.secondary,
   padding: 0;
   font-size: 1.05rem;
   color: var(--text); /* the glyph itself where no colour emoji font exists */
-  background: var(--panel);
-  border-color: var(--input-border);
+  background: transparent;
+  border-color: transparent;
 }
 
 .error { color: var(--error); margin: 4px 0; }
@@ -308,6 +318,9 @@ button.secondary,
   clip-path: inset(50%);
   white-space: nowrap;
 }
+/* A table ignores the 1 px height, and a hidden 640 px one made the city
+   dialog scroll into empty space; fixed, it takes no room in any scroller. */
+table.visually-hidden { position: fixed; top: 0; left: 0; }
 .empty { color: var(--muted); }
 
 /* Shared horizontal rhythm for every full-width band. */
@@ -362,8 +375,9 @@ button.secondary,
   text-decoration: none;
 }
 
-.nav-links a:hover { color: var(--text); background: var(--panel); }
-.nav-links a[aria-current="page"] { color: var(--accent-contrast); background: var(--accent); }
+.nav-links a:hover { color: var(--text); }
+/* The tab on screen: its name in full ink over a teal underline, not a filled pill. */
+.nav-links a[aria-current="page"] { color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
 
 .header-actions { display: flex; align-items: center; gap: 10px; }
 .toggle { color: var(--muted); cursor: pointer; font-size: 0.95rem; white-space: nowrap; }
@@ -520,10 +534,11 @@ button.secondary,
   padding: 0;
   font-size: 1.2rem;
   line-height: 1;
-  background: rgba(10, 16, 46, 0.7);
-  color: #f8fafc;
-  border-color: rgba(157, 180, 255, 0.3);
+  background: transparent;
+  color: var(--text);
+  border-color: transparent;
 }
+@media (hover: hover) { .globe-zoom button:hover { background: var(--quiet-hover); } }
 
 /* On a phone the city cards are the point: the clock and controls stay
    compact so the first card shows on the first screen. */
@@ -545,11 +560,11 @@ button.secondary,
   z-index: 2;
   padding: 8px 12px;
   transform: translate(-50%, calc(-100% - 14px));
-  background: rgba(10, 16, 46, 0.94);
-  color: #c9d3f5;
-  border: 1px solid rgba(157, 180, 255, 0.3);
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  background: var(--panel);
+  color: var(--muted);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
   font-size: 0.78rem;
   line-height: 1.45;
   text-align: left;
@@ -558,8 +573,8 @@ button.secondary,
   animation: tip-in 0.15s ease-out;
 }
 
-.globe-tip strong { display: block; color: #f8fafc; font-size: 0.95rem; }
-.globe-tip .tip-time { color: #f5c451; font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.globe-tip strong { display: block; color: var(--text); font-size: 0.95rem; }
+.globe-tip .tip-time { color: var(--sun-ink); font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 @keyframes tip-in {
   from { opacity: 0; margin-top: 6px; }
@@ -642,6 +657,7 @@ body.time-shifted #time-label { color: var(--accent-ink); font-weight: 700; }
 
 .section-head { max-width: 640px; margin-bottom: 24px; }
 .section-head p { margin: 0; color: var(--muted); }
+.section-head p.source { font-size: 0.875rem; } /* only official sources stay under a heading, small */
 
 /* ---------- Add form ---------- */
 
@@ -731,9 +747,10 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 .hourly-source { margin: 6px 0 0; font-size: 0.75rem; color: var(--muted); }
 
 /* °C | °F beside the city search; it applies to every temperature shown. */
-.unit-toggle { display: inline-flex; margin-left: auto; border: 1px solid var(--input-border); border-radius: 6px; overflow: hidden; }
-.unit-toggle button { padding: 6px 12px; border: 0; border-radius: 0; background: transparent; color: var(--muted); font-size: 0.9rem; }
-.unit-toggle button[aria-pressed="true"] { background: var(--accent); color: var(--accent-contrast); }
+/* A segmented choice, not an action: the chosen unit sits on the surface in teal ink. */
+.unit-toggle { display: inline-flex; margin-left: auto; padding: 2px; border-radius: 6px; background: var(--quiet); }
+.unit-toggle button { padding: 6px 12px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 0.9rem; }
+.unit-toggle button[aria-pressed="true"] { background: var(--panel); color: var(--accent-ink); }
 
 /* The sun strip: the city's day from midnight to midnight, with a mark at the
    time shown (DESIGN.md motif). The mark's halo keeps it visible on both ends. */
@@ -849,9 +866,9 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
   margin-top: 12px;
   padding: 6px 14px;
   font-size: 0.85rem;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--quiet);
   color: inherit;
-  border-color: currentColor;
+  border-color: transparent;
 }
 
 
@@ -903,7 +920,9 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 
 .prayer-times li span { font-size: 0.75rem; color: var(--muted); }
 .prayer-times li strong { font-variant-numeric: tabular-nums; }
-.prayer-times li.next { outline: 2px solid currentColor; }
+/* The next prayer is marked the same way everywhere (cards, dialog, zone card, state table): amber. */
+.prayer-times li.next { box-shadow: inset 0 0 0 2px var(--sun-ink); }
+.prayer-times li.next strong { color: var(--sun-ink); }
 .next-prayer { font-weight: 700; }
 
 .forecast {
@@ -954,10 +973,20 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
   border-radius: 10px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
-  border-left: 4px solid var(--sun-ink);
 }
 
-.alert.quake { border-left-color: var(--moon); }
+/* The level in words (MET's "Waspada", "Buruk", "Bahaya"), not a coloured stripe. */
+.level-tag {
+  display: inline-block;
+  margin-bottom: 4px;
+  padding: 1px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px; /* a label, not a button (DESIGN.md: pills only for labels) */
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.level-tag.level-danger { color: var(--error); }
 .alert h4 { margin: 0 0 4px; font-size: 0.95rem; }
 .alert p { margin: 2px 0 0; font-size: 0.9rem; }
 .alert-more summary { margin-top: 4px; color: var(--accent-ink); font-size: 0.85rem; font-weight: 700; cursor: pointer; }
@@ -1055,7 +1084,7 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
 }
 .zone-times li span { color: var(--muted); font-size: 0.8rem; }
 .zone-times li strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
-.zone-times li.next { border-color: var(--sun-ink); box-shadow: inset 0 0 0 1px var(--sun-ink); }
+.zone-times li.next { border-color: var(--sun-ink); box-shadow: inset 0 0 0 1px var(--sun-ink); } /* 2 px in all, like .prayer-times */
 .zone-times li.next strong { color: var(--sun-ink); }
 
 .ramadan-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
@@ -1198,9 +1227,10 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
   top: 12px;
   max-width: calc(100% - 80px); /* clear of the zoom buttons */
   padding: 6px 12px;
-  border-radius: 12px;
-  background: rgba(10, 16, 46, 0.78);
-  color: #f8fafc;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
   font-size: 0.75rem;
 }
 /* Open on wide screens; on a phone it starts folded so the map shows (app.js). */
@@ -1213,9 +1243,6 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
   margin: 0;
   padding: 0;
   list-style: none;
-}
-@media (pointer: coarse) {
-  .pointer-hint { display: none; } /* drag and pinch need no telling on a touch screen */
 }
 
 .map-status { margin-top: 12px; color: var(--error); font-weight: 700; }
@@ -1231,9 +1258,10 @@ body.time-shifted .card :is(.weather, .hourly) { display: none; } /* it is the w
   bottom: 12px;
   max-width: min(420px, calc(100% - 24px));
   padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(10, 16, 46, 0.85);
-  color: #f8fafc;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
   font-size: 0.78rem;
 }
 
@@ -1324,7 +1352,7 @@ dialog { overscroll-behavior: contain; }
   overflow: hidden;
   border: 4px solid var(--aqi);
   border-radius: 50%;
-  background: linear-gradient(160deg, #312e81, #6d28d9);
+  background: var(--strip-night);
   box-shadow: 0 4px 14px rgba(2, 6, 23, 0.45);
   transition: transform 0.15s ease;
 }
@@ -1361,7 +1389,8 @@ dialog { overscroll-behavior: contain; }
   display: none;
   padding: 3px 8px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--panel);
+  color: var(--text);
   box-shadow: 0 2px 8px rgba(2, 6, 23, 0.25);
   font-size: 0.72rem;
   line-height: 1.3;
@@ -1386,7 +1415,7 @@ dialog { overscroll-behavior: contain; }
   height: 22px;
   padding: 0 6px;
   border-radius: 999px;
-  background: #0f172a;
+  background: var(--strip-night);
   color: #fff;
   font-size: 0.7rem;
   font-weight: 700;
@@ -1432,8 +1461,8 @@ dialog { overscroll-behavior: contain; }
   height: 100%;
   min-height: 180px;
   padding: 16px;
-  background: linear-gradient(160deg, #1e1b4b, #312e81 60%, #6d28d9);
-  color: #e0e7ff;
+  background: var(--strip-night);
+  color: #ffffff;
   font-weight: 700;
   text-align: center;
 }
@@ -1486,7 +1515,17 @@ dialog { overscroll-behavior: contain; }
 .dialog-photo img, .dialog-photo .photo-missing { display: block; width: 100%; height: auto; max-height: 360px; object-fit: cover; }
 .dialog-photo .photo-credit { padding: 0 20px; }
 
-.dialog-close { position: sticky; top: 0; z-index: 2; height: 0; text-align: right; }
+/* A header bar that stays put with its own background: the × never sits over the photo or the text. */
+.dialog-close {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--panel-border);
+}
 
 /* A month of prayer times: a table to read or print, and a calendar file. */
 .month-body { padding: 0 20px 20px; }
@@ -1519,23 +1558,21 @@ dialog { overscroll-behavior: contain; }
   gap: 4px 8px;
   margin: 12px 0 0;
   padding: 8px 12px;
-  border-left: 4px solid var(--sun-ink);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--sun) 14%, transparent);
+  border-radius: 10px;
+  background: var(--quiet);
   font-size: 0.9rem;
 }
-.zone-alert.level-severe { border-left-color: #ea580c; }
-.zone-alert.level-danger { border-left-color: var(--error); }
+.zone-alert .level-tag { margin-bottom: 0; }
 .zone-alert a { margin-left: auto; color: var(--accent-ink); font-weight: 700; }
 .dialog-close button {
-  width: 36px;
-  height: 36px;
-  margin: 10px;
+  width: 44px;
+  height: 44px;
   padding: 0;
-  font-size: 1.3rem;
-  background: rgba(10, 16, 46, 0.7);
-  color: #f8fafc;
+  font-size: 1.4rem;
+  background: transparent;
+  color: var(--text);
 }
+@media (hover: hover) { .dialog-close button:hover { background: var(--quiet-hover); } }
 
 /* ---------- Meeting planner ---------- */
 
@@ -1556,8 +1593,8 @@ dialog { overscroll-behavior: contain; }
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  border: 1px solid var(--input-border);
   border-radius: 6px;
+  background: var(--quiet);
   cursor: pointer;
   list-style: none;
 }
@@ -1605,6 +1642,13 @@ dialog { overscroll-behavior: contain; }
   font-variant-numeric: tabular-nums;
 }
 .planner-day .secondary { padding: 8px 16px; font-size: 0.9rem; }
+/* Phones: ‹ date › Hari ini on one row (a 320 px screen still wraps rather than squeeze the date). */
+@media (min-width: 340px) and (max-width: 600px) {
+  #planner { padding: 14px; }
+  .planner-day { flex-wrap: nowrap; gap: 4px; }
+  .planner-day input { flex: 1 1 0; min-width: 0; padding-inline: 4px; font-size: 0.875rem; }
+  .planner-day .secondary { flex: none; padding-inline: 10px; }
+}
 
 .planner-pick {
   display: flex;
@@ -1884,6 +1928,8 @@ dialog { overscroll-behavior: contain; }
 .card .drag-handle, .card .person-edit, .card .remove { flex: none; width: 44px; height: 44px; padding: 0; }
 .card .drag-handle { margin-left: -12px; }
 .card .remove { top: 4px; right: 4px; }
+/* Narrow cards: the sun/moon icon goes; the strip below already names the phase in words. */
+@media (max-width: 480px) { .card-head .phase { display: none; } }
 #dunia .weather-toggle { min-height: 0; } /* words inside a sentence: the inline exception */
 
 /* Keep animation events firing (card removal waits for one) but make them instant. */

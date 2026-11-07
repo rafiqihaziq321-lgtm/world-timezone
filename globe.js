@@ -158,10 +158,13 @@ export function createGlobe(canvas, options) {
 
     ctx.clearRect(0, 0, size, size);
 
-    // Atmosphere glow just outside the sphere.
+    // Atmosphere glow just outside the sphere, in the palette's night ink
+    // (DESIGN.md --strip-night), read each frame so it follows the theme.
+    const night = getComputedStyle(canvas).getPropertyValue('--strip-night').trim() || '#1e3a5f';
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(night.slice(i, i + 2), 16));
     const glow = ctx.createRadialGradient(cx, cy, radius * 0.98, cx, cy, radius * 1.12);
-    glow.addColorStop(0, 'rgba(96, 165, 250, 0.45)');
-    glow.addColorStop(1, 'rgba(96, 165, 250, 0)');
+    glow.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.45)`);
+    glow.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
     ctx.beginPath(); ctx.arc(cx, cy, radius * 1.12, 0, 2 * Math.PI); ctx.fillStyle = glow; ctx.fill();
 
     // Ocean shaded from upper-left so the sphere reads as 3D.

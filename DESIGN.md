@@ -54,10 +54,10 @@ Semua pasangan di bawah disemak dengan `contrast-check.py`: 35 lulus, 0 gagal.
 | `--surface` | `#FFFFFF` | `#152523` | Kad bandar, panel, input |
 | `--text` | `#134E4A` | `#E6F2F0` | Teks utama (9.01:1 / 15.37:1 pada latar) |
 | `--muted` | `#475569` | `#9FB3AF` | Teks sekunder (7.20:1 / 8.00:1) |
-| `--action` | `#0F766E` | `#2DD4BF` | Butang utama; teks butang `#FFFFFF` / `#0F1B1A` (5.47:1 / 9.46:1) |
-| `--action-ink` | `#0F766E` | `#5EEAD4` | Pautan dan teks tindakan |
+| `--action` | `#0F766E` | `#5FB3A8` | Butang utama dan keadaan dipilih sahaja; teks butang `#FFFFFF` / `#0F1B1A` (5.47:1 / 7.13:1). Teal gelap dikurangkan ketepuannya (0.66 → 0.36) |
+| `--action-ink` | `#0F766E` | `#8FD0C6` | Pautan, teks tindakan, pilihan unit (9.09:1 pada panel gelap) |
 | `--line` | `#7B8B89` | `#5F7572` | Sempadan kawalan (3.56:1 / 3.24:1, bukan teks) |
-| `--focus` | `#0F766E` | `#5EEAD4` | Gelang fokus 2 px, ofset 2 px (5.47:1 / 10.75:1) |
+| `--focus` | `#0F766E` | `#8FD0C6` | Gelang fokus 2 px, ofset 2 px (5.47:1 / 9.09:1) |
 | `--now` | `#B45309` (garis), `#92400E` (teks) | `#FBBF24` | Penanda "sekarang", waktu matahari |
 | `--error` | `#B42318` | `#FF8A80` | Ralat (6.57:1 / 6.96:1) |
 | Jalur: malam | `#1E3A5F` | `#0B2540` | Segmen malam |
@@ -121,6 +121,11 @@ Meja kerja yang kemas pada pagi Isnin: kertas putih kehijauan, dakwat teal gelap
 - **MOTION 1.** Hanya keadaan hover, fokus, tekan dan peralihan keadaan (150-200 ms). Tiada animasi masuk, tiada putaran glob automatik, tiada denyut berterusan. Butang "Main 24 jam" menggerakkan jam hanya apabila ditekan, dan butang yang sama menghentikannya.
 
 ## Bentuk dan ruang
+
+- **Butang (7 Nov 2026):** satu tindakan utama setiap bahagian sahaja diisi teal (contohnya Main 24 jam, Tambah bandar, Tambah kiraan). Tindakan lain ialah butang senyap: latar tinta 8% tanpa garis luar. Butang ikon (pautan, tema, imej, zum glob, ‹ ›, ×) tanpa sempadan.
+- **Tab:** tab semasa ditanda dengan garis bawah teal 2 px, bukan pil berisi.
+- **Tahap amaran:** perkataan MET ("Waspada", "Buruk", "Bahaya") dalam label, bukan jalur warna di tepi kad.
+- **Di bawah tajuk bahagian:** hanya sumber data rasmi, kecil (`0.875rem`).
 
 - **Radius:** 6 px untuk kawalan (butang, input), 10 px untuk baris dan panel. Bentuk pil hanya untuk cip penapis dan lencana UTC, kerana bentuk itu memberi tahu "ini label, bukan butang".
 - **Bayang:** tiada pada baris dan panel. Bayang hanya untuk elemen yang benar-benar terapung: dialog, bar "Batal" dan tooltip glob.

@@ -135,7 +135,6 @@
       <div class="section-head">
         <h2 id="bandar-title">Bandar anda</h2>
         <button id="share-image" type="button" class="icon-btn" aria-label="Kongsi imej jam" title="Kongsi imej jam" data-icon="image"></button>
-        <p>Jalur pada setiap kad ialah hari di bandar itu, dari tengah malam ke tengah malam; garis amber ialah masa yang dipaparkan. Klik kad untuk memusatkan glob padanya.</p>
         <p id="share-image-status" class="share-image-status" role="status"></p>
       </div>
       <label class="field-label" for="zone-input">Cari bandar</label>
@@ -157,7 +156,7 @@
     <section id="perancang" class="section" aria-labelledby="planner-title">
       <div class="section-head">
         <h2 id="planner-title">Perancang mesyuarat</h2>
-        <p>Setiap baris ialah satu bandar dalam senarai anda, sepanjang hari yang dipilih mengikut waktu anda. Klik satu jam untuk memilihnya, kemudian simpan ke kalendar atau lihat masa itu pada semua jam. Waktu kerja dan hujung minggu anda dipakai untuk semua bandar.</p>
+        <p>Satu baris setiap bandar; klik satu jam untuk memilihnya.</p>
       </div>
       <div id="planner">
         <div class="planner-day" role="group" aria-label="Hari dirancang">
@@ -201,7 +200,6 @@
     <section class="section" aria-labelledby="countdown-title">
       <div class="section-head">
         <h2 id="countdown-title">Kiraan detik</h2>
-        <p>Hari penting, dikira dalam waktu bandarnya. Disimpan dalam pelayar ini.</p>
       </div>
       <!-- The form is here, not built by js/countdown.js, so the section keeps its
            size at every width while that module loads; it switches the button on. -->
@@ -221,7 +219,6 @@
     <section id="glob" class="section globe-section" aria-labelledby="globe-title">
       <div class="section-head">
         <h2 id="globe-title">Siang dan malam</h2>
-        <p>Bahagian gelap glob ialah kawasan yang sedang malam pada masa yang dipaparkan.</p>
       </div>
       <div id="globe-wrap">
         <canvas id="globe" role="img" aria-label="Glob interaktif menunjukkan waktu semasa bandar utama serta kawasan siang dan malam"></canvas>
@@ -237,7 +234,6 @@
     <section id="fakta" class="section" aria-labelledby="facts-title">
       <div class="section-head">
         <h2 id="facts-title">Fakta zon waktu</h2>
-        <p>Garis zon waktu dilukis oleh kerajaan, dan sebahagiannya dilukis dengan cara yang pelik.</p>
       </div>
       <ul id="facts-list" class="facts">
         <li>
@@ -317,7 +313,7 @@
       <section class="section" aria-labelledby="my-zone-title">
         <div class="section-head">
           <h2 id="my-zone-title">Waktu solat zon anda</h2>
-          <p>Waktu JAKIM ikut zon, bukan ibu negeri. Pilihan anda disimpan dalam pelayar ini.</p>
+          <p class="source">Waktu JAKIM, ikut zon.</p>
         </div>
         <div class="zone-card">
           <div class="zone-pick">
@@ -338,7 +334,6 @@
       <section class="section" aria-labelledby="takwim-title">
         <div class="section-head">
           <h2 id="takwim-title">Takwim Islam</h2>
-          <p>Tarikh Hijri JAKIM, hari kebesaran, puasa sunat dan bulan.</p>
         </div>
         <div id="takwim" class="takwim"></div>
       </section>
@@ -346,7 +341,7 @@
       <section id="ramadan" class="section" aria-labelledby="ramadan-title" hidden>
         <div class="section-head">
           <h2 id="ramadan-title">Ramadan</h2>
-          <p>Waktu imsak dan berbuka JAKIM. Bulan Ramadan ikut takwim JAKIM.</p>
+          <p class="source">Waktu JAKIM.</p>
         </div>
         <div id="my-ramadan"></div>
       </section>
@@ -354,7 +349,7 @@
       <section class="section" aria-labelledby="my-alerts-title">
         <div class="section-head">
           <h2 id="my-alerts-title">Amaran</h2>
-          <p>Amaran cuaca dan gempa bumi rasmi daripada MET Malaysia.</p>
+          <p class="source">Sumber rasmi: MET Malaysia.</p>
         </div>
         <div class="alerts">
           <div id="my-warnings" class="alert-list"></div>
@@ -365,7 +360,7 @@
       <section class="section" aria-labelledby="my-weather-title">
         <div class="section-head">
           <h2 id="my-weather-title">Cuaca setiap negeri</h2>
-          <p>Ramalan MET Malaysia bagi hari ini.</p>
+          <p class="source">Ramalan MET Malaysia.</p>
         </div>
         <div id="my-weather" class="state-weather"></div>
       </section>
@@ -373,7 +368,7 @@
       <section class="section" aria-labelledby="my-prayer-title">
         <div class="section-head">
           <h2 id="my-prayer-title">Waktu solat setiap negeri</h2>
-          <p>Waktu JAKIM bagi ibu negeri setiap negeri. Solat seterusnya ditanda.</p>
+          <p class="source">Waktu JAKIM bagi ibu negeri.</p>
         </div>
         <div class="table-scroll" tabindex="0" role="region" aria-label="Jadual waktu solat setiap negeri"><table id="my-prayers" class="data-table"></table></div>
       </section>
@@ -381,7 +376,7 @@
       <section class="section" aria-labelledby="my-facts-title">
         <div class="section-head">
           <h2 id="my-facts-title">Fakta negeri</h2>
-          <p>Penduduk 2025 (anggaran DOSM) dan keluasan daripada sempadan rasmi DOSM.</p>
+          <p class="source">Penduduk 2025 (anggaran DOSM); keluasan daripada sempadan rasmi DOSM.</p>
         </div>
         <div class="table-scroll" tabindex="0" role="region" aria-label="Jadual fakta negeri"><table id="my-facts" class="data-table"></table></div>
       </section>
@@ -391,7 +386,6 @@
       <section class="section map-section" aria-labelledby="map-title">
         <div class="section-head">
           <h1 id="map-title" class="tab-title">Peta Malaysia</h1>
-          <p>Ibu negeri dan bandar besar Malaysia (zum masuk untuk lebih banyak). Pilih penanda untuk waktu solat, cuaca, kualiti udara dan arah kiblat; negeri yang menerima amaran MET diwarnakan.<span class="pointer-hint"> Seret untuk menggerakkan peta; klik kanan dan seret untuk condong dan putar.</span></p>
         </div>
         <div class="map-tools">
           <button id="map-nearest" type="button" class="btn secondary" data-icon="pin">Bandar terdekat</button>

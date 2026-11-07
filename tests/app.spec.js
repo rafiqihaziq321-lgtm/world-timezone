@@ -2467,7 +2467,7 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       await expect(alerts.getByRole('link', { name: 'Baca amaran' })).toHaveAttribute('href', '#my-alerts-title');
       await expect(alerts.locator('svg')).toHaveAttribute('data-glyph', 'warning');
       await page.getByLabel('Zon JAKIM').selectOption('WLY01'); // MET names it Kuala Lumpur, not the zone's state
-      await expect(alerts).toHaveText(['Amaran Ribut Petir (Waspada)Baca amaran']);
+      await expect(alerts).toHaveText(['Amaran Ribut Petir (Waspada)Tahap: WaspadaBaca amaran']); // the level as a text label
       await page.getByLabel('Zon JAKIM').selectOption('WLY02'); // Labuan: none in force
       await expect(alerts).toHaveCount(0);
     });

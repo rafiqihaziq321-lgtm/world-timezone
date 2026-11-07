@@ -1,6 +1,7 @@
 // MET Malaysia warnings in force, and the states they cover.
 
 import { parseMyt } from './time.js';
+import { el } from './util.js';
 
 export const WARNING_API = 'https://api.data.gov.my/weather/warning';
 // MET warnings in force at `now`, shared by the Malaysia tab and the map.
@@ -30,6 +31,17 @@ export const WARNING_STATE_NAMES = [
   ['W.P. Labuan', /\bLabuan\b/i], ['W.P. Putrajaya', /\bPutrajaya\b/i],
 ];
 export const WARNING_LEVELS = { alert: 'Amaran', severe: 'Buruk', danger: 'Bahaya' };
+// MET's own words for each level, shown as a text label on a warning (not a colour stripe).
+const LEVEL_WORDS = { alert: 'Waspada', severe: 'Buruk', danger: 'Bahaya' };
+
+// "Tahap: Bahaya" as a small label for warning `w`; null for a sea warning, which has no level.
+export function levelTag(w) {
+  const { level } = warningArea(w);
+  if (!level) return null;
+  const tag = el('span', `level-tag level-${level}`, LEVEL_WORDS[level]);
+  tag.prepend(el('span', 'visually-hidden', 'Tahap: '));
+  return tag;
+}
 
 // The states a land warning covers, and how severe it is. Warnings for the
 // sea ("laut bergelora", "perairan") name states only to locate the water,
