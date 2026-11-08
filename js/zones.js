@@ -8,9 +8,9 @@ import { PRAYER_TIMES, hijriParts, nextPrayer, retryButton } from './local-panel
 import { calendarPath, prayerEvents } from './prayer-calendar.js';
 import { locate, locationErrorText } from './qibla.js';
 import { saveState } from './storage.js';
-import { cityDate, formatClock } from './time.js';
+import { HOUR_MS, cityDate, formatClock, zonedTime } from './time.js';
 import { el, fetchJson, renderKeyed } from './util.js';
-import { activeWarnings, levelTag, warningArea } from './warnings.js';
+import { activeWarnings, levelSegments, levelTag, levelWord, warningArea, worstNamedLevel } from './warnings.js';
 
 export const ZONE_API = 'https://api.waktusolat.app';
 
@@ -48,6 +48,15 @@ export function zoneStates(zone) {
   if (zone.code === 'WLY01') return ['W.P. Kuala Lumpur', 'W.P. Putrajaya'];
   if (zone.code === 'WLY02') return ['W.P. Labuan'];
   return [zone.negeri];
+}
+
+// "Kuala Lumpur dan Putrajaya": states as the reader says them.
+export const stateList = (states) => states.map((s) => s.replace(/^W\.P\. /, '')).join(' dan ');
+
+// "1j 40m" until `at` (epoch ms).
+export function waitText(at, now) {
+  const minutes = Math.ceil((at - now.getTime()) / 60000);
+  return [Math.floor(minutes / 60) && `${Math.floor(minutes / 60)}j`, minutes % 60 && `${minutes % 60}m`].filter(Boolean).join(' ') || 'kurang seminit';
 }
 
 // Other parts of the page (the reminders) follow the select's change event,
@@ -123,44 +132,106 @@ export function renderZone(state, now) {
     // The zone is already named in the picker; the line above the times says what comes next.
     const list = el('ul', 'zone-times');
     for (const [field, label] of PRAYER_TIMES) {
-      const item = el('li', field === next ? 'next' : '');
+      const past = today[field] && today[field] * 1000 <= now.getTime();
+      const item = el('li', field === next ? 'next' : past ? 'done' : '');
       item.append(el('span', '', label), el('strong', '', today[field] ? formatClock(state, 'Asia/Kuala_Lumpur', today[field] * 1000) : 'tiada'));
       if (field === next) item.append(el('span', 'visually-hidden', ' (seterusnya)'));
       list.append(item);
     }
     const tomorrow = entry.data.prayers.find((p) => p.day === today.day + 1);
     const ahead = upcoming(state, today, tomorrow, next, now);
-    return ahead ? [ahead, list] : [list];
+    const day = zoneDay(state, today, next, now);
+    return ahead ? [ahead, day, list] : [day, list];
   });
+}
+
+// The zone's day as the sun strip (DESIGN.md, "Jalur zon"), its parts drawn
+// from JAKIM's own times so the marks sit exactly on them: night until Subuh,
+// dawn to Syuruk, day to Maghrib, dusk to Isyak, night again. Decorative: the
+// same times are written in the list under it.
+function zoneDay(state, today, next, now) {
+  const { year, month, day } = cityDate('Asia/Kuala_Lumpur', now);
+  const start = zonedTime('Asia/Kuala_Lumpur', year, month, day, 0, 0);
+  const end = start + 24 * HOUR_MS; // Malaysia keeps no daylight saving
+  const at = (field) => Math.min(end, Math.max(start, today[field] * 1000));
+  const pct = (ms) => `${((ms - start) / (end - start)) * 100}%`;
+  const box = el('div', 'zone-day');
+  box.setAttribute('aria-hidden', 'true');
+  const strip = el('div', 'sun-strip zone-strip');
+  const runs = el('div', 'sun-runs');
+  const edges = [start, at('fajr'), at('syuruk'), at('maghrib'), at('isha'), end];
+  ['night', 'dawn', 'day', 'dusk', 'night'].forEach((phase, i) => {
+    const run = el('span', phase);
+    run.style.width = `${((edges[i + 1] - edges[i]) / (end - start)) * 100}%`;
+    runs.append(run);
+  });
+  strip.append(runs);
+  for (const [field, label] of PRAYER_TIMES) {
+    if (!today[field]) continue;
+    const ms = today[field] * 1000;
+    const mark = el('span', `zone-mark${field === next ? ' next' : ms <= now.getTime() ? ' done' : ''}`);
+    mark.style.left = pct(ms);
+    if (field === next) {
+      // The next one is named on the strip; the flag keeps inside the strip's ends.
+      const share = (ms - start) / (end - start);
+      const flag = el('span', `zone-flag${share < 0.15 ? ' start' : share > 0.85 ? ' end' : ''}`, `${label} ${formatClock(state, 'Asia/Kuala_Lumpur', ms)}`);
+      mark.append(flag);
+    }
+    strip.append(mark);
+  }
+  const nowMark = el('span', 'sun-now');
+  nowMark.style.left = pct(now.getTime());
+  strip.append(nowMark);
+  const axis = el('div', 'zone-axis');
+  for (const h of [0, 6, 12, 18, 24]) axis.append(el('span', '', String(h).padStart(2, '0')));
+  box.append(strip, axis);
+  return box;
 }
 
 // "Zohor dalam 1j 40m (13:10)"; after Isyak, tomorrow's Subuh if the month holds it.
 function upcoming(state, today, tomorrow, next, now) {
   const [field, day] = next ? [next, today] : tomorrow?.fajr ? ['fajr', tomorrow] : [];
   if (!field) return null;
-  const minutes = Math.ceil((day[field] * 1000 - now.getTime()) / 60000);
-  const wait = [Math.floor(minutes / 60) && `${Math.floor(minutes / 60)}j`, minutes % 60 && `${minutes % 60}m`].filter(Boolean).join(' ') || 'kurang seminit';
+  const wait = waitText(day[field] * 1000, now);
   const label = PRAYER_TIMES.find(([f]) => f === field)[1];
+  // The tab's focal point: what comes next and how long until it.
   const line = el('p', 'zone-next');
-  line.append(el('strong', '', `${label}${next ? '' : ' esok'}`), ` dalam ${wait} (${formatClock(state, 'Asia/Kuala_Lumpur', day[field] * 1000)})`);
+  line.append(el('strong', '', `${label}${next ? '' : ' esok'}`), ' dalam ', el('span', 'zone-wait', wait), ' ',
+    el('span', 'zone-at', `(${formatClock(state, 'Asia/Kuala_Lumpur', day[field] * 1000)})`));
   return line;
 }
 
-// MET warnings in force for the zone's state, each linking to the full text.
+// The level meter for the zone's state (DESIGN.md): the worst level MET names,
+// in segments and in words, then each warning in force linking to its card.
 function renderZoneAlerts(state, now) {
   const zone = zoneByCode(state.prayerZone);
-  const { active } = activeWarnings(state, now);
-  const mine = zone ? active.filter((w) => warningArea(w).states.some((s) => zoneStates(zone).includes(s))) : [];
-  renderKeyed(alertsEl, mine.map((w) => `${w.warning_issue?.title_bm}|${w.valid_to}`).join('|'), () => mine.map((w) => {
-    const alert = el('p', `zone-alert level-${warningArea(w).level}`);
-    const more = el('a', '', 'Baca amaran');
-    more.href = '#my-alerts-title';
-    alert.append(icon('warning'), el('strong', '', w.warning_issue?.title_bm || w.heading_bm || 'Amaran MET'));
-    const tag = levelTag(w);
-    if (tag) alert.append(tag);
-    alert.append(more);
-    return alert;
-  }));
+  const { entry, active } = activeWarnings(state, now);
+  const states = zone ? zoneStates(zone) : [];
+  const mine = active.filter((w) => warningArea(w).states.some((s) => states.includes(s)));
+  const key = [zone?.code, entry.status, ...mine.map((w) => `${w.warning_issue?.title_bm}|${w.valid_to}`)].join('|');
+  renderKeyed(alertsEl, key, () => {
+    if (!zone || entry.status !== 'ok') return [];
+    const level = worstNamedLevel(mine);
+    const meter = el('div', `level-meter${mine.length ? '' : ' is-clear'}`);
+    const head = el('p', 'level-head');
+    const where = stateList(states);
+    const words = el('span');
+    words.append(el('strong', '', level ? levelWord(level) : mine.length ? 'Ada amaran' : 'Tiada amaran'), ` untuk ${where}`);
+    head.append(levelSegments(level), words);
+    if (mine.length && !level) head.append(el('span', 'level-none', ' · MET tidak menyatakan tahap'));
+    meter.append(head);
+    for (const w of mine) {
+      const row = el('p', `zone-alert level-${warningArea(w).level}`);
+      const more = el('a', '', 'Baca amaran');
+      more.href = '#my-alerts-title';
+      row.append(el('strong', '', w.warning_issue?.title_bm || w.heading_bm || 'Amaran MET'));
+      const tag = levelTag(w);
+      if (tag) row.append(tag);
+      row.append(more);
+      meter.append(row);
+    }
+    return [meter];
+  });
 }
 
 // The month shown in the dialog, as "YYYY-MM" on the dialog itself.

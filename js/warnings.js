@@ -39,12 +39,33 @@ const LEVEL_WORDS = { alert: 'Waspada', severe: 'Buruk', danger: 'Bahaya' };
 // "Tahap: Bahaya" as a small label for warning `w`, only where MET names the
 // level in its title or heading (a thunderstorm or sea warning names none).
 export function levelTag(w) {
-  const { level } = warningArea(w);
-  const named = /waspada|buruk|bahaya/i.test(`${w.warning_issue?.title_bm ?? ''} ${w.heading_bm ?? ''}`);
-  if (!level || !named) return null;
+  const level = namedLevel(w);
+  if (!level) return null;
   const tag = el('span', `level-tag level-${level}`, LEVEL_WORDS[level]);
   tag.prepend(el('span', 'visually-hidden', 'Tahap: '));
   return tag;
+}
+
+// The level MET names for warning `w`, or null when it names none.
+export function namedLevel(w) {
+  const named = /waspada|buruk|bahaya/i.test(`${w.warning_issue?.title_bm ?? ''} ${w.heading_bm ?? ''}`);
+  return named ? warningArea(w).level : null;
+}
+
+const LEVEL_RANK = { alert: 1, severe: 2, danger: 3 };
+// The worst level named among `warnings`, or null.
+export function worstNamedLevel(warnings) {
+  return warnings.map(namedLevel).filter(Boolean).sort((a, b) => LEVEL_RANK[b] - LEVEL_RANK[a])[0] ?? null;
+}
+export const levelWord = (level) => LEVEL_WORDS[level];
+
+// The level meter (DESIGN.md): three segments, as many filled as the level,
+// in MET's colour for it. Decorative: the level is always written beside it.
+export function levelSegments(level) {
+  const segs = el('span', `level-segs${level ? ` level-${level}` : ''}`);
+  segs.setAttribute('aria-hidden', 'true');
+  for (let i = 1; i <= 3; i++) segs.append(el('span', level && i <= LEVEL_RANK[level] ? 'on' : ''));
+  return segs;
 }
 
 // The states a land warning covers, and how severe it is. Warnings for the

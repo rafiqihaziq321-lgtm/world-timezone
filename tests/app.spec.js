@@ -1436,7 +1436,8 @@ test.describe('susun atur', () => {
     const headings = page.locator('#malaysia h2:visible');
     await expect(headings.first()).toHaveText('Waktu solat zon anda');
     await expect(headings.nth(1)).toHaveText('Takwim Islam'); // the Islamic calendar goes with the prayer times
-    await expect(headings.nth(2)).toHaveText('Amaran');
+    await expect(headings.nth(2)).toHaveText('Negeri hari ini'); // the tile map, then the warnings in full
+    await expect(headings.nth(3)).toHaveText('Amaran');
   });
 });
 
@@ -1957,7 +1958,28 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     await expect(page.locator('#my-quakes .alert')).toHaveCount(1);
     await expect(page.locator('#my-quakes .alert h4')).toHaveText('Magnitud 5.1: Laut Sulawesi');
 
-    await expect(page.locator('#my-weather .weather-tile h3')).toHaveText(['Penang', 'Selangor', 'WP Kuala Lumpur']); // today only
+    await expect(page.locator('#my-weather tbody th')).toHaveText(['Penang', 'Selangor', 'WP Kuala Lumpur']); // today only, in "Lihat jadual"
+
+    // The tile map: 16 states; with no zone chosen, Kuala Lumpur is shown first.
+    const tiles = page.locator('#my-tiles .state-tile');
+    await expect(tiles).toHaveCount(16);
+    await expect(page.locator('#my-tiles [aria-pressed="true"] .tile-code')).toHaveText('KUL');
+    const sgr = tiles.filter({ hasText: 'SGR' });
+    await expect(sgr).toHaveAttribute('aria-label', 'Selangor, Ribut petir di beberapa tempat, amaran Waspada');
+    await expect(sgr.locator('.level-segs.level-alert .on')).toHaveCount(1); // Waspada: one segment of three
+    await expect(tiles.filter({ hasText: 'PNG' }).locator('svg')).toHaveAttribute('data-glyph', 'fog'); // Berjerebu
+    await sgr.click();
+    await expect(sgr).toHaveAttribute('aria-pressed', 'true');
+    await expect(sgr).toBeFocused(); // the tiles are not rebuilt by a choice
+    const detail = page.locator('#my-state');
+    await expect(detail.locator('h3')).toHaveText('Selangor Shah Alam');
+    await expect(detail.locator('h3')).toHaveClass(/reveal/); // a new choice arrives (MOTION 3)
+    await expect(detail.locator('.state-next')).toHaveText('Zohor dalam 7j 10m (13:10, Shah Alam)');
+    await expect(detail.locator('.state-days li')).toHaveText([/Hari ini.*Ribut petir/, /Esok.*Hujan di satu dua tempat/, /Jumaat.*tiada ramalan/]);
+    await expect(detail.locator('.state-alert')).toHaveText(['Amaran Hujan Lebat (Waspada)Tahap: Waspada']);
+    await detail.getByRole('button', { name: 'Lihat daerah dalam senarai amaran' }).click();
+    await expect(page.locator('#alert-search')).toHaveValue('Selangor');
+    await expect(page.locator('#alert-search')).toBeFocused();
 
     const rows = page.locator('#my-prayers tbody tr');
     await expect(rows).toHaveCount(16);
@@ -2231,6 +2253,7 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     test('jadual negeri: lajur negeri kekal semasa diskrol; legenda peta dilipat', async ({ page }) => {
       await mockAll(page);
       await openApp(page, undefined, '#malaysia');
+      await page.locator('.my-tables > summary').click(); // the tables are folded under "Lihat jadual"
       const scroller = page.locator('#my-prayers').locator('xpath=..');
       const first = page.locator('#my-prayers tbody th').first();
       const before = await first.evaluate((el) => el.getBoundingClientRect().left);
@@ -2573,11 +2596,17 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       await expect(alerts).toHaveCount(1); // the Selangor warning
       await expect(alerts).toContainText('Amaran Hujan Lebat (Waspada)');
       await expect(alerts.getByRole('link', { name: 'Baca amaran' })).toHaveAttribute('href', '#my-alerts-title');
-      await expect(alerts.locator('svg')).toHaveAttribute('data-glyph', 'warning');
+      // The level meter: segments filled to the level, and the level in words beside them.
+      const head = page.locator('#zone-alerts .level-head');
+      await expect(head).toHaveText('Waspada untuk Selangor');
+      await expect(head.locator('.level-segs .on')).toHaveCount(1);
       await page.getByLabel('Zon JAKIM').selectOption('WLY01'); // MET names it Kuala Lumpur, not the zone's state
       await expect(alerts).toHaveText(['Amaran Ribut Petir (Waspada)Tahap: WaspadaBaca amaran']); // the level as a text label
+      await expect(head).toHaveText('Waspada untuk Kuala Lumpur dan Putrajaya');
       await page.getByLabel('Zon JAKIM').selectOption('WLY02'); // Labuan: none in force
       await expect(alerts).toHaveCount(0);
+      await expect(head).toHaveText('Tiada amaran untuk Labuan');
+      await expect(head.locator('.level-segs .on')).toHaveCount(0);
     });
 
     test('pilih zon: waktu hari ini untuk zon itu, solat seterusnya ditanda, dan kekal selepas reload', async ({ page }) => {
@@ -2598,6 +2627,12 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       // What comes next, counted down; the zone itself is named in the picker.
       await expect(times.locator('.zone-next')).toHaveText('Zohor dalam 7j 10m (13:10)');
       await expect(times.locator('.zone-name')).toHaveCount(0);
+      // The zone strip: six marks on the day, the next one flagged, the "now" line at 06:00 (a quarter of the way).
+      const strip = times.locator('.zone-strip');
+      await expect(strip.locator('.zone-mark')).toHaveCount(6);
+      await expect(strip.locator('.zone-mark.next .zone-flag')).toHaveText('Zohor 13:10');
+      await expect(strip.locator('.zone-mark.done')).toHaveCount(1); // 06:00: Subuh (05:55) is past
+      expect(parseFloat(await strip.locator('.sun-now').evaluate((el) => el.style.left))).toBeCloseTo(25, 1);
       await expect(times.locator('li')).toHaveText(['Subuh05:55', 'Syuruk07:05', 'Zohor13:10 (seterusnya)', 'Asar16:20', 'Maghrib19:12', 'Isyak20:22']);
       await expect(times.locator('li.next span').first()).toHaveText('Zohor');
       expect(prayerUrls).toContain('https://api.waktusolat.app/v2/solat/SGR03?year=2026&month=10');
@@ -3121,4 +3156,93 @@ test.describe('reka bentuk: jalur matahari, perancang, sasaran sentuh, glob kemu
     expect(await page.locator('#globe').evaluate((el) => el.getBoundingClientRect().height)).toBe(before); // space was kept for it
     await expect(page.locator('#globe-status')).toHaveText('');
   });
+});
+
+test.describe('langit hidup (DESIGN.md)', () => {
+  // Open-Meteo's current weather at every card: `code` is the WMO weather code.
+  const weatherIs = (page, code) => page.route('https://api.open-meteo.com/v1/forecast**', (route) => {
+    const places = (new URL(route.request().url()).searchParams.get('latitude') ?? '').split(',').length;
+    const row = { current: { temperature_2m: 30, weather_code: code, is_day: 1 } };
+    return route.fulfill({ json: places > 1 ? Array(places).fill(row) : row, headers: { 'Access-Control-Allow-Origin': '*' } });
+  });
+
+  test('warna langit ikut matahari di bandar anda dan masa yang dipaparkan; jalur matahari boleh diseret', async ({ page }) => {
+    await openApp(page); // 06:00 in Kuala Lumpur: the hour before sunrise
+    const sky = page.locator('#sky');
+    await expect(sky).toHaveAttribute('aria-hidden', 'true');
+    await expect(sky).toHaveAttribute('data-phase', 'dawn');
+    const top = () => sky.evaluate((el) => el.style.getPropertyValue('--sky-top'));
+    const dawn = await top();
+    await page.locator('#time-slider').fill('24'); // six hours on: midday
+    await expect(sky).toHaveAttribute('data-phase', 'day');
+    expect(await top()).not.toBe(dawn);
+    // Dragging Kuala Lumpur's sun strip to 95% of its day: 22:48, to the quarter hour 22:45.
+    const strip = card(page, 'Asia/Kuala_Lumpur').locator('.sun-strip');
+    await strip.scrollIntoViewIfNeeded();
+    const box = await strip.boundingBox();
+    await page.mouse.move(box.x + box.width * 0.95, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.up();
+    await expect(page.locator('#time-label')).toContainText('22:45 waktu anda');
+    await expect(sky).toHaveAttribute('data-phase', 'night');
+  });
+
+  test('ribut petir: hujan dan kilat bergerak, dan berhenti bila tab tersembunyi atau gerakan dikurangkan', async ({ page }) => {
+    await weatherIs(page, 95);
+    await page.emulateMedia({ reducedMotion: 'no-preference' }); // the suite runs with motion reduced
+    await openApp(page);
+    const sky = page.locator('#sky');
+    await expect(sky).toHaveAttribute('data-weather', 'ribut');
+    await expect(sky).toHaveAttribute('data-animating', 'true');
+    const setHidden = (hidden) => page.evaluate((value) => {
+      Object.defineProperty(document, 'hidden', { value, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }, hidden);
+    await setHidden(true);
+    await expect(sky).toHaveAttribute('data-animating', 'false');
+    await setHidden(false);
+    await expect(sky).toHaveAttribute('data-animating', 'true');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect(sky).toHaveAttribute('data-animating', 'false');
+  });
+
+  test('langit cerah tanpa gerakan tidak menjalankan canvas', async ({ page }) => {
+    await weatherIs(page, 0);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await openApp(page);
+    await expect(page.locator('#sky')).toHaveAttribute('data-weather', 'cerah');
+    await expect(page.locator('#sky')).not.toHaveAttribute('data-animating', 'true');
+  });
+
+  for (const scheme of ['light', 'dark']) {
+    test(`kontras: setiap token teks lulus 4.5:1 pada setiap warna langit (${scheme})`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await openApp(page);
+      const worst = await page.evaluate(() => {
+        const css = getComputedStyle(document.documentElement);
+        const rgb = (name) => css.getPropertyValue(name).trim().match(/[\da-f]{2}/gi).map((h) => parseInt(h, 16));
+        const lum = (c) => c.map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+          .reduce((n, v, i) => n + v * [0.2126, 0.7152, 0.0722][i], 0);
+        const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+        const order = ['night', 'dawn', 'day', 'dusk', 'night'];
+        const skies = [];
+        for (const end of ['top', 'bottom']) {
+          for (let i = 0; i < 4; i++) {
+            const a = rgb(`--sky-${order[i]}-${end}`);
+            const b = rgb(`--sky-${order[i + 1]}-${end}`);
+            skies.push([`${order[i]} ${end}`, a], [`${order[i]}-${order[i + 1]} ${end}`, a.map((v, j) => Math.round((v + b[j]) / 2))]);
+          }
+        }
+        let low = { ratio: Infinity };
+        for (const token of ['--text', '--muted', '--accent-ink', '--sun-ink', '--error']) {
+          for (const [where, sky] of skies) {
+            const r = ratio(rgb(token), sky);
+            if (r < low.ratio) low = { ratio: r, token, where };
+          }
+        }
+        return low;
+      });
+      expect(worst.ratio, `${worst.token} pada ${worst.where}`).toBeGreaterThanOrEqual(4.5);
+    });
+  }
 });

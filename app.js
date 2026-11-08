@@ -8,6 +8,7 @@ import { renderLocalPanel, retryButton } from './js/local-panel.js';
 import { renderFacts, renderMalaysia } from './js/malaysia.js';
 import { plannerTableEl, renderPlanner, setupPlannerDay, setupWorkSettings, showMeeting } from './js/planner.js';
 import { setupMapTools } from './js/qibla.js';
+import { setupSky, updateSky } from './js/sky.js';
 import { checkReminders, setupReminders } from './js/reminders.js';
 import { createCityListLoader, findCity } from './js/search.js';
 import { clearShareParams, copyShareLink, readShareParams } from './js/share.js';
@@ -123,6 +124,9 @@ function tick(state) {
   renderHero(state, now);
   const localOffset = utcOffsetMinutes(LOCAL_ZONE, now);
   const weatherFor = currentWeather(state);
+  // The sky behind the page: the viewer's own city (the first card in their zone with a position).
+  const home = state.cities.find((c) => c.zone === LOCAL_ZONE && c.lat !== null && c.lon !== null) ?? null;
+  updateSky(home, now.getTime(), home && weatherFor(home));
   for (const card of clocksEl.querySelectorAll('.card')) {
     const zone = card.dataset.zone;
     const city = state.cities.find((c) => cityKey(c) === card.dataset.key);
@@ -225,6 +229,7 @@ function init() {
     });
   }
 
+  setupSky();
   const loadCityList = createCityListLoader();
   const saved = loadState();
   const shared = readShareParams();
@@ -249,6 +254,7 @@ function init() {
   if (shared.meeting) showMeeting(state, shared.meeting);
   state.mapView = null; // created the first time the Bandar tab opens
   state.ramadanState = 'W.P. Kuala Lumpur'; // whose imsak and berbuka the Ramadan countdown shows
+  state.stateView = null; // the state tile chosen in the Malaysia tab; null follows the zone
   state.tab = showTab(window.location.hash);
   const countdownSeen = new IntersectionObserver((entries) => {
     if (!entries.some((e) => e.isIntersecting)) return;
@@ -373,6 +379,30 @@ function init() {
   timeResetEl.addEventListener('click', () => {
     stopPlay();
     setViewTime(state, null);
+  });
+  // Dragging a card's sun strip sets the time shown, to the quarter hour; the
+  // slider above does the same from the keyboard.
+  clocksEl.addEventListener('pointerdown', (down) => {
+    const strip = down.target.closest('.sun-strip');
+    if (!strip || down.button !== 0 || !strip.dataset.start) return;
+    down.preventDefault();
+    stopPlay();
+    strip.setPointerCapture(down.pointerId);
+    const follow = (e) => {
+      const box = strip.getBoundingClientRect();
+      const share = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width));
+      const start = Number(strip.dataset.start);
+      setViewTime(state, floorToQuarter(start + share * (Number(strip.dataset.end) - start) + QUARTER_MS / 2));
+    };
+    follow(down);
+    strip.classList.add('is-dragging');
+    strip.addEventListener('pointermove', follow);
+    const end = () => {
+      strip.classList.remove('is-dragging');
+      strip.removeEventListener('pointermove', follow);
+    };
+    strip.addEventListener('pointerup', end, { once: true });
+    strip.addEventListener('pointercancel', end, { once: true });
   });
   // The clocks as a picture to send; drawn by a module loaded on first use.
   document.getElementById('share-image').addEventListener('click', async () => {

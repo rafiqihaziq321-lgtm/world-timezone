@@ -41,6 +41,7 @@
   <link rel="modulepreload" href="js/icons.js">
   <link rel="modulepreload" href="js/jakim-zones.js">
   <link rel="modulepreload" href="js/local-panel.js">
+  <link rel="modulepreload" href="js/moon.js">
   <link rel="modulepreload" href="js/malaysia.js">
   <link rel="modulepreload" href="js/places.js">
   <link rel="modulepreload" href="js/prayer-calendar.js">
@@ -49,6 +50,7 @@
   <link rel="modulepreload" href="js/reminders.js">
   <link rel="modulepreload" href="js/search.js">
   <link rel="modulepreload" href="js/share.js">
+  <link rel="modulepreload" href="js/sky.js">
   <link rel="modulepreload" href="js/storage.js">
   <link rel="modulepreload" href="js/tabs.js">
   <link rel="modulepreload" href="js/theme.js">
@@ -59,6 +61,8 @@
   <link rel="modulepreload" href="js/zones.js">
 </head>
 <body>
+  <!-- The living sky (DESIGN.md, "Langit hidup"): drawn by js/sky.js from the sun, Moon and weather. -->
+  <div id="sky" aria-hidden="true"><canvas></canvas></div>
   <a class="skip-link" href="#kandungan">Langkau ke kandungan</a>
   <a class="skip-link" href="#bandar">Langkau ke senarai bandar</a>
   <a class="skip-link" href="#planner-table">Langkau ke jadual perancang</a>
@@ -322,13 +326,14 @@
             <button id="zone-locate" type="button" class="secondary" data-icon="pin">Guna lokasi saya</button>
           </div>
           <p id="zone-status" class="local-status" role="status"></p>
-          <div id="zone-alerts"></div>
+          <!-- The next prayer first (the one thing to see), then the day's six times, then warnings and tools. -->
           <div id="zone-times"></div>
+          <div id="zone-alerts"></div>
           <div class="zone-actions">
             <button id="zone-month" type="button" class="secondary" data-icon="calendar">Jadual sebulan</button>
           </div>
+          <div id="prayer-reminder" class="reminder"></div>
         </div>
-        <div id="prayer-reminder" class="reminder"></div>
       </section>
 
       <section class="section" aria-labelledby="takwim-title">
@@ -344,6 +349,21 @@
           <p class="source">Waktu JAKIM.</p>
         </div>
         <div id="my-ramadan"></div>
+      </section>
+
+      <!-- The states as a tile map (DESIGN.md, "Peta jubin negeri"): pick one for its details. -->
+      <section class="section" aria-labelledby="my-states-title">
+        <div class="section-head">
+          <h2 id="my-states-title">Negeri hari ini</h2>
+          <p class="source">Ramalan dan amaran MET Malaysia; waktu JAKIM bagi ibu negeri.</p>
+        </div>
+        <div class="state-view">
+          <div class="state-map">
+            <div id="my-tiles" class="state-tiles" role="group" aria-label="Pilih negeri"></div>
+            <p class="tile-key"><span><span class="level-segs level-alert" aria-hidden="true"><span class="on"></span><span></span><span></span></span>Tahap amaran MET: Waspada, Buruk, Bahaya</span> <span data-icon="warning">Amaran tanpa tahap</span> <span data-icon="pin">Negeri zon anda</span></p>
+          </div>
+          <div id="my-state" class="state-detail"></div>
+        </div>
       </section>
 
       <section class="section" aria-labelledby="my-alerts-title">
@@ -362,28 +382,20 @@
         </div>
       </section>
 
-      <section class="section" aria-labelledby="my-weather-title">
-        <div class="section-head">
-          <h2 id="my-weather-title">Cuaca setiap negeri</h2>
+      <!-- Every state at once, as exact figures: folded, for reference. -->
+      <section class="section" aria-label="Jadual setiap negeri">
+        <details class="my-tables">
+          <summary>Lihat jadual: cuaca, waktu solat dan fakta setiap negeri</summary>
+          <h3 id="my-weather-title">Cuaca hari ini</h3>
           <p class="source">Ramalan MET Malaysia.</p>
-        </div>
-        <div id="my-weather" class="state-weather"></div>
-      </section>
-
-      <section class="section" aria-labelledby="my-prayer-title">
-        <div class="section-head">
-          <h2 id="my-prayer-title">Waktu solat setiap negeri</h2>
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="my-weather-title"><table id="my-weather" class="data-table"></table></div>
+          <h3 id="my-prayer-title">Waktu solat setiap negeri</h3>
           <p class="source">Waktu JAKIM bagi ibu negeri.</p>
-        </div>
-        <div class="table-scroll" tabindex="0" role="region" aria-label="Jadual waktu solat setiap negeri"><table id="my-prayers" class="data-table"></table></div>
-      </section>
-
-      <section class="section" aria-labelledby="my-facts-title">
-        <div class="section-head">
-          <h2 id="my-facts-title">Fakta negeri</h2>
+          <div class="table-scroll" tabindex="0" role="region" aria-label="Jadual waktu solat setiap negeri"><table id="my-prayers" class="data-table"></table></div>
+          <h3 id="my-facts-title">Fakta negeri</h3>
           <p class="source">Penduduk 2025 (anggaran DOSM); keluasan daripada sempadan rasmi DOSM.</p>
-        </div>
-        <div class="table-scroll" tabindex="0" role="region" aria-label="Jadual fakta negeri"><table id="my-facts" class="data-table"></table></div>
+          <div class="table-scroll" tabindex="0" role="region" aria-label="Jadual fakta negeri"><table id="my-facts" class="data-table"></table></div>
+        </details>
       </section>
     </div>
 
