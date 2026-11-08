@@ -7,6 +7,17 @@ const APP_URL = 'index.html'; // relative to baseURL (the local test server)
 const STORAGE_KEY = 'world-timezone:v1';
 // 22:00:07 UTC = 06:00:07 Wed in Kuala Lumpur (London on BST, New York on EDT).
 const FIXED_NOW = new Date('2026-10-13T22:00:07Z');
+// data/banjir.json as scripts/build-banjir.mjs writes it: every state JPS
+// has a table for, read 20 minutes ago, `above` the stations past Normal.
+const FLOOD_STATES = ['Johor', 'Kedah', 'Kelantan', 'Melaka', 'Negeri Sembilan', 'Pahang', 'Perlis', 'Pulau Pinang', 'Perak',
+  'W.P. Putrajaya', 'Sabah', 'Selangor', 'Sarawak', 'Terengganu', 'W.P. Kuala Lumpur'];
+function floodFile(above = {}, readAt = new Date(FIXED_NOW.getTime() - 20 * 60000)) {
+  const at = readAt.toISOString();
+  return {
+    source: 'https://publicinfobanjir.water.gov.my/', built: at, missing: [],
+    states: Object.fromEntries(FLOOD_STATES.map((n) => [n, { fetched: at, stations: n === 'W.P. Putrajaya' ? 0 : 20, above: above[n] ?? [] }])),
+  };
+}
 
 // Every test also fails if the page logs an error or warning, unless the test
 // declares it with test.use({ expectedConsole: [/pattern/] }).
@@ -18,6 +29,8 @@ const test = base.extend({
     await page.route((url) => url.hostname !== 'localhost', (route) => route.fulfill({
       json: [], headers: { 'Access-Control-Allow-Origin': '*' },
     }));
+    // Built only on deploy, so never on the test server: every river normal, unless a test routes its own.
+    await page.route('**/data/banjir.json', (route) => route.fulfill({ json: floodFile() }));
     const problems = [];
     page.on('pageerror', (err) => problems.push(err.message));
     page.on('console', (msg) => {
@@ -2599,7 +2612,7 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       await expect(alerts).toContainText('Amaran Hujan Lebat (Waspada)');
       await expect(alerts.getByRole('link', { name: 'Baca amaran' })).toHaveAttribute('href', '#my-alerts-title');
       // The level meter: segments filled to the level, and the level in words beside them.
-      const head = page.locator('#zone-alerts .level-head');
+      const head = page.locator('#zone-alerts .level-meter:not(.flood-meter) .level-head');
       await expect(head).toHaveText('Waspada untuk Selangor');
       await expect(head.locator('.level-segs .on')).toHaveCount(1);
       await page.getByLabel('Zon JAKIM').selectOption('WLY01'); // MET names it Kuala Lumpur, not the zone's state
@@ -2609,6 +2622,82 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       await expect(alerts).toHaveCount(0);
       await expect(head).toHaveText('Tiada amaran untuk Labuan');
       await expect(head.locator('.level-segs .on')).toHaveCount(0);
+    });
+
+    // JPS readings from 8 Nov 2026, the levels as JPS itself marked them.
+    const batu = { name: 'Sg. Batu di Emp. Batu', district: 'Gombak (WPKL)', river: 'Sg. Batu', level: 'waspada', wl: 103.14, thresholds: { waspada: 103.1, amaran: 104.1, bahaya: 104.8 }, at: '2026-10-13T21:35:00.000Z' };
+    const tua = { ...batu, name: 'Sg. Tua di Emp. Batu', wl: 103.19 };
+    const perak = [
+      { name: 'Sg. Bidor di Changkat Jong', district: 'Hilir Perak', river: 'Sg. Bidor', level: 'bahaya', wl: 3.7, thresholds: { waspada: 3.1, amaran: 3.22, bahaya: 3.5 }, at: '2026-10-13T21:30:00.000Z' },
+      { name: 'Sg. Kurau di Kolam Air Bukit Merah', district: 'Kerian', river: 'Sg. Kurau', level: 'amaran', wl: 9.09, thresholds: { waspada: 9, amaran: 9.04, bahaya: 9.14 }, at: '2026-10-13T21:30:00.000Z' },
+      { name: 'Sg. Kampar di Kg. Baru Kuala Dipang (RHN)', district: 'Kampar', river: 'Sg. Kampar', level: 'waspada', wl: 22.01, thresholds: { waspada: 22, amaran: 22.2, bahaya: 23.4 }, at: '2026-10-13T21:30:00.000Z' },
+    ];
+
+    test('aras sungai JPS: kad zon, jubin dan panel negeri menunjukkan stesen melebihi Normal', async ({ page }) => {
+      await mockAll(page);
+      await page.route('**/data/banjir.json', (route) => route.fulfill({ json: floodFile({ 'W.P. Kuala Lumpur': [batu, tua], Perak: perak }) }));
+      await openApp(page, { zones: ['Asia/Kuala_Lumpur'], hour24: true, prayerZone: 'WLY01' }, '#malaysia');
+      // The zone card: a second meter, JPS's level drawn as MET's, each station read against its threshold.
+      const meter = page.locator('#zone-alerts .flood-meter');
+      await expect(meter.locator('.level-head')).toHaveText('Waspada aras sungai di 2 daripada 20 stesen JPS, Kuala Lumpur dan Putrajaya');
+      await expect(meter.locator('.level-head .level-segs.level-alert .on')).toHaveCount(1);
+      await expect(meter.locator('.flood-station')).toHaveText([
+        'Sg. Batu di Emp. Batu, Gombak (WPKL)Waspada: 103.14 m (ambang 103.10 m), 05:35',
+        'Sg. Tua di Emp. Batu, Gombak (WPKL)Waspada: 103.19 m (ambang 103.10 m), 05:35',
+      ]);
+      await expect(meter.locator('.flood-source')).toHaveText('Aras sungai JPS, dikemas kini 05:40.');
+      await expect(meter.getByRole('link', { name: 'JPS' })).toHaveAttribute('href', 'https://publicinfobanjir.water.gov.my/');
+
+      // The tiles: a wave on each state with a river past Normal, the level read out.
+      const tiles = page.locator('#my-tiles .state-tile');
+      await expect(tiles.locator('.tile-flood')).toHaveCount(2);
+      const prk = tiles.filter({ hasText: 'PRK' });
+      await expect(prk).toHaveAttribute('aria-label', /aras sungai Bahaya di 3 stesen/);
+      await expect(tiles.filter({ hasText: 'KTN' }).locator('.tile-flood')).toHaveCount(0);
+
+      // The state panel: worst first, all three levels in segments and words.
+      await prk.click();
+      const rivers = page.locator('#my-state .state-rivers');
+      await expect(rivers.locator('.level-head')).toHaveText('Bahaya aras sungai di 3 daripada 20 stesen JPS, Perak');
+      await expect(rivers.locator('.level-head .level-segs.level-danger .on')).toHaveCount(3);
+      await expect(rivers.locator('.flood-reading strong')).toHaveText(['Bahaya:', 'Amaran:', 'Waspada:']);
+      await expect(rivers.locator('.flood-station .level-segs .on')).toHaveCount(3 + 2 + 1);
+
+      await tiles.filter({ hasText: 'KTN' }).click();
+      await expect(rivers.locator('.level-head')).toHaveText('Aras sungai normal di Kelantan (20 stesen JPS)');
+      await expect(rivers.locator('.level-head .level-segs .on')).toHaveCount(0);
+      await tiles.filter({ hasText: 'LBN' }).click(); // JPS has no table for Labuan
+      await expect(rivers.locator('.level-head')).toHaveText('Tiada data aras sungai JPS untuk Labuan');
+      await expect(rivers.locator('.flood-source')).toHaveCount(0);
+    });
+
+    test('aras sungai JPS: data lebih 3 jam dinyatakan, dan stesen ke-4 dan seterusnya dilipat dalam kad zon', async ({ page }) => {
+      await mockAll(page);
+      const many = Array.from({ length: 5 }, (_, i) => ({ ...batu, name: `Stesen ${i + 1}` }));
+      await page.route('**/data/banjir.json', (route) => route.fulfill({ json: floodFile({ 'W.P. Kuala Lumpur': many }, new Date(FIXED_NOW.getTime() - 4 * 3600000)) }));
+      await openApp(page, { zones: ['Asia/Kuala_Lumpur'], hour24: true, prayerZone: 'WLY01' }, '#malaysia');
+      const meter = page.locator('#zone-alerts .flood-meter');
+      await expect(meter.locator('.flood-stations').first().locator('.flood-station')).toHaveCount(3);
+      await expect(meter.locator('.flood-more summary')).toHaveText('2 stesen lagi');
+      await expect(meter.locator('.flood-source')).toHaveClass(/is-stale/);
+      await expect(meter.locator('.flood-source')).toHaveText(/^Data JPS lebih 3 jam lalu \(14 Okt,? 02:00\); semak laman JPS untuk bacaan terkini\.$/);
+    });
+
+    test.describe(() => {
+      test.use({ expectedConsole: [/status of 500/] });
+      test('aras sungai JPS gagal dimuat: panel negeri boleh cuba lagi, kad zon tidak menunjukkan apa-apa', async ({ page }) => {
+        await mockAll(page);
+        let fail = true;
+        await page.route('**/data/banjir.json', (route) => (fail ? route.fulfill({ status: 500, body: '' }) : route.fulfill({ json: floodFile({ 'W.P. Kuala Lumpur': [batu] }) })));
+        await openApp(page, { zones: ['Asia/Kuala_Lumpur'], hour24: true, prayerZone: 'WLY01' }, '#malaysia');
+        const rivers = page.locator('#my-state .state-rivers');
+        await expect(rivers).toContainText('Aras sungai tidak dapat dimuat.');
+        await expect(page.locator('#zone-alerts .flood-meter')).toHaveCount(0);
+        fail = false;
+        await rivers.getByRole('button', { name: /Cuba lagi/ }).click();
+        await expect(rivers.locator('.flood-station')).toHaveCount(1);
+        await expect(page.locator('#zone-alerts .flood-station')).toHaveCount(1);
+      });
     });
 
     test('pilih zon: waktu hari ini untuk zon itu, solat seterusnya ditanda, dan kekal selepas reload', async ({ page }) => {
@@ -3004,8 +3093,9 @@ test.describe('kalendar langganan: skrip binaan', () => {
   const { execFile } = require('node:child_process');
 
   // Two days a month for every zone; `failing` zones answer 500, and
-  // `onceFailing` ones only to their first request.
-  async function standIn(failing, onceFailing = []) {
+  // `onceFailing` ones only to their first request. The published site has
+  // JHR01's calendar, or every zone's with `publishedAll`.
+  async function standIn(failing, onceFailing = [], publishedAll = false) {
     const seen = [];
     const server = http.createServer((req, res) => {
       const url = new URL(req.url, 'http://x');
@@ -3016,14 +3106,14 @@ test.describe('kalendar langganan: skrip binaan', () => {
         const at = (day, hh, mm) => Date.UTC(Number(url.searchParams.get('year')), Number(url.searchParams.get('month')) - 1, day, hh - 8, mm) / 1000;
         const prayers = [1, 2].map((day) => ({ day, fajr: at(day, 5, 55), syuruk: at(day, 7, 5), dhuhr: at(day, 13, 10), asr: at(day, 16, 20), maghrib: at(day, 19, 12), isha: at(day, 20, 22) }));
         res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ zone, prayers }));
-      } else if (url.pathname === '/laman/kalendar/JHR01.ics') {
-        res.writeHead(200, { 'Content-Type': 'text/calendar' }).end('SALINAN-LAMA-JHR01');
+      } else if (url.pathname === '/laman/kalendar/JHR01.ics' || (publishedAll && url.pathname.startsWith('/laman/kalendar/'))) {
+        res.writeHead(200, { 'Content-Type': 'text/calendar' }).end(`SALINAN-LAMA-${url.pathname.match(/(\w+)\.ics$/)[1]}`);
       } else {
         res.writeHead(zone ? 500 : 404).end();
       }
     });
     await new Promise((resolve) => { server.listen(0, '127.0.0.1', resolve); });
-    return { server, base: `http://127.0.0.1:${server.address().port}` };
+    return { server, base: `http://127.0.0.1:${server.address().port}`, seen };
   }
 
   // Resolves with the exit code and output, whether or not the script fails.
@@ -3056,6 +3146,23 @@ test.describe('kalendar langganan: skrip binaan', () => {
     }
   });
 
+  test('--copy (binaan 30 minit untuk aras sungai): setiap kalendar disalin dari laman, API tidak ditanya', async ({}, testInfo) => {
+    const { server, base, seen } = await standIn([], [], true);
+    try {
+      const out = testInfo.outputPath('salin');
+      const run = await build(base, [out, '--previous', `${base}/laman/`, '--copy']);
+      expect(run.code, run.stderr).toBe(0);
+      expect(run.stdout).toContain('60 calendars in');
+      expect(run.stdout).toContain('60 kept from the published site');
+      expect(fs.readFileSync(path.join(out, 'WLY01.ics'), 'utf8')).toBe('SALINAN-LAMA-WLY01');
+      expect(seen).toEqual([]);
+      const alone = await build(base, [testInfo.outputPath('salin-tanpa-laman'), '--copy']); // --copy needs --previous
+      expect(alone.code).toBe(2);
+    } finally {
+      server.close();
+    }
+  });
+
   test('zon gagal tanpa salinan yang boleh dikekalkan: binaan gagal', async ({}, testInfo) => {
     const { server, base } = await standIn(['JHR01', 'KDH02']);
     try {
@@ -3065,6 +3172,70 @@ test.describe('kalendar langganan: skrip binaan', () => {
       const missing = await build(base, [testInfo.outputPath('salinan-tiada'), '--previous', `${base}/laman/`]);
       expect(missing.code).not.toBe(0);
       expect(missing.stderr).toContain('KDH02: HTTP 500, and no published copy to keep (HTTP 404)');
+    } finally {
+      server.close();
+    }
+  });
+});
+
+// scripts/build-banjir.mjs, as .github/workflows/pages.yml runs it, against
+// real JPS tables saved on 8 Nov 2026 (tests/fixtures/jps-*.html).
+test.describe('aras sungai JPS: skrip binaan', () => {
+  const http = require('node:http');
+  const fs = require('node:fs');
+  const { execFile } = require('node:child_process');
+  const fixture = (code) => fs.readFileSync(`tests/fixtures/jps-${code}.html`, 'utf8');
+  const kept = { fetched: '2026-11-08T08:00:00.000Z', stations: 4, above: [] };
+
+  // Kuala Lumpur and Perak answer with their saved tables, Sabah always fails,
+  // Johor answers with a page that is not a table, the rest with Kelantan's.
+  async function standIn() {
+    const server = http.createServer((req, res) => {
+      const url = new URL(req.url, 'http://x');
+      if (url.pathname === '/laman/data/banjir.json') {
+        res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ states: { Sabah: kept } }));
+        return;
+      }
+      const code = url.pathname === '/aras-air/data-paras-air/aras-air-data/' && url.searchParams.get('state');
+      if (!code || code === 'SAB') res.writeHead(code ? 500 : 404).end();
+      else if (code === 'JHR') res.writeHead(200, { 'Content-Type': 'text/html' }).end('<p>Sedang diselenggara</p>');
+      else res.writeHead(200, { 'Content-Type': 'text/html' }).end(fixture({ WLH: 'wlh', PRK: 'prk' }[code] ?? 'kel'));
+    });
+    await new Promise((resolve) => { server.listen(0, '127.0.0.1', resolve); });
+    return { server, base: `http://127.0.0.1:${server.address().port}` };
+  }
+
+  const build = (base, args) => new Promise((resolve) => {
+    execFile(process.execPath, ['--disable-warning=MODULE_TYPELESS_PACKAGE_JSON', 'scripts/build-banjir.mjs', ...args],
+      { env: { ...process.env, JPS_BASE: base, RETRY_MS: '1' } },
+      (err, stdout, stderr) => resolve({ code: err ? err.code : 0, stdout, stderr }));
+  });
+
+  test('tahap dikira daripada ambang JPS sendiri; negeri gagal kekal dengan salinan terbit atau disenaraikan hilang', async ({}, testInfo) => {
+    const { server, base } = await standIn();
+    try {
+      const out = testInfo.outputPath('banjir.json');
+      const run = await build(base, [out, '--previous', `${base}/laman/`]);
+      expect(run.code, run.stderr).toBe(0);
+      expect(run.stderr).toContain('SAB: HTTP 500; keeping the published copy');
+      expect(run.stderr).toContain('JHR: not a JPS water level table; no published copy to keep');
+      const data = JSON.parse(fs.readFileSync(out, 'utf8'));
+      expect(data.missing).toEqual(['Johor']); // never reported as "all clear"
+      expect(data.states.Sabah).toEqual(kept); // with its own reading time, so the page can say how old it is
+
+      // The same stations JPS itself colours on its page, level for level.
+      for (const [name, code] of [['W.P. Kuala Lumpur', 'wlh'], ['Perak', 'prk'], ['Kelantan', 'kel']]) {
+        const marked = (id) => (fixture(code).match(new RegExp(`data-th='wl' id='${id}'`, 'g')) ?? []).length;
+        const count = (level) => data.states[name].above.filter((s) => s.level === level).length;
+        expect([count('waspada'), count('amaran'), count('bahaya')], name).toEqual([marked('alert'), marked('warning'), marked('danger')]);
+      }
+      expect(data.states.Kelantan).toMatchObject({ stations: 35, above: [] });
+      expect(data.states['W.P. Kuala Lumpur'].stations).toBe(39);
+      expect(data.states['W.P. Kuala Lumpur'].above[1]).toEqual({
+        name: 'Sg. Batu di Emp. Batu', district: 'Gombak (WPKL)', river: 'Sg. Batu', level: 'waspada', wl: 103.14,
+        thresholds: { waspada: 103.1, amaran: 104.1, bahaya: 104.8 }, at: '2026-11-08T10:05:00.000Z',
+      });
+      expect(data.states.Perak.above.map((s) => s.level)).toEqual(['bahaya', 'amaran', 'waspada']); // worst first
     } finally {
       server.close();
     }

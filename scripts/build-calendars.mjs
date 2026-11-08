@@ -2,11 +2,13 @@
 // Malaysia, as the calendars people subscribe to from the month dialog.
 // .github/workflows/pages.yml runs it before each deploy:
 //
-//   node scripts/build-calendars.mjs _site/kalendar --previous https://<site>/
+//   node scripts/build-calendars.mjs _site/kalendar --previous https://<site>/ [--copy]
 //
 // A zone whose times cannot be fetched keeps the copy already published at
 // --previous, so subscribers never lose their events to an API outage; with
-// neither, the build fails and the site stays as it was.
+// neither, the build fails and the site stays as it was. --copy keeps every
+// published calendar without asking the API: the deploys between the daily
+// rebuilds, which only refresh the flood data.
 // ZONE_API and RETRY_MS (ms before the first retry) are for tests.
 
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -16,9 +18,9 @@ import { JAKIM_ZONES } from '../js/jakim-zones.js';
 import { calendarName, calendarPath, prayerEvents } from '../js/prayer-calendar.js';
 import { cityDate } from '../js/time.js';
 
-const [outDir, flag, previous] = process.argv.slice(2);
-if (!outDir || (flag !== undefined && (flag !== '--previous' || !previous))) {
-  console.error('Usage: node scripts/build-calendars.mjs <out-dir> [--previous <published-site-url>]');
+const [outDir, flag, previous, copy] = process.argv.slice(2);
+if (!outDir || (flag !== undefined && (flag !== '--previous' || !previous)) || (copy !== undefined && copy !== '--copy')) {
+  console.error('Usage: node scripts/build-calendars.mjs <out-dir> [--previous <published-site-url> [--copy]]');
   process.exit(2);
 }
 const api = process.env.ZONE_API ?? 'https://api.waktusolat.app';
@@ -43,20 +45,30 @@ async function fetchMonth(code, y, m) {
   }
 }
 
+async function publishedCalendar(code, why) {
+  const res = await fetch(new URL(calendarPath(code), previous));
+  if (!res.ok) throw new Error(`${code}: ${why}, and no published copy to keep (HTTP ${res.status})`);
+  return res.text();
+}
+
 await mkdir(outDir, { recursive: true });
 let kept = 0;
 for (const zone of JAKIM_ZONES) {
   const file = join(outDir, `${zone.code}.ics`);
+  if (copy) {
+    await writeFile(file, await publishedCalendar(zone.code, 'copying'));
+    kept += 1;
+    continue;
+  }
   try {
     const events = [];
     for (const m of months) events.push(...prayerEvents(zone, m.year, m.month, await fetchMonth(zone.code, m.year, m.month)));
     await writeFile(file, icsCalendar(events, now, { name: calendarName(zone), refreshHours: 12 }));
   } catch (err) {
     if (!previous) throw new Error(`${zone.code}: ${err.message}`);
-    const res = await fetch(new URL(calendarPath(zone.code), previous));
-    if (!res.ok) throw new Error(`${zone.code}: ${err.message}, and no published copy to keep (HTTP ${res.status})`);
+    const text = await publishedCalendar(zone.code, err.message);
     console.warn(`${zone.code}: ${err.message}; keeping the published copy`);
-    await writeFile(file, await res.text());
+    await writeFile(file, text);
     kept += 1;
   }
 }

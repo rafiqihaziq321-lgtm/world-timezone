@@ -5,6 +5,7 @@ import { downloadIcs, icsCalendar } from './calendar.js';
 import { icon } from './icons.js';
 import { JAKIM_ZONES, zoneByCode } from './jakim-zones.js';
 import { PRAYER_TIMES, hijriParts, nextPrayer, retryButton } from './local-panel.js';
+import { floodData, floodKey, floodMeter } from './floods.js';
 import { calendarPath, prayerEvents } from './prayer-calendar.js';
 import { locate, locationErrorText } from './qibla.js';
 import { saveState } from './storage.js';
@@ -201,16 +202,20 @@ function upcoming(state, today, tomorrow, next, now) {
   return line;
 }
 
-// The level meter for the zone's state (DESIGN.md): the worst level MET names,
-// in segments and in words, then each warning in force linking to its card.
+// The level meters for the zone's state (DESIGN.md): the worst level MET names,
+// in segments and in words, then each warning in force linking to its card;
+// then JPS's river stations above Normal there.
 function renderZoneAlerts(state, now) {
   const zone = zoneByCode(state.prayerZone);
   const { entry, active } = activeWarnings(state, now);
   const states = zone ? zoneStates(zone) : [];
   const mine = active.filter((w) => warningArea(w).states.some((s) => states.includes(s)));
-  const key = [zone?.code, entry.status, ...mine.map((w) => `${w.warning_issue?.title_bm}|${w.valid_to}`)].join('|');
+  const flood = floodData(state);
+  const key = [zone?.code, entry.status, floodKey(state, flood.entry, states, now), ...mine.map((w) => `${w.warning_issue?.title_bm}|${w.valid_to}`)].join('|');
   renderKeyed(alertsEl, key, () => {
-    if (!zone || entry.status !== 'ok') return [];
+    if (!zone) return [];
+    const rivers = flood.entry.status === 'ok' ? [floodMeter(state, flood.entry.data, states, stateList(states), now, 3)] : [];
+    if (entry.status !== 'ok') return rivers;
     const level = worstNamedLevel(mine);
     const meter = el('div', `level-meter${mine.length ? '' : ' is-clear'}`);
     const head = el('p', 'level-head');
@@ -230,7 +235,7 @@ function renderZoneAlerts(state, now) {
       row.append(more);
       meter.append(row);
     }
-    return [meter];
+    return [meter, ...rivers];
   });
 }
 

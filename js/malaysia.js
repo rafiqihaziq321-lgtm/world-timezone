@@ -1,5 +1,6 @@
 // The Malaysia tab: warnings, earthquakes, weather, prayer times, Ramadan, facts.
 
+import { floodData, floodKey, floodMeter, floodStations, floodWord, worstFlood } from './floods.js';
 import { icon } from './icons.js';
 import { PRAYER_TIMES, WEATHER_API, hijriParts, nextPrayer, prayerFor, retryButton, weatherIcon } from './local-panel.js';
 import { makeCity } from './storage.js';
@@ -427,7 +428,9 @@ function renderStates(state, now, { forecasts, active, warnings, myStates, praye
   const chosen = state.stateView ?? myStates[0] ?? 'W.P. Kuala Lumpur';
   const rows = forecasts.entry.status === 'ok' && Array.isArray(forecasts.entry.data) ? forecasts.entry.data : [];
   const tilesEl = document.getElementById('my-tiles');
-  const tileKey = [forecasts.key, forecasts.entry.status, warnings.status, myStates.join(), ...active.map((w) => `${w.warning_issue?.issued}|${w.valid_to}`)].join('|');
+  const flood = floodData(state);
+  const rivers = flood.entry.status === 'ok' ? flood.entry.data : null;
+  const tileKey = [forecasts.key, forecasts.entry.status, warnings.status, flood.entry.status, rivers?.built, myStates.join(), ...active.map((w) => `${w.warning_issue?.issued}|${w.valid_to}`)].join('|');
   // Rebuilt only when the data changes: choosing a tile keeps its focus.
   renderKeyed(tilesEl, tileKey, () => MALAYSIA_STATES.map((s) => {
     const [code, col, row, span = 1] = STATE_TILES[s.state];
@@ -435,6 +438,7 @@ function renderStates(state, now, { forecasts, active, warnings, myStates, praye
     const summary = today ? today.summary_forecast || today.afternoon_forecast || '' : '';
     const ws = warningsFor(active, s.state);
     const level = worstNamedLevel(ws);
+    const high = floodStations(rivers, [s.state]) ?? [];
     const tile = el('button', `state-tile${myStates.includes(s.state) ? ' is-mine' : ''}`);
     tile.type = 'button';
     tile.dataset.state = s.state;
@@ -442,11 +446,13 @@ function renderStates(state, now, { forecasts, active, warnings, myStates, praye
     tile.setAttribute('aria-controls', 'my-state');
     // Its name and what the marks say, read out in full.
     const said = [s.state.replace(/^W\.P\. /, ''), summary || (forecasts.entry.status === 'ok' ? 'tiada ramalan' : ''),
-      ws.length ? (level ? `amaran ${levelWord(level)}` : 'ada amaran') : 'tiada amaran', myStates.includes(s.state) ? 'negeri zon anda' : ''];
+      ws.length ? (level ? `amaran ${levelWord(level)}` : 'ada amaran') : 'tiada amaran',
+      high.length ? `aras sungai ${floodWord(worstFlood(high))} di ${high.length} stesen` : '', myStates.includes(s.state) ? 'negeri zon anda' : ''];
     tile.setAttribute('aria-label', said.filter(Boolean).join(', '));
     tile.title = said.filter(Boolean).join(' · ');
     const mark = el('span', 'tile-weather');
     if (today) mark.append(weatherIcon(summary));
+    if (high.length) mark.append(icon('flood', 'tile-flood'));
     const codeEl = el('span', 'tile-code', code);
     codeEl.translate = false; // an identifier, not words to translate
     tile.append(codeEl, mark);
@@ -470,7 +476,7 @@ function renderStates(state, now, { forecasts, active, warnings, myStates, praye
   // A newly chosen state arrives (DESIGN.md, MOTION 3); the minute's redraw does not move.
   const fresh = detailEl.dataset.shown !== undefined && detailEl.dataset.shown !== chosen;
   detailEl.dataset.shown = chosen;
-  renderKeyed(detailEl, [chosen, tileKey, p.key, p.entry.status, minute, state.hour24, state.tempUnit].join('|'), () => {
+  renderKeyed(detailEl, [chosen, tileKey, floodKey(state, flood.entry, [chosen], now), p.key, p.entry.status, minute, state.hour24, state.tempUnit].join('|'), () => {
     const head = el('h3', '', s.state.replace(/^W\.P\. /, ''));
     head.append(' ', el('small', '', s.capital));
     const out = [head];
@@ -530,6 +536,12 @@ function renderStates(state, now, { forecasts, active, warnings, myStates, praye
       alerts.append(find);
     }
     out.push(alerts);
+
+    // JPS's river stations above Normal there.
+    const riversEl = el('div', 'state-rivers');
+    if (rivers) riversEl.append(floodMeter(state, rivers, [chosen], stateList([chosen]), now, 8));
+    else riversEl.append(statusLine(state, flood.entry, flood.key, 'Aras sungai'));
+    out.push(riversEl);
     if (fresh) for (const node of out) node.classList.add('reveal');
     return out;
   });
