@@ -2010,7 +2010,9 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     await expect(byCapital('George Town').locator('.city-now')).toContainText('Berjerebu');
     expect(calls.wiki).toBe(2); // all 16 photos and credits in two batched requests
     // data.gov.my allows 4 requests a minute: all states, every location today, and warnings.
-    expect(calls.dataGov).toHaveLength(3);
+    // The last two are asked for by the 3D map once it is ready, and WebGL takes its own time,
+    // so wait for them rather than count straight away (counting early failed 6 runs in 8).
+    await expect.poll(() => calls.dataGov.length, { timeout: 15000 }).toBe(3);
 
     await byCapital('Kuala Lumpur').locator('.city-open').click();
     const dialog = page.locator('#city-dialog');
