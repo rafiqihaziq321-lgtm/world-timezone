@@ -70,7 +70,7 @@ Semua pasangan di bawah disemak dengan `contrast-check.py`: 35 lulus, 0 gagal.
 | `--met-bahaya` | `#DC2626` | `#F87171` | Tahap amaran MET Bahaya (merah), segmen meter tahap sahaja |
 | `--seg-edge` | `#134E4A` | `#E6F2F0` | Garis tepi segmen yang diisi |
 
-Warna tahap MET (diluluskan pemilik, 7 Nov 2026): tiga warna rasmi MET, khas untuk tahap amaran. Ia hanya mengisi segmen meter, tidak pernah menjadi warna teks atau latar kad, dan tidak dipakai di tempat lain. Semakan `contrast-check.py` (bukan teks, sasaran 3:1):
+Warna tahap MET (diluluskan pemilik, 7 Nov 2026): tiga warna rasmi MET, khas untuk tahap amaran. Ia hanya mengisi segmen meter, tidak pernah menjadi warna teks atau latar kad, dan tidak dipakai di tempat lain. Sejak 8 Nov 2026 (diluluskan pemilik) meter yang sama juga menunjukkan tahap aras sungai JPS: Waspada kuning, Amaran jingga, Bahaya merah; lihat "Aras sungai JPS". Segmen, garis tepi dan permukaannya sama, jadi semakan di bawah terpakai. Semakan `contrast-check.py` (bukan teks, sasaran 3:1):
 - Gelap: 12.06:1, 7.03:1 dan 5.75:1 pada `--surface`; 13.36:1 hingga 6.37:1 pada `--bg`. Lulus.
 - Cerah: Buruk 3.56:1 dan Bahaya 4.83:1 pada putih. Lulus.
 - Cerah, Waspada: 1.92:1 pada putih. Gagal sebagai isian sahaja. Sebab itu segmen yang diisi bergaris `--seg-edge` (4.94:1 dengan kuning, 9.01:1 pada latar), dan tahap sentiasa ditulis dalam perkataan di sebelahnya. Warna tidak pernah membawa maksud seorang diri.
@@ -184,7 +184,13 @@ Jubin yang dipilih bersempadan `--action` 2 px (`aria-pressed`). Nama penuh, ram
 - ramalan tiga hari (ikon, hari, teks MET, suhu);
 - amaran negeri itu, dengan butang "Lihat daerah dalam senarai amaran" yang mengisi carian amaran.
 
-Pilihan lalai ialah negeri zon anda. Legenda di bawah peta menerangkan meter, segi tiga dan pin.
+Pilihan lalai ialah negeri zon anda. Legenda di bawah peta menerangkan meter, segi tiga, gelombang dan pin.
+
+**Aras sungai JPS (8 Nov 2026).** Stesen JPS yang melepasi ambang Normal, daripada `data/banjir.json` (dibina setiap 30 minit oleh `scripts/build-banjir.mjs`, kerana JPS tidak membenarkan pelayar membaca jadualnya). Tahapnya dikira daripada ambang JPS sendiri bagi setiap stesen, tidak direka. Ia memakai meter tahap: Waspada 1 segmen, Amaran 2, Bahaya 3, dalam warna MET yang sepadan, dengan perkataan JPS dalam label. Meter kedua ini dipakai:
+- dalam kad zon, di bawah meter MET: tahap terburuk, "N daripada M stesen JPS", tiga stesen pertama dan selebihnya dilipat;
+- dalam panel negeri: sehingga lapan stesen, selebihnya dilipat.
+
+Setiap baris stesen: segmen, nama dan daerah; di bawahnya tahap dalam perkataan, bacaan berbanding ambang yang dilepasinya dan waktu bacaan ("Amaran: 5.95 m (ambang 5.50 m), 18:15"). Baris sumber "Aras sungai JPS, dikemas kini 18:20" menjadi `--error` tebal jika data lebih 3 jam ("Data JPS lebih 3 jam lalu …"). Negeri tanpa jadual JPS (Labuan) atau yang gagal dibaca ditulis "Tiada data aras sungai JPS", tidak pernah "normal". Pada jubin, ikon gelombang 12 px di sebelah ikon cuaca (warna teks) menandakan sungai melebihi Normal. Tahapnya ada dalam `aria-label` dan panel, bukan dalam warna jubin. Kontras pada latar meter (`--quiet` di atas panel): cerah `--error` 5.77:1, `--muted` 6.65:1, `--action-ink` 4.80:1; gelap 5.61:1, 5.82:1, 7.32:1.
 
 **Lipatan.** Gempa bumi menjadi satu baris ringkasan, dengan senarai di dalamnya. Jadual cuaca, waktu solat dan fakta 16 negeri berada di bawah "Lihat jadual".
 

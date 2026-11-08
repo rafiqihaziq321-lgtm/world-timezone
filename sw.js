@@ -1,8 +1,9 @@
 // Service worker: lets Jam Dunia open without a connection.
 // Strategy is stale-while-revalidate: answer from the cache at once, then
-// refresh that cache from the network so the next visit gets updates.
+// refresh that cache from the network so the next visit gets updates. The
+// river levels are the exception: network first, the cache only offline.
 // Bump CACHE when the precache list changes so old caches are cleared.
-const CACHE = 'jam-dunia-v18';
+const CACHE = 'jam-dunia-v19';
 
 // The app shell. vendor/cities.js (~400 KB) is not precached: it is cached the
 // first time someone searches, keeping the first visit light.
@@ -18,6 +19,7 @@ const PRECACHE = [
   'js/cards.js',
   'js/cities.js',
   'js/dialog.js',
+  'js/floods.js',
   'js/holidays.js',
   'js/icons.js',
   'js/jakim-zones.js',
@@ -80,6 +82,14 @@ self.addEventListener('fetch', (event) => {
 
   // Share links differ only in their query string; they all use the same page.
   const key = url.origin + url.pathname;
+  // River levels change every 30 minutes; an old copy is only for offline.
+  if (url.pathname.endsWith('/data/banjir.json')) {
+    event.respondWith(caches.open(CACHE).then((cache) => fetch(event.request).then((response) => {
+      if (response.ok) cache.put(key, response.clone());
+      return response;
+    }, async (err) => (await cache.match(key)) ?? Promise.reject(err))));
+    return;
+  }
   event.respondWith(caches.open(CACHE).then(async (cache) => {
     const cached = await cache.match(key);
     const fresh = fetch(event.request).then((response) => {

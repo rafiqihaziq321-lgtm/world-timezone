@@ -1,8 +1,10 @@
 name: Pages
 
 # Builds the site with each zone's prayer calendar (kalendar/<ZONE>.ics) and
-# deploys it to GitHub Pages. The calendars are not committed: they are
-# rebuilt here daily, so subscribers always have this month and the next.
+# the JPS river levels (data/banjir.json), and deploys it to GitHub Pages.
+# Neither is committed. The calendars are rebuilt daily, so subscribers always
+# have this month and the next; the river levels every 30 minutes, when the
+# calendars are copied from the live site instead.
 # Needs Settings → Pages → Source set to "GitHub Actions".
 
 on:
@@ -10,6 +12,7 @@ on:
     branches: [main]
   schedule:
     - cron: '23 18 * * *' # 02:23 in Malaysia
+    - cron: '7,37 * * * *' # river levels only
   workflow_dispatch:
 
 permissions:
@@ -39,7 +42,10 @@ jobs:
       - run: mkdir _site && git archive HEAD | tar -x -C _site
 
       # A zone the API fails for keeps its calendar from the live site.
-      - run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-calendars.mjs _site/kalendar --previous "${{ steps.pages.outputs.base_url }}/"
+      - run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-calendars.mjs _site/kalendar --previous "${{ steps.pages.outputs.base_url }}/" ${{ github.event.schedule == '7,37 * * * *' && '--copy' || '' }}
+
+      # A state JPS fails for keeps its stations from the live site.
+      - run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-banjir.mjs _site/data/banjir.json --previous "${{ steps.pages.outputs.base_url }}/"
 
       - uses: actions/upload-pages-artifact@v3
         with:
