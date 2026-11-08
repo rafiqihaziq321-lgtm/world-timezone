@@ -63,6 +63,15 @@ Semua pasangan di bawah disemak dengan `contrast-check.py`: 35 lulus, 0 gagal.
 | Jalur: malam | `#1E3A5F` | `#0B2540` | Segmen malam |
 | Jalur: siang | `#FDE68A` | `#E8C766` | Segmen siang |
 | Jalur: fajar dan senja | kecerunan antara malam dan siang dalam jalur sahaja | sama | Peralihan |
+| `--met-waspada` | `#EAB308` | `#FDE047` | Tahap amaran MET Waspada (kuning), segmen meter tahap sahaja |
+| `--met-buruk` | `#EA580C` | `#FB923C` | Tahap amaran MET Buruk (jingga), segmen meter tahap sahaja |
+| `--met-bahaya` | `#DC2626` | `#F87171` | Tahap amaran MET Bahaya (merah), segmen meter tahap sahaja |
+| `--seg-edge` | `#134E4A` | `#E6F2F0` | Garis tepi segmen yang diisi |
+
+Warna tahap MET (diluluskan pemilik, 7 Nov 2026): tiga warna rasmi MET, khas untuk tahap amaran. Ia hanya mengisi segmen meter, tidak pernah menjadi warna teks atau latar kad, dan tidak dipakai di tempat lain. Semakan `contrast-check.py` (bukan teks, sasaran 3:1):
+- Gelap: 12.06:1, 7.03:1 dan 5.75:1 pada `--surface`; 13.36:1 hingga 6.37:1 pada `--bg`. Lulus.
+- Cerah: Buruk 3.56:1 dan Bahaya 4.83:1 pada putih. Lulus.
+- Cerah, Waspada: 1.92:1 pada putih. Gagal sebagai isian sahaja. Sebab itu segmen yang diisi bergaris `--seg-edge` (4.94:1 dengan kuning, 9.01:1 pada latar), dan tahap sentiasa ditulis dalam perkataan di sebelahnya. Warna tidak pernah membawa maksud seorang diri.
 
 Perancang (teks / latar sel):
 
@@ -124,7 +133,7 @@ Meja kerja yang kemas pada pagi Isnin: kertas putih kehijauan, dakwat teal gelap
 
 - **Butang (7 Nov 2026):** satu tindakan utama setiap bahagian sahaja diisi teal (contohnya Main 24 jam, Tambah bandar, Tambah kiraan). Tindakan lain ialah butang senyap: latar tinta 8% tanpa garis luar. Butang ikon (pautan, tema, imej, zum glob, ‹ ›, ×) tanpa sempadan.
 - **Tab:** tab semasa ditanda dengan garis bawah teal 2 px, bukan pil berisi.
-- **Tahap amaran:** perkataan MET ("Waspada", "Buruk", "Bahaya") dalam label, bukan jalur warna di tepi kad.
+- **Tahap amaran:** perkataan MET ("Waspada", "Buruk", "Bahaya") dalam label, bukan jalur warna di tepi kad. Di tab Malaysia, meter tahap (lihat "Tab Malaysia") menambah segmen berwarna MET di sebelah perkataan itu.
 - **Kawasan amaran:** teks MET dipecah kepada tempoh, negeri dan daerah (label kecil), dengan "Semak kawasan anda" di atas. Padanan memakai warna pilihan (teal); amaran yang tidak menyebut tempat itu dilipat ke tajuknya. Amaran laut dipecah ikut seksyen MET (perairan Malaysia, perkapalan), jenis amaran, tempoh dan kawasan perairan. Negeri tanpa daerah berkongsi satu baris "Seluruh negeri". Label tahap hanya jika MET menamakannya; buletin "Tiada Nasihat" tidak dipaparkan. Teks penuh MET kekal di bawah, dan jika teks tidak dapat dipecah, ringkasan lama dipaparkan.
 - **Di bawah tajuk bahagian:** hanya sumber data rasmi, kecil (`0.875rem`).
 
@@ -132,6 +141,43 @@ Meja kerja yang kemas pada pagi Isnin: kertas putih kehijauan, dakwat teal gelap
 - **Bayang:** tiada pada baris dan panel. Bayang hanya untuk elemen yang benar-benar terapung: dialog, bar "Batal" dan tooltip glob.
 - **Ruang:** skala 4 / 8 / 12 / 16 / 24 / 40 / 64 px. Jarak antara seksyen 40 px pada telefon dan 64 px pada desktop, bukan 112 px.
 - **Sasaran sentuh:** minimum 44 x 44 px untuk setiap kawalan, termasuk × buang, seret dan butang nama, dengan jarak 8 px antara sasaran bersebelahan.
+
+## Tab Malaysia (7 Nov 2026)
+
+Tab ini menukar teks dan angka kepada tiga komponen. Nilai tepat kekal dalam teks, butiran atau lipatan.
+
+**Jalur zon.** Jalur matahari selebar kad zon (tinggi 20 px). Segmennya daripada waktu JAKIM zon itu sendiri, supaya penanda tepat pada waktunya: malam hingga Subuh, fajar hingga Syuruk, siang hingga Maghrib, senja hingga Isyak, kemudian malam. Bahagian-bahagiannya:
+- Enam penanda menegak 2 px: `--text` untuk yang akan datang, `--muted` untuk yang sudah lalu.
+- Penanda waktu seterusnya 4 px, dengan bendera "Zohor 12:52" di atasnya. Bendera itu kekal di dalam hujung jalur.
+- Garis amber `--now-line` hanya untuk "sekarang".
+- Paksi 00 / 06 / 12 / 18 / 24 di bawah jalur.
+
+Jalur ini `aria-hidden`. Enam waktu ditulis dalam senarai di bawahnya: enam lajur pada desktop dan 3x2 pada telefon. Waktu yang sudah lalu berwarna `--muted`. Kiraan detik "Zohor dalam 52m" di atas jalur kekal titik fokus tab.
+
+**Meter tahap.** Tiga segmen (14 x 10 px; 22 x 14 px dalam kad zon; 8 x 6 px pada jubin). Segmen yang diisi sama banyak dengan tahap (Waspada 1, Buruk 2, Bahaya 3), dalam warna MET bagi tahap itu, dan bergaris `--seg-edge`. Segmen kosong bergaris `--strip-line`. Perkataan tahap ditulis di sebelahnya. Amaran yang tahapnya tidak dinamakan MET (ribut petir, laut) ditunjukkan dengan segmen kosong dan "MET tidak menyatakan tahap". Tiada tahap yang direka. Meter dipakai:
+- dalam kad zon, untuk tahap terburuk negeri zon dan setiap amarannya, dengan pautan "Baca amaran";
+- pada setiap jubin negeri;
+- dalam panel negeri.
+
+**Peta jubin negeri.** 16 butang dalam grid 6 lajur, mengikut kedudukan kasar:
+- Semenanjung di lajur 1 hingga 3. Pahang merentang dua baris.
+- Lajur 4 kosong, mewakili laut.
+- Borneo (Labuan, Sabah, Sarawak) di lajur 5 dan 6.
+
+Setiap jubin (min 48 x 64 px, jarak 8 px) memuatkan:
+- kod negeri (PLS, KTN, KUL …);
+- ikon cuaca hari ini, daripada set ikon SVG sedia ada;
+- meter tahap, atau ikon segi tiga untuk amaran tanpa tahap;
+- pin `--action-ink` untuk negeri zon anda.
+
+Jubin yang dipilih bersempadan `--action` 2 px (`aria-pressed`). Nama penuh, ramalan dan tahap jubin ada dalam `aria-label` dan `title`. Memilih jubin menukar panel di sebelahnya (di bawahnya pada telefon), yang memuatkan:
+- solat seterusnya di ibu negeri;
+- ramalan tiga hari (ikon, hari, teks MET, suhu);
+- amaran negeri itu, dengan butang "Lihat daerah dalam senarai amaran" yang mengisi carian amaran.
+
+Pilihan lalai ialah negeri zon anda. Legenda di bawah peta menerangkan meter, segi tiga dan pin.
+
+**Lipatan.** Gempa bumi menjadi satu baris ringkasan, dengan senarai di dalamnya. Jadual cuaca, waktu solat dan fakta 16 negeri berada di bawah "Lihat jadual".
 
 ## Salinan
 

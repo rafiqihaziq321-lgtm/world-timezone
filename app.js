@@ -249,6 +249,7 @@ function init() {
   if (shared.meeting) showMeeting(state, shared.meeting);
   state.mapView = null; // created the first time the Bandar tab opens
   state.ramadanState = 'W.P. Kuala Lumpur'; // whose imsak and berbuka the Ramadan countdown shows
+  state.stateView = null; // the state tile chosen in the Malaysia tab; null follows the zone
   state.tab = showTab(window.location.hash);
   const countdownSeen = new IntersectionObserver((entries) => {
     if (!entries.some((e) => e.isIntersecting)) return;

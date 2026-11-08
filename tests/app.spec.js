@@ -1436,7 +1436,8 @@ test.describe('susun atur', () => {
     const headings = page.locator('#malaysia h2:visible');
     await expect(headings.first()).toHaveText('Waktu solat zon anda');
     await expect(headings.nth(1)).toHaveText('Takwim Islam'); // the Islamic calendar goes with the prayer times
-    await expect(headings.nth(2)).toHaveText('Amaran');
+    await expect(headings.nth(2)).toHaveText('Negeri hari ini'); // the tile map, then the warnings in full
+    await expect(headings.nth(3)).toHaveText('Amaran');
   });
 });
 
@@ -1957,7 +1958,27 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     await expect(page.locator('#my-quakes .alert')).toHaveCount(1);
     await expect(page.locator('#my-quakes .alert h4')).toHaveText('Magnitud 5.1: Laut Sulawesi');
 
-    await expect(page.locator('#my-weather .weather-tile h3')).toHaveText(['Penang', 'Selangor', 'WP Kuala Lumpur']); // today only
+    await expect(page.locator('#my-weather tbody th')).toHaveText(['Penang', 'Selangor', 'WP Kuala Lumpur']); // today only, in "Lihat jadual"
+
+    // The tile map: 16 states; with no zone chosen, Kuala Lumpur is shown first.
+    const tiles = page.locator('#my-tiles .state-tile');
+    await expect(tiles).toHaveCount(16);
+    await expect(page.locator('#my-tiles [aria-pressed="true"] .tile-code')).toHaveText('KUL');
+    const sgr = tiles.filter({ hasText: 'SGR' });
+    await expect(sgr).toHaveAttribute('aria-label', 'Selangor, Ribut petir di beberapa tempat, amaran Waspada');
+    await expect(sgr.locator('.level-segs.level-alert .on')).toHaveCount(1); // Waspada: one segment of three
+    await expect(tiles.filter({ hasText: 'PNG' }).locator('svg')).toHaveAttribute('data-glyph', 'fog'); // Berjerebu
+    await sgr.click();
+    await expect(sgr).toHaveAttribute('aria-pressed', 'true');
+    await expect(sgr).toBeFocused(); // the tiles are not rebuilt by a choice
+    const detail = page.locator('#my-state');
+    await expect(detail.locator('h3')).toHaveText('Selangor Shah Alam');
+    await expect(detail.locator('.state-next')).toHaveText('Zohor dalam 7j 10m (13:10, Shah Alam)');
+    await expect(detail.locator('.state-days li')).toHaveText([/Hari ini.*Ribut petir/, /Esok.*Hujan di satu dua tempat/, /Jumaat.*tiada ramalan/]);
+    await expect(detail.locator('.state-alert')).toHaveText(['Amaran Hujan Lebat (Waspada)Tahap: Waspada']);
+    await detail.getByRole('button', { name: 'Lihat daerah dalam senarai amaran' }).click();
+    await expect(page.locator('#alert-search')).toHaveValue('Selangor');
+    await expect(page.locator('#alert-search')).toBeFocused();
 
     const rows = page.locator('#my-prayers tbody tr');
     await expect(rows).toHaveCount(16);
@@ -2231,6 +2252,7 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     test('jadual negeri: lajur negeri kekal semasa diskrol; legenda peta dilipat', async ({ page }) => {
       await mockAll(page);
       await openApp(page, undefined, '#malaysia');
+      await page.locator('.my-tables > summary').click(); // the tables are folded under "Lihat jadual"
       const scroller = page.locator('#my-prayers').locator('xpath=..');
       const first = page.locator('#my-prayers tbody th').first();
       const before = await first.evaluate((el) => el.getBoundingClientRect().left);
@@ -2573,11 +2595,17 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       await expect(alerts).toHaveCount(1); // the Selangor warning
       await expect(alerts).toContainText('Amaran Hujan Lebat (Waspada)');
       await expect(alerts.getByRole('link', { name: 'Baca amaran' })).toHaveAttribute('href', '#my-alerts-title');
-      await expect(alerts.locator('svg')).toHaveAttribute('data-glyph', 'warning');
+      // The level meter: segments filled to the level, and the level in words beside them.
+      const head = page.locator('#zone-alerts .level-head');
+      await expect(head).toHaveText('Waspada untuk Selangor');
+      await expect(head.locator('.level-segs .on')).toHaveCount(1);
       await page.getByLabel('Zon JAKIM').selectOption('WLY01'); // MET names it Kuala Lumpur, not the zone's state
       await expect(alerts).toHaveText(['Amaran Ribut Petir (Waspada)Tahap: WaspadaBaca amaran']); // the level as a text label
+      await expect(head).toHaveText('Waspada untuk Kuala Lumpur dan Putrajaya');
       await page.getByLabel('Zon JAKIM').selectOption('WLY02'); // Labuan: none in force
       await expect(alerts).toHaveCount(0);
+      await expect(head).toHaveText('Tiada amaran untuk Labuan');
+      await expect(head.locator('.level-segs .on')).toHaveCount(0);
     });
 
     test('pilih zon: waktu hari ini untuk zon itu, solat seterusnya ditanda, dan kekal selepas reload', async ({ page }) => {
@@ -2598,6 +2626,12 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
       // What comes next, counted down; the zone itself is named in the picker.
       await expect(times.locator('.zone-next')).toHaveText('Zohor dalam 7j 10m (13:10)');
       await expect(times.locator('.zone-name')).toHaveCount(0);
+      // The zone strip: six marks on the day, the next one flagged, the "now" line at 06:00 (a quarter of the way).
+      const strip = times.locator('.zone-strip');
+      await expect(strip.locator('.zone-mark')).toHaveCount(6);
+      await expect(strip.locator('.zone-mark.next .zone-flag')).toHaveText('Zohor 13:10');
+      await expect(strip.locator('.zone-mark.done')).toHaveCount(1); // 06:00: Subuh (05:55) is past
+      expect(parseFloat(await strip.locator('.sun-now').evaluate((el) => el.style.left))).toBeCloseTo(25, 1);
       await expect(times.locator('li')).toHaveText(['Subuh05:55', 'Syuruk07:05', 'Zohor13:10 (seterusnya)', 'Asar16:20', 'Maghrib19:12', 'Isyak20:22']);
       await expect(times.locator('li.next span').first()).toHaveText('Zohor');
       expect(prayerUrls).toContain('https://api.waktusolat.app/v2/solat/SGR03?year=2026&month=10');
