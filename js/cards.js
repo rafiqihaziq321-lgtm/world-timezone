@@ -133,14 +133,17 @@ export function createCard(state, city) {
   remove.setAttribute('aria-label', `Buang ${city.name}`);
   remove.addEventListener('click', () => {
     card.classList.add('leaving');
-    card.addEventListener('animationend', () => {
+    // Only the card's own leaving animation: its panels' opening animations bubble here too.
+    card.addEventListener('animationend', function leave(e) {
+      if (e.target !== card) return;
+      card.removeEventListener('animationend', leave);
       const index = state.cities.findIndex((c) => cityKey(c) === cityKey(city));
       state.cities = state.cities.filter((c) => cityKey(c) !== cityKey(city));
       saveState(state);
       renderCards(state);
       state.refresh();
       offerUndo(state, city, index);
-    }, { once: true });
+    });
   });
   // Malaysian cities: JAKIM prayer times and MET weather. Elsewhere, prayer
   // times worked out in the browser, for any city whose position is known.

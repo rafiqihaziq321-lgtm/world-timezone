@@ -92,7 +92,7 @@ export function nextPhase(ms, target) {
 
 // Height of the Moon's upper edge above the horizon, in degrees, as seen
 // from the ground (parallax) through the air (refraction).
-function moonHeight(ms, lat, lon) {
+export function moonHeight(ms, lat, lon) {
   const d = days(ms);
   const m = moonAt(d);
   const hourAngle = (280.16 + 360.9856235 * d) * RAD + lon * RAD - m.ra;

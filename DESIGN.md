@@ -2,7 +2,9 @@
 
 Arah reka bentuk untuk antara muka Jam Dunia. Dipilih pada 6 November 2026: hala tuju B, "Meja Kerja". Fail ini ialah data reka bentuk (identiti, palet, tipografi, rasa, dial), bukan arahan kod.
 
-Dial: ENERGY 2 / RHYTHM 2 / MOTION 1
+Dial: ENERGY 3 / RHYTHM 2 / MOTION 3
+
+Perubahan hala tuju (8 November 2026, diminta pemilik): MOTION 1 → 3 dan ENERGY 2 → 3, supaya app terasa hidup. Sebabnya: latar menjadi langit yang berubah ikut matahari, bulan dan cuaca sebenar (lihat "Langit hidup"), dan bahagian yang dibuka kini muncul dengan gerakan pendek. Prinsipnya kekal: setiap gerakan datang daripada data sebenar atau tindakan pengguna, bukan hiasan.
 
 ## Identiti
 
@@ -40,7 +42,7 @@ Sebab:
 - **Tugas dahulu.** Glob kini mengisi skrin pertama dan menolak kad bandar ke y=1813 pada 768x1024 (audit #21). Dua daripada tiga tugas utama bermula di senarai bandar.
 - **Bajet.** Glob dan pustakanya berjumlah 134,601 bait pada muatan awal (diukur). Memuatnya kemudian memberi ruang untuk fon dan motif baharu.
 - **Tidak dibuang.** Glob menyokong ciri yang berfungsi (klik bandar untuk tambah, garis terminator, label masa). Membuangnya bermakna memadam kelakuan sedia ada, dan itu memerlukan persetujuan.
-- **MOTION 1.** Glob tidak berputar sendiri. Ia hanya bergerak apabila diseret, dizum atau apabila pengguna memilih bandar.
+- **Gerakan glob (kekal sejak MOTION 1).** Glob tidak berputar sendiri. Ia hanya bergerak apabila diseret, dizum atau apabila pengguna memilih bandar.
 
 ## Palet
 
@@ -85,7 +87,7 @@ Perancang (teks / latar sel):
 
 Tiada lagi:
 - latar kecerunan pada kad
-- cahaya radial dan bintang di latar
+- cahaya radial dan bintang hiasan di latar (bintang kini dilukis hanya pada waktu malam sebenar di tempat anda; lihat "Langit hidup")
 - kabur latar (backdrop-filter)
 - ungu dan merah jambu
 
@@ -123,11 +125,18 @@ Berat 800, 600 dan 500 dipetakan ke 700; 300 dan 200 ke 400. Dalam `style.css` h
 
 ## Rasa
 
-Meja kerja yang kemas pada pagi Isnin: kertas putih kehijauan, dakwat teal gelap, satu pen amber untuk menanda "sekarang".
+Meja kerja yang kemas pada pagi Isnin, di tepi tingkap: kertas putih kehijauan, dakwat teal gelap, satu pen amber untuk menanda "sekarang", dan langit di luar yang berubah sepanjang hari.
 
-- **ENERGY 2.** Satu elemen kuat setiap skrin, iaitu jam bandar pertama dalam saiz besar. Selebihnya tenang dengan perbezaan berat 700/400 yang jelas.
+- **ENERGY 3.** Satu elemen kuat setiap skrin, iaitu jam bandar pertama dalam saiz besar, dan kini latar langit yang berwarna ikut waktu. Kad, panel dan jadual kekal tenang dengan perbezaan berat 700/400 yang jelas.
 - **RHYTHM 2.** Kad bandar dan baris perancang berirama sama (motif jalur). Ada dua pecahan yang disengajakan: perancang ialah panel lebar penuh, dan fakta zon waktu menjadi senarai padat dua lajur, bukan kad.
-- **MOTION 1.** Hanya keadaan hover, fokus, tekan dan peralihan keadaan (150-200 ms). Tiada animasi masuk, tiada putaran glob automatik, tiada denyut berterusan. Butang "Main 24 jam" menggerakkan jam hanya apabila ditekan, dan butang yang sama menghentikannya.
+- **MOTION 3.** Gerakan ada tiga jenis, semuanya daripada data atau tindakan:
+  1. Langit di latar mengikut waktu, bulan dan cuaca sebenar (lihat "Langit hidup").
+  2. Bahagian yang dibuka (panel solat dan cuaca, ramalan setiap jam, lipatan `details`, panel negeri) muncul dengan pudar dan turun 4 px.
+  3. Tekanan dan pilihan memberi maklum balas: butang mengecil sedikit, jubin negeri mengecil semasa ditekan dan sempadannya beralih apabila dipilih.
+
+  Tiada animasi masuk halaman, tiada putaran glob automatik, dan tiada denyut atau kelipan berterusan. Butang "Main 24 jam" menggerakkan jam (dan langit) hanya apabila ditekan.
+- **Token masa:** `--dur-press` 120 ms (tekan), `--dur-state` 180 ms (perubahan keadaan), `--dur-reveal` 220 ms (muncul), `--dur-sky` 1200 ms (warna langit, linear), dan `--ease-out` cubic-bezier(0.2, 0.7, 0.2, 1) untuk benda yang tiba.
+- **Reduced motion:** semua animasi dan peralihan menjadi serta-merta (1 ms). Langit menjadi warna statik ikut waktu, dengan bintang, bulan dan awan sebagai gambar pegun. Tiada hujan, kilat atau parallax.
 
 ## Bentuk dan ruang
 
@@ -178,6 +187,45 @@ Jubin yang dipilih bersempadan `--action` 2 px (`aria-pressed`). Nama penuh, ram
 Pilihan lalai ialah negeri zon anda. Legenda di bawah peta menerangkan meter, segi tiga dan pin.
 
 **Lipatan.** Gempa bumi menjadi satu baris ringkasan, dengan senarai di dalamnya. Jadual cuaca, waktu solat dan fakta 16 negeri berada di bawah "Lihat jadual".
+
+## Langit hidup (8 Nov 2026)
+
+Latar seluruh app, di belakang ketiga-tiga tab (`#sky`, `js/sky.js`, `aria-hidden`). Semua yang dilukisnya ialah data yang sudah ada dalam halaman:
+
+- **Warna:** kecerunan atas ke bawah antara empat hentian, iaitu malam, fajar, siang dan senja. Kedudukannya dikira daripada matahari terbit dan terbenam sebenar (`sunTimes`) di bandar anda, iaitu kad pertama dalam zon waktu anda yang ada kedudukan. Tanpa kedudukan, jam tetap 06:00 dan 18:00 dipakai, sama seperti kad. Fajar dan senja ialah sejam di kiri dan kanan matahari terbit dan terbenam, seperti pada jalur matahari. Warna beralih secara linear sepanjang jam itu, dan setiap perubahan dipudarkan selama `--dur-sky`. Langit mengikut masa yang dipaparkan: penukar masa, "Main 24 jam" dan menyeret jalur matahari kad semuanya menukar langit.
+- **Malam:** bintang halus di kedudukan tetap (urutan berbenih, sama setiap lawatan), dipudarkan di belakang awan. Bulan dilukis dalam fasa sebenar (`moonPhase`), hanya apabila ia di atas ufuk di tempat anda (`moonHeight`). Tiada kelipan.
+- **Cuaca:** bacaan semasa Open-Meteo di bandar anda, permintaan yang sama seperti kad tanpa sebarang permintaan baru. Ia dipaparkan sebagai:
+  - awan lembut yang hanyut perlahan (Separa berawan dan Mendung);
+  - hujan (gerimis, hujan, hujan lebat);
+  - salji;
+  - jerebu atau kabus di bahagian bawah;
+  - untuk ribut petir: hujan dan kilat lembut setiap 9 hingga 20 saat, jauh di bawah had 3 kelipan sesaat.
+- **Parallax:** paling banyak 8 px, ikut tetikus (penuding halus sahaja) atau condongan telefon (hanya jika pelayar memberinya tanpa meminta kebenaran). Lapisan yang lebih jauh bergerak kurang: bintang 0.4, bulan 0.6, awan 1.
+- **Bateri:** canvas paling banyak 30 bingkai sesaat dan nisbah piksel paling banyak 1.5. Ia hanya berjalan apabila ada yang bergerak, iaitu cuaca atau parallax yang belum tiba. Ia berhenti apabila tab tersembunyi. Langit cerah tanpa gerakan dilukis sekali sahaja.
+- **Seret jalur matahari:** pada kad bandar, jalur boleh diseret untuk memilih masa, digenapkan ke suku jam. Kawasan sentuhnya 30 px tinggi. Penukar masa kekal sebagai cara papan kekunci.
+
+Token (cerah / gelap):
+
+| Token | Cerah | Gelap |
+|---|---|---|
+| `--sky-night-top` / `-bottom` | `#E6EDF5` / `#EEF2F5` | `#08111F` / `#0B1618` |
+| `--sky-dawn-top` / `-bottom` | `#F8ECDA` / `#F5F6F1` | `#231C15` / `#0F1B1A` |
+| `--sky-day-top` / `-bottom` | `#E4F1F6` / `#F6FAF9` | `#122B2A` / `#0F1B1A` |
+| `--sky-dusk-top` / `-bottom` | `#FAEBDF` / `#F5F3EF` | `#261A14` / `#10181A` |
+| `--sky-star` | slate 45% | `#E6F2F0` 90% |
+| `--sky-cloud` | putih 60% | `#8CA5A5` 8.5% |
+| `--sky-rain` | slate 25% | `#C8DCE6` 22% |
+| `--sky-flash` (kilat) | putih 50% | `#AABEDC` 7% |
+
+**Kontras.** Teks yang terletak terus di atas langit (tajuk, ayat sumber, jam "Waktu anda") mesti lulus 4.5:1 pada setiap hentian dan titik tengahnya. Kad, panel, jadual dan bar navigasi kekal permukaan pekat. Hasil semakan:
+
+| Tema | Paling rendah | Pada |
+|---|---|---|
+| Cerah | `--text` 8.03:1, `--muted` 6.42:1, `--action-ink` 4.64:1, sun-ink 6.01:1, `--error` 5.57:1 | malam atas |
+| Gelap | `--text` 11.48:1, `--muted` 5.98:1, `--action-ink` 7.52:1 | siang atas dengan kilat |
+| Gelap, awan tebal dengan kilat serentak | `--muted` 4.72:1 | kes terburuk |
+
+Inilah sebabnya awan dan kilat tema gelap sangat samar. Hujan ialah garisan 1 px pada 22-25%.
 
 ## Salinan
 

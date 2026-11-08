@@ -1973,6 +1973,7 @@ test.describe('tab Malaysia dan Bandar Malaysia', () => {
     await expect(sgr).toBeFocused(); // the tiles are not rebuilt by a choice
     const detail = page.locator('#my-state');
     await expect(detail.locator('h3')).toHaveText('Selangor Shah Alam');
+    await expect(detail.locator('h3')).toHaveClass(/reveal/); // a new choice arrives (MOTION 3)
     await expect(detail.locator('.state-next')).toHaveText('Zohor dalam 7j 10m (13:10, Shah Alam)');
     await expect(detail.locator('.state-days li')).toHaveText([/Hari ini.*Ribut petir/, /Esok.*Hujan di satu dua tempat/, /Jumaat.*tiada ramalan/]);
     await expect(detail.locator('.state-alert')).toHaveText(['Amaran Hujan Lebat (Waspada)Tahap: Waspada']);
@@ -3155,4 +3156,93 @@ test.describe('reka bentuk: jalur matahari, perancang, sasaran sentuh, glob kemu
     expect(await page.locator('#globe').evaluate((el) => el.getBoundingClientRect().height)).toBe(before); // space was kept for it
     await expect(page.locator('#globe-status')).toHaveText('');
   });
+});
+
+test.describe('langit hidup (DESIGN.md)', () => {
+  // Open-Meteo's current weather at every card: `code` is the WMO weather code.
+  const weatherIs = (page, code) => page.route('https://api.open-meteo.com/v1/forecast**', (route) => {
+    const places = (new URL(route.request().url()).searchParams.get('latitude') ?? '').split(',').length;
+    const row = { current: { temperature_2m: 30, weather_code: code, is_day: 1 } };
+    return route.fulfill({ json: places > 1 ? Array(places).fill(row) : row, headers: { 'Access-Control-Allow-Origin': '*' } });
+  });
+
+  test('warna langit ikut matahari di bandar anda dan masa yang dipaparkan; jalur matahari boleh diseret', async ({ page }) => {
+    await openApp(page); // 06:00 in Kuala Lumpur: the hour before sunrise
+    const sky = page.locator('#sky');
+    await expect(sky).toHaveAttribute('aria-hidden', 'true');
+    await expect(sky).toHaveAttribute('data-phase', 'dawn');
+    const top = () => sky.evaluate((el) => el.style.getPropertyValue('--sky-top'));
+    const dawn = await top();
+    await page.locator('#time-slider').fill('24'); // six hours on: midday
+    await expect(sky).toHaveAttribute('data-phase', 'day');
+    expect(await top()).not.toBe(dawn);
+    // Dragging Kuala Lumpur's sun strip to 95% of its day: 22:48, to the quarter hour 22:45.
+    const strip = card(page, 'Asia/Kuala_Lumpur').locator('.sun-strip');
+    await strip.scrollIntoViewIfNeeded();
+    const box = await strip.boundingBox();
+    await page.mouse.move(box.x + box.width * 0.95, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.up();
+    await expect(page.locator('#time-label')).toContainText('22:45 waktu anda');
+    await expect(sky).toHaveAttribute('data-phase', 'night');
+  });
+
+  test('ribut petir: hujan dan kilat bergerak, dan berhenti bila tab tersembunyi atau gerakan dikurangkan', async ({ page }) => {
+    await weatherIs(page, 95);
+    await page.emulateMedia({ reducedMotion: 'no-preference' }); // the suite runs with motion reduced
+    await openApp(page);
+    const sky = page.locator('#sky');
+    await expect(sky).toHaveAttribute('data-weather', 'ribut');
+    await expect(sky).toHaveAttribute('data-animating', 'true');
+    const setHidden = (hidden) => page.evaluate((value) => {
+      Object.defineProperty(document, 'hidden', { value, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }, hidden);
+    await setHidden(true);
+    await expect(sky).toHaveAttribute('data-animating', 'false');
+    await setHidden(false);
+    await expect(sky).toHaveAttribute('data-animating', 'true');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect(sky).toHaveAttribute('data-animating', 'false');
+  });
+
+  test('langit cerah tanpa gerakan tidak menjalankan canvas', async ({ page }) => {
+    await weatherIs(page, 0);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await openApp(page);
+    await expect(page.locator('#sky')).toHaveAttribute('data-weather', 'cerah');
+    await expect(page.locator('#sky')).not.toHaveAttribute('data-animating', 'true');
+  });
+
+  for (const scheme of ['light', 'dark']) {
+    test(`kontras: setiap token teks lulus 4.5:1 pada setiap warna langit (${scheme})`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await openApp(page);
+      const worst = await page.evaluate(() => {
+        const css = getComputedStyle(document.documentElement);
+        const rgb = (name) => css.getPropertyValue(name).trim().match(/[\da-f]{2}/gi).map((h) => parseInt(h, 16));
+        const lum = (c) => c.map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+          .reduce((n, v, i) => n + v * [0.2126, 0.7152, 0.0722][i], 0);
+        const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+        const order = ['night', 'dawn', 'day', 'dusk', 'night'];
+        const skies = [];
+        for (const end of ['top', 'bottom']) {
+          for (let i = 0; i < 4; i++) {
+            const a = rgb(`--sky-${order[i]}-${end}`);
+            const b = rgb(`--sky-${order[i + 1]}-${end}`);
+            skies.push([`${order[i]} ${end}`, a], [`${order[i]}-${order[i + 1]} ${end}`, a.map((v, j) => Math.round((v + b[j]) / 2))]);
+          }
+        }
+        let low = { ratio: Infinity };
+        for (const token of ['--text', '--muted', '--accent-ink', '--sun-ink', '--error']) {
+          for (const [where, sky] of skies) {
+            const r = ratio(rgb(token), sky);
+            if (r < low.ratio) low = { ratio: r, token, where };
+          }
+        }
+        return low;
+      });
+      expect(worst.ratio, `${worst.token} pada ${worst.where}`).toBeGreaterThanOrEqual(4.5);
+    });
+  }
 });

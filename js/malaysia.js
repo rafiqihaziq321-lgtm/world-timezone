@@ -466,7 +466,11 @@ function renderStates(state, now, { forecasts, active, warnings, myStates, praye
   const ws = warningsFor(active, chosen);
   const minute = Math.floor(now.getTime() / MINUTE_MS);
   const days = [0, 1, 2].map((i) => addDaysIso(forecasts.iso, i));
-  renderKeyed(document.getElementById('my-state'), [chosen, tileKey, p.key, p.entry.status, minute, state.hour24, state.tempUnit].join('|'), () => {
+  const detailEl = document.getElementById('my-state');
+  // A newly chosen state arrives (DESIGN.md, MOTION 3); the minute's redraw does not move.
+  const fresh = detailEl.dataset.shown !== undefined && detailEl.dataset.shown !== chosen;
+  detailEl.dataset.shown = chosen;
+  renderKeyed(detailEl, [chosen, tileKey, p.key, p.entry.status, minute, state.hour24, state.tempUnit].join('|'), () => {
     const head = el('h3', '', s.state.replace(/^W\.P\. /, ''));
     head.append(' ', el('small', '', s.capital));
     const out = [head];
@@ -526,6 +530,7 @@ function renderStates(state, now, { forecasts, active, warnings, myStates, praye
       alerts.append(find);
     }
     out.push(alerts);
+    if (fresh) for (const node of out) node.classList.add('reveal');
     return out;
   });
 }
